@@ -4,136 +4,873 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Panda's Heating & Cooling</title>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    :root{
+      --bg:#0a0a0c;
+      --bg2:#121216;
+      --panel:rgba(255,255,255,0.04);
+      --panelBorder:rgba(199,156,52,0.28);
+      --text:#f3efe7;
+      --muted:#c8c0b0;
+      --gold:#c79c34;
+      --goldSoft:#a78027;
+      --line:rgba(255,255,255,0.08);
+      --shadow:0 20px 60px rgba(0,0,0,.45);
+      --radius:26px;
+      --max:1200px;
+    }
+
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(24,34,74,.35), transparent 30%),
+        radial-gradient(circle at 85% 18%, rgba(199,156,52,.15), transparent 25%),
+        linear-gradient(180deg, #070709 0%, #0b0b0f 100%);
+      color:var(--text);
+    }
+
+    a{text-decoration:none;color:inherit}
+    img{max-width:100%;display:block}
+    button,input,select,textarea{font:inherit}
+
+    .container{
+      width:min(calc(100% - 32px), var(--max));
+      margin:0 auto;
+    }
+
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:50;
+      backdrop-filter:blur(12px);
+      background:rgba(8,8,10,.78);
+      border-bottom:1px solid rgba(199,156,52,.18);
+    }
+
+    .nav{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:20px;
+      min-height:84px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+
+    .brand-badge{
+      width:64px;
+      height:64px;
+      border-radius:50%;
+      border:2px solid var(--gold);
+      background:#fff;
+      display:grid;
+      place-items:center;
+      color:#111;
+      font-size:28px;
+      box-shadow:0 0 0 6px rgba(199,156,52,.08);
+    }
+
+    .brand-text h1{
+      margin:0;
+      font-size:31px;
+      line-height:1;
+      letter-spacing:.02em;
+    }
+
+    .brand-text p{
+      margin:8px 0 0;
+      color:var(--gold);
+      letter-spacing:.18em;
+      font-size:12px;
+      text-transform:uppercase;
+    }
+
+    .nav-links{
+      display:flex;
+      gap:28px;
+      flex-wrap:wrap;
+      color:#f4f0e8;
+      font-weight:600;
+      font-size:15px;
+    }
+
+    .hero{
+      padding:56px 0 40px;
+    }
+
+    .hero-grid{
+      display:grid;
+      grid-template-columns:1.1fr .9fr;
+      gap:42px;
+      align-items:center;
+    }
+
+    .eyebrow{
+      color:var(--gold);
+      text-transform:uppercase;
+      letter-spacing:.24em;
+      font-weight:700;
+      font-size:14px;
+      margin-bottom:20px;
+    }
+
+    .hero h2{
+      margin:0;
+      font-size:88px;
+      line-height:.94;
+      letter-spacing:-.05em;
+      max-width:700px;
+    }
+
+    .hero p{
+      max-width:720px;
+      font-size:18px;
+      line-height:1.6;
+      color:var(--muted);
+      margin:26px 0 0;
+    }
+
+    .hero-actions{
+      display:flex;
+      gap:14px;
+      flex-wrap:wrap;
+      margin-top:34px;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:999px;
+      padding:18px 28px;
+      font-weight:700;
+      transition:.2s ease;
+      border:1px solid transparent;
+      cursor:pointer;
+    }
+
+    .btn-gold{
+      background:var(--gold);
+      color:#121212;
+    }
+
+    .btn-gold:hover{background:#ddb24a}
+    .btn-outline{
+      border-color:rgba(199,156,52,.7);
+      color:#fff;
+      background:transparent;
+    }
+    .btn-outline:hover{
+      background:rgba(199,156,52,.08);
+    }
+
+    .hero-card{
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+      border:1px solid var(--panelBorder);
+      border-radius:30px;
+      padding:28px;
+      box-shadow:var(--shadow);
+    }
+
+    .hero-chip{
+      display:inline-flex;
+      align-items:center;
+      border:1px solid rgba(199,156,52,.5);
+      color:var(--gold);
+      border-radius:999px;
+      padding:10px 16px;
+      font-weight:700;
+      margin-bottom:18px;
+    }
+
+    .truck-wrap{
+      border-radius:24px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.06);
+      background:#111;
+      aspect-ratio: 16 / 10;
+      display:grid;
+      place-items:center;
+      color:#777;
+      font-size:14px;
+      text-align:center;
+      padding:20px;
+    }
+
+    .placeholder-truck{
+      width:100%;
+      height:100%;
+      border-radius:22px;
+      background:
+        linear-gradient(135deg, rgba(199,156,52,.08), rgba(255,255,255,.02)),
+        radial-gradient(circle at 20% 20%, rgba(255,255,255,.08), transparent 30%),
+        #16161b;
+      display:grid;
+      place-items:center;
+      border:1px solid rgba(255,255,255,.04);
+    }
+
+    .placeholder-truck strong{
+      font-size:28px;
+      display:block;
+      margin-bottom:10px;
+      color:#fff;
+    }
+
+    section.block{
+      padding:26px 0;
+    }
+
+    .section-head{
+      margin-bottom:18px;
+    }
+
+    .section-head h3{
+      margin:0;
+      font-size:40px;
+      line-height:1.05;
+      letter-spacing:-.03em;
+    }
+
+    .section-head p{
+      margin:12px 0 0;
+      color:var(--muted);
+      max-width:760px;
+      line-height:1.6;
+    }
+
+    .cards{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:18px;
+    }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:var(--shadow);
+    }
+
+    .service-icon{
+      width:52px;
+      height:52px;
+      border-radius:16px;
+      display:grid;
+      place-items:center;
+      background:rgba(199,156,52,.12);
+      border:1px solid rgba(199,156,52,.22);
+      font-size:24px;
+      margin-bottom:18px;
+    }
+
+    .card h4{
+      margin:0 0 10px;
+      font-size:24px;
+    }
+
+    .card p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.6;
+    }
+
+    .tool-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:18px;
+    }
+
+    .tool-card{
+      background:var(--panel);
+      border:1px solid var(--panelBorder);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:var(--shadow);
+    }
+
+    .tool-card h4{
+      margin:0 0 10px;
+      font-size:28px;
+    }
+
+    .tool-card p{
+      margin:0 0 18px;
+      color:var(--muted);
+      line-height:1.6;
+    }
+
+    label{
+      display:block;
+      margin:14px 0 8px;
+      font-weight:700;
+      color:#f1ece2;
+    }
+
+    input,select,textarea{
+      width:100%;
+      background:#141419;
+      color:#f7f4ef;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;
+      padding:14px 15px;
+      outline:none;
+    }
+
+    input:focus,select:focus,textarea:focus{
+      border-color:rgba(199,156,52,.65);
+      box-shadow:0 0 0 3px rgba(199,156,52,.08);
+    }
+
+    textarea{min-height:120px;resize:vertical}
+
+    .result{
+      margin-top:18px;
+      background:rgba(199,156,52,.08);
+      border:1px solid rgba(199,156,52,.22);
+      border-radius:18px;
+      padding:18px;
+    }
+
+    .result .small{
+      color:var(--muted);
+      font-size:13px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+
+    .result .big{
+      margin-top:8px;
+      font-size:34px;
+      font-weight:800;
+      line-height:1.1;
+    }
+
+    .plans{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:18px;
+    }
+
+    .plan{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(199,156,52,.22);
+      border-radius:24px;
+      padding:26px;
+      box-shadow:var(--shadow);
+    }
+
+    .plan-tag{
+      display:inline-block;
+      color:var(--gold);
+      border:1px solid rgba(199,156,52,.35);
+      padding:8px 12px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      margin-bottom:16px;
+    }
+
+    .plan h4{
+      margin:0;
+      font-size:26px;
+    }
+
+    .price{
+      margin:14px 0 18px;
+      font-size:42px;
+      font-weight:800;
+      color:#fff;
+    }
+
+    .price span{
+      font-size:16px;
+      color:var(--muted);
+      font-weight:600;
+    }
+
+    .plan ul{
+      margin:0 0 22px 18px;
+      padding:0;
+      color:var(--muted);
+      line-height:1.8;
+    }
+
+    .contact-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:18px;
+    }
+
+    .contact-info{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:var(--shadow);
+    }
+
+    .contact-info h4{
+      margin:0 0 10px;
+      font-size:28px;
+    }
+
+    .contact-info p{
+      margin:0 0 18px;
+      color:var(--muted);
+      line-height:1.6;
+    }
+
+    .contact-lines{
+      display:grid;
+      gap:12px;
+      margin-top:18px;
+      color:#f3efe7;
+      font-weight:600;
+    }
+
+    footer{
+      border-top:1px solid rgba(199,156,52,.15);
+      margin-top:36px;
+      padding:28px 0 50px;
+      color:var(--muted);
+      text-align:center;
+    }
+
+    @media (max-width: 1080px){
+      .hero h2{font-size:68px}
+      .hero-grid{grid-template-columns:1fr}
+      .cards,.plans,.tool-grid,.contact-grid{grid-template-columns:1fr}
+    }
+
+    @media (max-width: 760px){
+      .nav{
+        flex-direction:column;
+        align-items:flex-start;
+        padding:14px 0;
+      }
+      .nav-links{
+        gap:16px;
+        font-size:14px;
+      }
+      .brand-text h1{font-size:22px}
+      .hero{padding:34px 0 22px}
+      .hero h2{font-size:52px}
+      .section-head h3{font-size:32px}
+      .price{font-size:34px}
+      .result .big{font-size:28px}
+    }
+  </style>
 </head>
 <body>
-  <div class="app-shell">
-    <header class="topbar">
+  <header class="topbar">
+    <div class="container nav">
       <div class="brand">
-        <div class="logo">🐼</div>
-        <div>
-          <h1 id="businessName">Panda's Heating & Cooling</h1>
-          <p id="tagline">Comfort made easy</p>
+        <div class="brand-badge">🐼</div>
+        <div class="brand-text">
+          <h1>PANDA'S HEATING &amp; COOLING</h1>
+          <p>Engineered comfort. Built for protection.</p>
         </div>
       </div>
-    </header>
 
-    <main class="content">
-      <section class="card hero">
-        <h2>How can we help?</h2>
-        <p>Get an estimate, find your filter, compare maintenance plans, or request service.</p>
-      </section>
+      <nav class="nav-links">
+        <a href="#services">Services</a>
+        <a href="#brand">Brand</a>
+        <a href="#estimator">Estimator</a>
+        <a href="#loads">Load Calc</a>
+        <a href="#plans">Plans</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </div>
+  </header>
 
-      <section class="card">
-        <h3>Quick Estimate</h3>
-        <label>Home Size</label>
-        <select id="homeSize">
-          <option value="small">Under 1500 sq ft</option>
-          <option value="medium">1500–2500 sq ft</option>
-          <option value="large">2500+ sq ft</option>
-        </select>
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">Luxury HVAC Experience</div>
+          <h2>Premium comfort with a brand homeowners remember.</h2>
+          <p>
+            Panda's Heating &amp; Cooling delivers high-end heating, cooling, airflow design,
+            clean installation work, and a polished customer experience built for long-term performance.
+          </p>
 
-        <label>System Type</label>
-        <select id="systemType">
-          <option value="ac">Cooling Only</option>
-          <option value="full">Cooling + Heating</option>
-        </select>
-
-        <label>Ductwork Needed?</label>
-        <select id="ductwork">
-          <option value="no">No</option>
-          <option value="yes">Yes</option>
-        </select>
-
-        <div class="result-box">
-          <div class="result-label">Estimated Range</div>
-          <div class="result-value" id="estimateOutput">$7,500 – $10,200</div>
+          <div class="hero-actions">
+            <a class="btn btn-gold" href="#estimator">Get My Estimate</a>
+            <a class="btn btn-outline" href="#brand">See the Brand</a>
+          </div>
         </div>
 
-        <button class="btn primary" onclick="calculateEstimate()">Update Estimate</button>
-      </section>
+        <div class="hero-card">
+          <div class="hero-chip">Built to stand out</div>
+          <div class="truck-wrap">
+            <div class="placeholder-truck">
+              <div>
+                <strong>Panda's Heating &amp; Cooling</strong>
+                Replace this box later with your truck photo or install image.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <section class="card">
-        <h3>Cooling Load Calculator</h3>
-        <label>Square Footage</label>
-        <input type="number" id="coolSqft" placeholder="Enter square footage" />
-
-        <label>Insulation Level</label>
-        <select id="coolInsulation">
-          <option value="tight">Tight</option>
-          <option value="average">Average</option>
-          <option value="poor">Poor</option>
-        </select>
-
-        <label>Window Exposure</label>
-        <select id="coolWindows">
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-
-        <div class="result-box">
-          <div class="result-label">Cooling Load</div>
-          <div class="result-value" id="coolingResult">—</div>
+    <section id="services" class="block">
+      <div class="container">
+        <div class="section-head">
+          <h3>Services that match the presentation.</h3>
+          <p>
+            Built for homeowners who care about comfort, appearance, airflow, reliability, and a premium install experience.
+          </p>
         </div>
 
-        <button class="btn primary" onclick="calculateCoolingLoad()">Calculate Cooling</button>
-      </section>
+        <div class="cards">
+          <div class="card">
+            <div class="service-icon">❄️</div>
+            <h4>Cooling Systems</h4>
+            <p>High-efficiency AC and heat pump solutions designed for comfort, cleaner installs, and proper performance.</p>
+          </div>
 
-      <section class="card">
-        <h3>Heating Load Calculator</h3>
-        <label>Square Footage</label>
-        <input type="number" id="heatSqft" placeholder="Enter square footage" />
+          <div class="card">
+            <div class="service-icon">🔥</div>
+            <h4>Heating Systems</h4>
+            <p>Heating solutions with attention to sizing, airflow, controls, and long-term dependability.</p>
+          </div>
 
-        <label>Insulation Level</label>
-        <select id="heatInsulation">
-          <option value="tight">Tight</option>
-          <option value="average">Average</option>
-          <option value="poor">Poor</option>
-        </select>
+          <div class="card">
+            <div class="service-icon">🌬️</div>
+            <h4>Airflow &amp; Duct Design</h4>
+            <p>Duct upgrades, airflow correction, and layout planning to help systems actually perform the way they should.</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
-        <label>Climate Severity</label>
-        <select id="heatClimate">
-          <option value="mild">Mild</option>
-          <option value="moderate">Moderate</option>
-          <option value="cold">Cold</option>
-        </select>
+    <section id="brand" class="block">
+      <div class="container">
+        <div class="section-head">
+          <h3>A luxury look with real HVAC tools behind it.</h3>
+          <p>
+            This site is designed to look premium on the front end while still giving you working HVAC calculators,
+            estimator tools, and a path to a private owner-only admin page.
+          </p>
+        </div>
+      </div>
+    </section>
 
-        <div class="result-box">
-          <div class="result-label">Heating Load</div>
-          <div class="result-value" id="heatingResult">—</div>
+    <section id="estimator" class="block">
+      <div class="container">
+        <div class="section-head">
+          <h3>Quick project estimator</h3>
+          <p>Use this planning tool to give homeowners a cleaner first step before a site visit.</p>
         </div>
 
-        <button class="btn primary" onclick="calculateHeatingLoad()">Calculate Heating</button>
-      </section>
+        <div class="tool-card">
+          <h4>Estimate Range</h4>
+          <p>This is a planning range only. Final pricing depends on scope, access, electrical, ductwork, and equipment selection.</p>
 
-      <section class="card">
-        <h3>Maintenance Plans</h3>
-        <div class="plan">
-          <strong id="plan1Name">Essential Air Plan</strong>
-          <p id="plan1Price">$12 / month</p>
-        </div>
-        <div class="plan">
-          <strong id="plan2Name">Comfort Air Plan</strong>
-          <p id="plan2Price">$22 / month</p>
-        </div>
-        <div class="plan">
-          <strong id="plan3Name">Pure Air Plan</strong>
-          <p id="plan3Price">$39 / month</p>
-        </div>
-      </section>
+          <label for="homeSize">Home Size</label>
+          <select id="homeSize">
+            <option value="small">Under 1500 sq ft</option>
+            <option value="medium">1500–2500 sq ft</option>
+            <option value="large">2500+ sq ft</option>
+          </select>
 
-      <section class="card">
-        <h3>Request Service</h3>
-        <input type="text" id="leadName" placeholder="Full name" />
-        <input type="tel" id="leadPhone" placeholder="Phone number" />
-        <input type="email" id="leadEmail" placeholder="Email address" />
-        <textarea id="leadNotes" placeholder="Tell us what you need"></textarea>
-        <button class="btn primary" onclick="sendLead()">Submit Request</button>
-      </section>
-    </main>
-  </div>
+          <label for="systemType">System Type</label>
+          <select id="systemType">
+            <option value="ac">Cooling Only</option>
+            <option value="full">Cooling + Heating</option>
+          </select>
 
-  <script src="app.js"></script>
+          <label for="ductwork">Ductwork Needed?</label>
+          <select id="ductwork">
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
+          </select>
+
+          <label for="packageType">Package Level</label>
+          <select id="packageType">
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+          </select>
+
+          <div class="result">
+            <div class="small">Estimated Range</div>
+            <div class="big" id="estimateOutput">$7,500 – $10,200</div>
+          </div>
+
+          <div style="margin-top:18px;">
+            <button class="btn btn-gold" onclick="calculateEstimate()">Update Estimate</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="loads" class="block">
+      <div class="container">
+        <div class="section-head">
+          <h3>Cooling and heating load calculations</h3>
+          <p>We’ll make these more HVAC-accurate later. This version is your strong-looking working starter.</p>
+        </div>
+
+        <div class="tool-grid">
+          <div class="tool-card">
+            <h4>Cooling Load Calculator</h4>
+            <p>Quick planning calculation for cooling load and approximate tonnage.</p>
+
+            <label for="coolSqft">Square Footage</label>
+            <input type="number" id="coolSqft" placeholder="Enter square footage" />
+
+            <label for="coolInsulation">Insulation Level</label>
+            <select id="coolInsulation">
+              <option value="tight">Tight</option>
+              <option value="average">Average</option>
+              <option value="poor">Poor</option>
+            </select>
+
+            <label for="coolWindows">Window Exposure</label>
+            <select id="coolWindows">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+
+            <div class="result">
+              <div class="small">Cooling Load</div>
+              <div class="big" id="coolingResult">—</div>
+            </div>
+
+            <div style="margin-top:18px;">
+              <button class="btn btn-gold" onclick="calculateCoolingLoad()">Calculate Cooling</button>
+            </div>
+          </div>
+
+          <div class="tool-card">
+            <h4>Heating Load Calculator</h4>
+            <p>Quick planning calculation for heating load based on size, insulation, and climate severity.</p>
+
+            <label for="heatSqft">Square Footage</label>
+            <input type="number" id="heatSqft" placeholder="Enter square footage" />
+
+            <label for="heatInsulation">Insulation Level</label>
+            <select id="heatInsulation">
+              <option value="tight">Tight</option>
+              <option value="average">Average</option>
+              <option value="poor">Poor</option>
+            </select>
+
+            <label for="heatClimate">Climate Severity</label>
+            <select id="heatClimate">
+              <option value="mild">Mild</option>
+              <option value="moderate">Moderate</option>
+              <option value="cold">Cold</option>
+            </select>
+
+            <div class="result">
+              <div class="small">Heating Load</div>
+              <div class="big" id="heatingResult">—</div>
+            </div>
+
+            <div style="margin-top:18px;">
+              <button class="btn btn-gold" onclick="calculateHeatingLoad()">Calculate Heating</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="plans" class="block">
+      <div class="container">
+        <div class="section-head">
+          <h3>Maintenance plans</h3>
+          <p>Premium presentation with simple monthly plan structure.</p>
+        </div>
+
+        <div class="plans">
+          <div class="plan">
+            <div class="plan-tag">Entry</div>
+            <h4>Essential Air</h4>
+            <div class="price">$12 <span>/ month</span></div>
+            <ul>
+              <li>Standard filter support</li>
+              <li>Basic maintenance reminders</li>
+              <li>Clean recurring service structure</li>
+            </ul>
+            <a href="#contact" class="btn btn-outline">Ask About This Plan</a>
+          </div>
+
+          <div class="plan">
+            <div class="plan-tag">Popular</div>
+            <h4>Comfort Air</h4>
+            <div class="price">$22 <span>/ month</span></div>
+            <ul>
+              <li>Premium filter support</li>
+              <li>Priority scheduling</li>
+              <li>Better comfort and air quality positioning</li>
+            </ul>
+            <a href="#contact" class="btn btn-gold">Choose Comfort</a>
+          </div>
+
+          <div class="plan">
+            <div class="plan-tag">Premium</div>
+            <h4>Pure Air</h4>
+            <div class="price">$39 <span>/ month</span></div>
+            <ul>
+              <li>Higher-end filtration support</li>
+              <li>Priority service positioning</li>
+              <li>Luxury air care presentation</li>
+            </ul>
+            <a href="#contact" class="btn btn-outline">Ask About Pure Air</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="block">
+      <div class="container">
+        <div class="section-head">
+          <h3>Start the conversation</h3>
+          <p>Let homeowners request service or a quote while you keep the luxury front-end feel.</p>
+        </div>
+
+        <div class="contact-grid">
+          <div class="contact-info">
+            <h4>Panda's Heating &amp; Cooling</h4>
+            <p>
+              Premium HVAC presentation, system replacements, airflow design, service requests,
+              and comfort-focused support for homeowners.
+            </p>
+
+            <div class="contact-lines">
+              <div>Phone: (503) 555-1234</div>
+              <div>Email: theahvacguy@gmail.com</div>
+              <div>Service Area: Portland Metro</div>
+            </div>
+          </div>
+
+          <div class="tool-card">
+            <h4>Request service or quote</h4>
+
+            <label for="leadName">Full Name</label>
+            <input type="text" id="leadName" placeholder="Your full name" />
+
+            <label for="leadPhone">Phone</label>
+            <input type="tel" id="leadPhone" placeholder="Phone number" />
+
+            <label for="leadEmail">Email</label>
+            <input type="email" id="leadEmail" placeholder="Email address" />
+
+            <label for="leadNotes">Notes</label>
+            <textarea id="leadNotes" placeholder="Tell us what you need"></textarea>
+
+            <div style="margin-top:18px;">
+              <button class="btn btn-gold" onclick="sendLead()">Submit Request</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      Panda's Heating &amp; Cooling — premium comfort with real HVAC tools.
+    </div>
+  </footer>
+
+  <script>
+    function calculateEstimate() {
+      const homeSize = document.getElementById("homeSize").value;
+      const systemType = document.getElementById("systemType").value;
+      const ductwork = document.getElementById("ductwork").value;
+      const packageType = document.getElementById("packageType").value;
+
+      let low = 5500;
+      let high = 7600;
+
+      if (homeSize === "medium") { low += 1300; high += 1900; }
+      if (homeSize === "large") { low += 2800; high += 3600; }
+      if (systemType === "full") { low += 1500; high += 2200; }
+      if (ductwork === "yes") { low += 1000; high += 1700; }
+      if (packageType === "premium") { low += 1200; high += 1800; }
+
+      document.getElementById("estimateOutput").textContent =
+        "$" + low.toLocaleString() + " – $" + high.toLocaleString();
+    }
+
+    function calculateCoolingLoad() {
+      const sqft = Number(document.getElementById("coolSqft").value);
+      const insulation = document.getElementById("coolInsulation").value;
+      const windows = document.getElementById("coolWindows").value;
+
+      if (!sqft) {
+        document.getElementById("coolingResult").textContent = "Enter square footage";
+        return;
+      }
+
+      let btuPerSqft = 20;
+      if (insulation === "tight") btuPerSqft -= 2;
+      if (insulation === "poor") btuPerSqft += 4;
+      if (windows === "medium") btuPerSqft += 2;
+      if (windows === "high") btuPerSqft += 5;
+
+      const totalBTU = Math.round(sqft * btuPerSqft);
+      const tons = (totalBTU / 12000).toFixed(2);
+
+      document.getElementById("coolingResult").textContent =
+        totalBTU.toLocaleString() + " BTU/hr • " + tons + " tons";
+    }
+
+    function calculateHeatingLoad() {
+      const sqft = Number(document.getElementById("heatSqft").value);
+      const insulation = document.getElementById("heatInsulation").value;
+      const climate = document.getElementById("heatClimate").value;
+
+      if (!sqft) {
+        document.getElementById("heatingResult").textContent = "Enter square footage";
+        return;
+      }
+
+      let btuPerSqft = 30;
+      if (insulation === "tight") btuPerSqft -= 4;
+      if (insulation === "poor") btuPerSqft += 6;
+      if (climate === "moderate") btuPerSqft += 5;
+      if (climate === "cold") btuPerSqft += 10;
+
+      const totalBTU = Math.round(sqft * btuPerSqft);
+
+      document.getElementById("heatingResult").textContent =
+        totalBTU.toLocaleString() + " BTU/hr";
+    }
+
+    function sendLead() {
+      const name = document.getElementById("leadName").value.trim();
+      const phone = document.getElementById("leadPhone").value.trim();
+      const email = document.getElementById("leadEmail").value.trim();
+      const notes = document.getElementById("leadNotes").value.trim();
+
+      const subject = encodeURIComponent("New Panda HVAC Request");
+      const body = encodeURIComponent(
+        "Name: " + name + "\\n" +
+        "Phone: " + phone + "\\n" +
+        "Email: " + email + "\\n" +
+        "Notes: " + notes
+      );
+
+      window.location.href = "mailto:theahvacguy@gmail.com?subject=" + subject + "&body=" + body;
+    }
+
+    calculateEstimate();
+  </script>
 </body>
-</html> 
+</html>
