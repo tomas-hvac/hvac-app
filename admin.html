@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panda Admin</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">🔒</div>
+        <div>
+          <h1>Owner Admin</h1>
+          <p>Private editing page</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="card" id="loginCard">
+        <h3>Owner Login</h3>
+        <input type="password" id="adminPassword" placeholder="Enter password" />
+        <button class="btn primary" onclick="loginAdmin()">Enter</button>
+        <p id="loginMessage"></p>
+      </section>
+
+      <section class="card hidden" id="adminPanel">
+        <h3>Business Settings</h3>
+        <label>Business Name</label>
+        <input type="text" id="adminBusinessName" />
+
+        <label>Tagline</label>
+        <input type="text" id="adminTagline" />
+
+        <label>Plan 1 Name</label>
+        <input type="text" id="adminPlan1Name" />
+
+        <label>Plan 1 Price</label>
+        <input type="text" id="adminPlan1Price" />
+
+        <label>Plan 2 Name</label>
+        <input type="text" id="adminPlan2Name" />
+
+        <label>Plan 2 Price</label>
+        <input type="text" id="adminPlan2Price" />
+
+        <label>Plan 3 Name</label>
+        <input type="text" id="adminPlan3Name" />
+
+        <label>Plan 3 Price</label>
+        <input type="text" id="adminPlan3Price" />
+
+        <button class="btn primary" onclick="saveAdminSettings()">Save Changes</button>
+        <p id="saveMessage"></p>
+      </section>
+    </main>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
