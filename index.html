@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Panda HVAC App</title>
+  <style>
+    :root{
+      --bg:#0a0a0d;
+      --card:#141419;
+      --card2:#1a1a21;
+      --text:#f4f1ea;
+      --muted:#b8b2a7;
+      --line:rgba(255,255,255,.08);
+      --gold:#d0a63a;
+      --gold-dark:#b88a1a;
+      --shadow:0 16px 36px rgba(0,0,0,.28);
+      --radius:24px;
+      --radius-sm:18px;
+    }
+
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;
+      padding:0;
+      background:linear-gradient(180deg,#09090c 0%, #0d0d12 100%);
+      color:var(--text);
+      font-family:Arial, Helvetica, sans-serif;
+    }
+
+    body{
+      padding-bottom:96px;
+    }
+
+    a{text-decoration:none;color:inherit}
+    button,input,select,textarea{font:inherit}
+
+    .app{
+      max-width:460px;
+      margin:0 auto;
+      min-height:100vh;
+      background:
+        radial-gradient(circle at top left, rgba(32,44,96,.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(208,166,58,.12), transparent 22%),
+        linear-gradient(180deg,#09090c 0%, #0d0d12 100%);
+    }
+
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:20;
+      backdrop-filter:blur(12px);
+      background:rgba(10,10,13,.88);
+      border-bottom:1px solid rgba(208,166,58,.16);
+      padding:14px 16px 12px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .logo{
+      width:52px;
+      height:52px;
+      border-radius:50%;
+      overflow:hidden;
+      flex-shrink:0;
+      border:2px solid var(--gold);
+      background:#fff;
+      box-shadow:0 0 0 5px rgba(208,166,58,.08);
+      display:grid;
+      place-items:center;
+      color:#111;
+      font-size:22px;
+    }
+
+    .logo img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    .brand h1{
+      margin:0;
+      font-size:18px;
+      line-height:1.05;
+      letter-spacing:.02em;
+    }
+
+    .brand p{
+      margin:4px 0 0;
+      color:var(--gold);
+      font-size:11px;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      font-weight:700;
+    }
+
+    .content{
+      padding:16px;
+    }
+
+    .screen{
+      display:none;
+      animation:fade .18s ease;
+    }
+
+    .screen.active{
+      display:block;
+    }
+
+    @keyframes fade{
+      from{opacity:.55; transform:translateY(6px)}
+      to{opacity:1; transform:none}
+    }
+
+    .hero{
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+      border:1px solid rgba(208,166,58,.16);
+      border-radius:30px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      margin-bottom:16px;
+    }
+
+    .hero-photo{
+      height:210px;
+      background:
+        linear-gradient(135deg, rgba(208,166,58,.1), rgba(255,255,255,.03)),
+        url("https://images.unsplash.com/photo-1616046229478-9901c5536a45?auto=format&fit=crop&w=1200&q=80") center/cover;
+    }
+
+    .hero-copy{
+      padding:18px;
+    }
+
+    .eyebrow{
+      color:var(--gold);
+      font-size:12px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.16em;
+      margin-bottom:10px;
+    }
+
+    .hero-copy h2{
+      margin:0;
+      font-size:34px;
+      line-height:1.02;
+      letter-spacing:-.04em;
+    }
+
+    .hero-copy p{
+      margin:12px 0 0;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:15px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .home-card{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:24px;
+      box-shadow:var(--shadow);
+      padding:16px;
+      min-height:128px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      cursor:pointer;
+      transition:.18s ease;
+    }
+
+    .home-card:hover{
+      transform:translateY(-1px);
+      border-color:rgba(208,166,58,.24);
+    }
+
+    .icon{
+      width:46px;
+      height:46px;
+      border-radius:16px;
+      display:grid;
+      place-items:center;
+      background:rgba(208,166,58,.12);
+      border:1px solid rgba(208,166,58,.2);
+      font-size:22px;
+    }
+
+    .home-card strong{
+      display:block;
+      margin-top:12px;
+      font-size:19px;
+      line-height:1.08;
+    }
+
+    .home-card span{
+      display:block;
+      margin-top:6px;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.35;
+    }
+
+    .section-title{
+      margin:20px 0 10px;
+      color:var(--gold);
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+    }
+
+    .panel{
+      background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--line);
+      border-radius:28px;
+      box-shadow:var(--shadow);
+      padding:18px;
+    }
+
+    .panel h3{
+      margin:0;
+      font-size:28px;
+      line-height:1.05;
+      letter-spacing:-.03em;
+    }
+
+    .panel .copy{
+      margin:10px 0 0;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:14px;
+    }
+
+    .field{
+      margin-top:14px;
+    }
+
+    .field label{
+      display:block;
+      margin-bottom:8px;
+      font-size:14px;
+      font-weight:700;
+    }
+
+    input,select,textarea{
+      width:100%;
+      padding:14px 14px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.08);
+      background:#111117;
+      color:#fff;
+      outline:none;
+    }
+
+    textarea{
+      min-height:120px;
+      resize:vertical;
+    }
+
+    input:focus,select:focus,textarea:focus{
+      border-color:rgba(208,166,58,.48);
+      box-shadow:0 0 0 3px rgba(208,166,58,.08);
+    }
+
+    .result{
+      margin-top:16px;
+      background:rgba(208,166,58,.08);
+      border:1px solid rgba(208,166,58,.18);
+      border-radius:18px;
+      padding:16px;
+    }
+
+    .result small{
+      color:var(--muted);
+      display:block;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+
+    .result .value{
+      margin-top:8px;
+      font-size:30px;
+      font-weight:800;
+      line-height:1.08;
+      letter-spacing:-.03em;
+    }
+
+    .btn-row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:16px;
+    }
+
+    .btn{
+      min-height:52px;
+      border:none;
+      border-radius:16px;
+      cursor:pointer;
+      font-weight:700;
+      padding:0 18px;
+    }
+
+    .btn-gold{
+      background:linear-gradient(180deg, #ddb955 0%, #c99d2d 100%);
+      color:#111;
+    }
+
+    .btn-dark{
+      background:transparent;
+      color:#fff;
+      border:1px solid rgba(208,166,58,.4);
+    }
+
+    .stack{
+      display:grid;
+      gap:12px;
+      margin-top:14px;
+    }
+
+    .mini-card{
+      background:rgba(255,255,255,.03);
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:16px;
+    }
+
+    .mini-card strong{
+      display:block;
+      font-size:20px;
+      margin-bottom:6px;
+    }
+
+    .mini-card p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.45;
+      font-size:14px;
+    }
+
+    .price{
+      margin-top:10px;
+      font-size:28px;
+      font-weight:800;
+      color:#fff;
+    }
+
+    .tag{
+      display:inline-block;
+      margin-bottom:10px;
+      padding:7px 12px;
+      border-radius:999px;
+      border:1px solid rgba(208,166,58,.28);
+      color:var(--gold);
+      font-size:11px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.13em;
+    }
+
+    .back{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-bottom:14px;
+      color:var(--gold);
+      font-weight:700;
+      cursor:pointer;
+      background:none;
+      border:none;
+      padding:0;
+    }
+
+    .bottom-nav{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      z-index:30;
+      background:rgba(12,12,16,.94);
+      border-top:1px solid rgba(208,166,58,.14);
+      backdrop-filter:blur(12px);
+      padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    }
+
+    .nav-wrap{
+      max-width:460px;
+      margin:0 auto;
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:8px;
+    }
+
+    .nav-btn{
+      background:transparent;
+      border:none;
+      color:#aaa396;
+      border-radius:14px;
+      padding:8px 4px;
+      font-size:11px;
+      font-weight:700;
+      cursor:pointer;
+    }
+
+    .nav-btn.active{
+      background:rgba(208,166,58,.1);
+      color:#fff;
+    }
+
+    .nav-btn .n-ico{
+      display:block;
+      font-size:18px;
+      margin-bottom:4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">🐼</div>
+        <div>
+          <h1>Panda's Heating &amp; Cooling</h1>
+          <p>Comfort tools for customers &amp; techs</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <!-- HOME -->
+      <section id="screen-home" class="screen active">
+        <div class="hero">
+          <div class="hero-photo"></div>
+          <div class="hero-copy">
+            <div class="eyebrow">Simple • clean • field-ready</div>
+            <h2>HVAC tools that feel modern and easy to use.</h2>
+            <p>
+              Built for homeowners, technicians in the field, and owner control later.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="home-card" data-target="estimate">
+            <div class="icon">🧮</div>
+            <div>
+              <strong>Estimate</strong>
+              <span>Quick customer planning range</span>
+            </div>
+          </div>
+
+          <div class="home-card" data-target="load">
+            <div class="icon">❄️</div>
+            <div>
+              <strong>Load Calc</strong>
+              <span>Cooling and heating tools</span>
+            </div>
+          </div>
+
+          <div class="home-card" data-target="filters">
+            <div class="icon">🌬️</div>
+            <div>
+              <strong>Filters</strong>
+              <span>Help customers find the right filter</span>
+            </div>
+          </div>
+
+          <div class="home-card" data-target="plans">
+            <div class="icon">🛡️</div>
+            <div>
+              <strong>Plans</strong>
+              <span>Maintenance options and pricing</span>
+            </div>
+          </div>
+
+          <div class="home-card" data-target="request">
+            <div class="icon">✉️</div>
+            <div>
+              <strong>Request</strong>
+              <span>Quote or service request form</span>
+            </div>
+          </div>
+
+          <div class="home-card" data-target="tech">
+            <div class="icon">🧰</div>
+            <div>
+              <strong>Tech Tools</strong>
+              <span>Field-use tools and quick notes</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">What this app does</div>
+        <div class="stack">
+          <div class="mini-card">
+            <strong>Customer side</strong>
+            <p>Estimate, filters, plans, and service request flow.</p>
+          </div>
+          <div class="mini-card">
+            <strong>Technician side</strong>
+            <p>Cooling load, heating load, quick field reference, and job notes.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ESTIMATE -->
+      <section id="screen-estimate" class="screen">
+        <button class="back" data-target="home">← Back</button>
+        <div class="panel">
+          <h3>Quick Estimate</h3>
+          <p class="copy">Simple customer-facing planning tool.</p>
+
+          <div class="field">
+            <label>Home Size</label>
+            <select id="homeSize">
+              <option value="small">Under 1500 sq ft</option>
+              <option value="medium">1500–2500 sq ft</option>
+              <option value="large">2500+ sq ft</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>System Type</label>
+            <select id="systemType">
+              <option value="ac">Cooling Only</option>
+              <option value="full">Cooling + Heating</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Ductwork Needed?</label>
+            <select id="ductwork">
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Package Level</label>
+            <select id="packageType">
+              <option value="standard">Standard</option>
+              <option value="premium">Premium</option>
+            </select>
+          </div>
+
+          <div class="result">
+            <small>Estimated range</small>
+            <div class="value" id="estimateOutput">$7,500 – $10,200</div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-gold" onclick="calculateEstimate()">Update</button>
+            <button class="btn btn-dark" data-target="request">Request Quote</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOAD -->
+      <section id="screen-load" class="screen">
+        <button class="back" data-target="home">← Back</button>
+
+        <div class="stack">
+          <div class="panel">
+            <h3>Cooling Load</h3>
+            <p class="copy">Quick field-ready cooling planning tool.</p>
+
+            <div class="field">
+              <label>Square Footage</label>
+              <input type="number" id="coolSqft" placeholder="Enter square footage">
+            </div>
+
+            <div class="field">
+              <label>Insulation Level</label>
+              <select id="coolInsulation">
+                <option value="tight">Tight</option>
+                <option value="average">Average</option>
+                <option value="poor">Poor</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Window Exposure</label>
+              <select id="coolWindows">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <div class="result">
+              <small>Cooling result</small>
+              <div class="value" id="coolingResult">—</div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-gold" onclick="calculateCoolingLoad()">Calculate</button>
+              <button class="btn btn-dark" onclick="clearCooling()">Clear</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Heating Load</h3>
+            <p class="copy">Quick field-ready heating planning tool.</p>
+
+            <div class="field">
+              <label>Square Footage</label>
+              <input type="number" id="heatSqft" placeholder="Enter square footage">
+            </div>
+
+            <div class="field">
+              <label>Insulation Level</label>
+              <select id="heatInsulation">
+                <option value="tight">Tight</option>
+                <option value="average">Average</option>
+                <option value="poor">Poor</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Climate Severity</label>
+              <select id="heatClimate">
+                <option value="mild">Mild</option>
+                <option value="moderate">Moderate</option>
+                <option value="cold">Cold</option>
+              </select>
+            </div>
+
+            <div class="result">
+              <small>Heating result</small>
+              <div class="value" id="heatingResult">—</div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn btn-gold" onclick="calculateHeatingLoad()">Calculate</button>
+              <button class="btn btn-dark" onclick="clearHeating()">Clear</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FILTERS -->
+      <section id="screen-filters" class="screen">
+        <button class="back" data-target="home">← Back</button>
+        <div class="panel">
+          <h3>Find My Filter</h3>
+          <p class="copy">Simple guide for customers.</p>
+
+          <div class="field">
+            <label>Pets in the home?</label>
+            <select id="pets">
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Air quality goal</label>
+            <select id="airNeeds">
+              <option value="dust">Dust control</option>
+              <option value="allergy">Allergy support</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Filter level</label>
+            <select id="filterLevel">
+              <option value="standard">Standard</option>
+              <option value="premium">Premium</option>
+            </select>
+          </div>
+
+          <div class="result">
+            <small>Recommended filter</small>
+            <div class="value" id="filterResult">Premium Home Filter</div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-gold" onclick="updateFilter()">Update</button>
+            <button class="btn btn-dark" data-target="plans">See Plans</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- PLANS -->
+      <section id="screen-plans" class="screen">
+        <button class="back" data-target="home">← Back</button>
+
+        <div class="stack">
+          <div class="mini-card">
+            <div class="tag">Entry</div>
+            <strong>Essential Air</strong>
+            <p>Standard filter support and simple recurring care.</p>
+            <div class="price">$12 / month</div>
+          </div>
+
+          <div class="mini-card">
+            <div class="tag">Popular</div>
+            <strong>Comfort Air</strong>
+            <p>Premium filter support and priority scheduling.</p>
+            <div class="price">$22 / month</div>
+          </div>
+
+          <div class="mini-card">
+            <div class="tag">Premium</div>
+            <strong>Pure Air</strong>
+            <p>High-performance filtration and higher-end support.</p>
+            <div class="price">$39 / month</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- REQUEST -->
+      <section id="screen-request" class="screen">
+        <button class="back" data-target="home">← Back</button>
+        <div class="panel">
+          <h3>Request Service</h3>
+          <p class="copy">Customer quote or service request.</p>
+
+          <div class="field">
+            <label>Full Name</label>
+            <input type="text" id="leadName" placeholder="Your full name">
+          </div>
+
+          <div class="field">
+            <label>Phone</label>
+            <input type="tel" id="leadPhone" placeholder="Phone number">
+          </div>
+
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="leadEmail" placeholder="Email address">
+          </div>
+
+          <div class="field">
+            <label>Job Type</label>
+            <select id="leadJob">
+              <option>New Installation</option>
+              <option>Repair</option>
+              <option>Maintenance</option>
+              <option>Filter / Plan</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Notes</label>
+            <textarea id="leadNotes" placeholder="Tell us what you need"></textarea>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-gold" onclick="sendLead()">Submit</button>
+            <button class="btn btn-dark" onclick="clearLead()">Clear</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TECH TOOLS -->
+      <section id="screen-tech" class="screen">
+        <button class="back" data-target="home">← Back</button>
+
+        <div class="stack">
+          <div class="mini-card">
+            <strong>Cooling load</strong>
+            <p>Use the load calculator tab for quick sizing support in the field.</p>
+          </div>
+
+          <div class="mini-card">
+            <strong>Heating load</strong>
+            <p>Fast rough planning while you’re onsite.</p>
+          </div>
+
+          <div class="mini-card">
+            <strong>Job notes</strong>
+            <p>Next step: we can add service notes, airflow notes, and parts tracking here.</p>
+          </div>
+
+          <div class="mini-card">
+            <strong>Owner admin</strong>
+            <p>Next step after this: private edit page so only you can change prices and wording.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-wrap">
+      <button class="nav-btn active" data-target="home">
+        <span class="n-ico">🏠</span>Home
+      </button>
+      <button class="nav-btn" data-target="estimate">
+        <span class="n-ico">🧮</span>Estimate
+      </button>
+      <button class="nav-btn" data-target="load">
+        <span class="n-ico">❄️</span>Loads
+      </button>
+      <button class="nav-btn" data-target="request">
+        <span class="n-ico">✉️</span>Request
+      </button>
+      <button class="nav-btn" data-target="tech">
+        <span class="n-ico">🧰</span>Tech
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    function showScreen(name){
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      const target = document.getElementById("screen-" + name);
+      if(target) target.classList.add("active");
+
+      document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll('.nav-btn[data-target="' + name + '"]').forEach(b => b.classList.add("active"));
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    document.querySelectorAll("[data-target]").forEach(el => {
+      el.addEventListener("click", function(){
+        const target = this.getAttribute("data-target");
+        if(target) showScreen(target);
+      });
+    });
+
+    function calculateEstimate() {
+      const homeSize = document.getElementById("homeSize").value;
+      const systemType = document.getElementById("systemType").value;
+      const ductwork = document.getElementById("ductwork").value;
+      const packageType = document.getElementById("packageType").value;
+
+      let low = 5500;
+      let high = 7600;
+
+      if (homeSize === "medium") { low += 1300; high += 1900; }
+      if (homeSize === "large") { low += 2800; high += 3600; }
+      if (systemType === "full") { low += 1500; high += 2200; }
+      if (ductwork === "yes") { low += 1000; high += 1700; }
+      if (packageType === "premium") { low += 1200; high += 1800; }
+
+      document.getElementById("estimateOutput").textContent =
+        "$" + low.toLocaleString() + " – $" + high.toLocaleString();
+    }
+
+    function calculateCoolingLoad() {
+      const sqft = Number(document.getElementById("coolSqft").value);
+      const insulation = document.getElementById("coolInsulation").value;
+      const windows = document.getElementById("coolWindows").value;
+
+      if (!sqft) {
+        document.getElementById("coolingResult").textContent = "Enter square footage";
+        return;
+      }
+
+      let btuPerSqft = 20;
+      if (insulation === "tight") btuPerSqft -= 2;
+      if (insulation === "poor") btuPerSqft += 4;
+      if (windows === "medium") btuPerSqft += 2;
+      if (windows === "high") btuPerSqft += 5;
+
+      const totalBTU = Math.round(sqft * btuPerSqft);
+      const tons = (totalBTU / 12000).toFixed(2);
+
+      document.getElementById("coolingResult").textContent =
+        totalBTU.toLocaleString() + " BTU/hr • " + tons + " tons";
+    }
+
+    function calculateHeatingLoad() {
+      const sqft = Number(document.getElementById("heatSqft").value);
+      const insulation = document.getElementById("heatInsulation").value;
+      const climate = document.getElementById("heatClimate").value;
+
+      if (!sqft) {
+        document.getElementById("heatingResult").textContent = "Enter square footage";
+        return;
+      }
+
+      let btuPerSqft = 30;
+      if (insulation === "tight") btuPerSqft -= 4;
+      if (insulation === "poor") btuPerSqft += 6;
+      if (climate === "moderate") btuPerSqft += 5;
+      if (climate === "cold") btuPerSqft += 10;
+
+      const totalBTU = Math.round(sqft * btuPerSqft);
+
+      document.getElementById("heatingResult").textContent =
+        totalBTU.toLocaleString() + " BTU/hr";
+    }
+
+    function clearCooling(){
+      document.getElementById("coolSqft").value = "";
+      document.getElementById("coolInsulation").value = "tight";
+      document.getElementById("coolWindows").value = "low";
+      document.getElementById("coolingResult").textContent = "—";
+    }
+
+    function clearHeating(){
+      document.getElementById("heatSqft").value = "";
+      document.getElementById("heatInsulation").value = "tight";
+      document.getElementById("heatClimate").value = "mild";
+      document.getElementById("heatingResult").textContent = "—";
+    }
+
+    function updateFilter(){
+      const pets = document.getElementById("pets").value;
+      const air = document.getElementById("airNeeds").value;
+      const level = document.getElementById("filterLevel").value;
+
+      let result = "Standard Home Filter";
+
+      if (pets === "yes" || level === "premium") {
+        result = "Premium Home Filter";
+      }
+
+      if (air === "allergy") {
+        result = "High-Performance Air Care Filter";
+      }
+
+      document.getElementById("filterResult").textContent = result;
+    }
+
+    function sendLead() {
+      const name = document.getElementById("leadName").value.trim();
+      const phone = document.getElementById("leadPhone").value.trim();
+      const email = document.getElementById("leadEmail").value.trim();
+      const job = document.getElementById("leadJob").value.trim();
+      const notes = document.getElementById("leadNotes").value.trim();
+
+      const subject = encodeURIComponent("New Panda HVAC Request");
+      const body = encodeURIComponent(
+        "Name: " + name + "\n" +
+        "Phone: " + phone + "\n" +
+        "Email: " + email + "\n" +
+        "Job Type: " + job + "\n" +
+        "Notes: " + notes
+      );
+
+      window.location.href = "mailto:theahvacguy@gmail.com?subject=" + subject + "&body=" + body;
+    }
+
+    function clearLead(){
+      document.getElementById("leadName").value = "";
+      document.getElementById("leadPhone").value = "";
+      document.getElementById("leadEmail").value = "";
+      document.getElementById("leadJob").value = "New Installation";
+      document.getElementById("leadNotes").value = "";
+    }
+
+    calculateEstimate();
+    updateFilter();
+  </script>
+</body>
+</html>

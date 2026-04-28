@@ -1,0 +1,147 @@
+:root{
+  --bg:#f6f3ed;
+  --card:#ffffff;
+  --text:#1e2430;
+  --muted:#657084;
+  --line:#d8d4ca;
+  --navy:#1f4678;
+  --green:#4d7a2a;
+  --gold:#b7891f;
+  --shadow:0 10px 24px rgba(0,0,0,.08);
+  --radius:20px;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  font-family:Arial, Helvetica, sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.app-shell{
+  max-width:700px;
+  margin:0 auto;
+  min-height:100vh;
+}
+
+.topbar{
+  background:#fff;
+  border-bottom:1px solid var(--line);
+  padding:16px;
+  position:sticky;
+  top:0;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.logo{
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#fff;
+  border:1px solid var(--line);
+  font-size:22px;
+}
+
+.brand h1{
+  margin:0;
+  font-size:20px;
+}
+
+.brand p{
+  margin:2px 0 0;
+  color:var(--muted);
+  font-size:13px;
+}
+
+.content{
+  padding:16px;
+}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  padding:18px;
+  margin-bottom:16px;
+}
+
+.card h2, .card h3{
+  margin-top:0;
+}
+
+label{
+  display:block;
+  margin:12px 0 6px;
+  font-weight:700;
+}
+
+input, select, textarea{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  font-size:15px;
+}
+
+textarea{
+  min-height:100px;
+  resize:vertical;
+}
+
+.btn{
+  margin-top:14px;
+  border:none;
+  border-radius:12px;
+  padding:14px 16px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.btn.primary{
+  background:var(--navy);
+  color:white;
+  width:100%;
+}
+
+.result-box{
+  margin-top:16px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#faf8f2;
+}
+
+.result-label{
+  color:var(--muted);
+  font-size:13px;
+}
+
+.result-value{
+  font-size:28px;
+  font-weight:700;
+  margin-top:6px;
+}
+
+.plan{
+  padding:12px 0;
+  border-bottom:1px solid var(--line);
+}
+
+.plan:last-child{
+  border-bottom:none;
+}
+
+.hidden{
+  display:none;
+}
