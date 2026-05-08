@@ -2,15 +2,7 @@
 
 import { useState } from "react";
 
-export default function CustomerProposal({
-  tons,
-  homeType,
-  finalPrice,
-  basicPrice,
-  premiumPrice,
-  elitePrice,
-  formatMoney,
-}: {
+type Props = {
   tons: number;
   homeType: string;
   finalPrice: number;
@@ -18,8 +10,23 @@ export default function CustomerProposal({
   premiumPrice: number;
   elitePrice: number;
   formatMoney: (value: number) => string;
-}) {
-  const [selectedOption, setSelectedOption] = useState<any | null>(null);
+};
+
+type ProposalOption = {
+  name: "Basic Comfort" | "Better Comfort" | "Elite Comfort";
+  priceValue: number;
+  features: string[];
+};
+
+export default function CustomerProposal({
+  tons,
+  homeType,
+  basicPrice,
+  premiumPrice,
+  elitePrice,
+  formatMoney,
+}: Props) {
+  const [selectedOption, setSelectedOption] = useState<ProposalOption | null>(null);
   const [proposalConfirmed, setProposalConfirmed] = useState(false);
 
   const [customerName, setCustomerName] = useState("");
@@ -27,54 +34,41 @@ export default function CustomerProposal({
   const [phone, setPhone] = useState("");
   const [systemType, setSystemType] = useState("");
 
+  const recommendedName =
+    tons <= 2 ? "Basic Comfort" : tons <= 3 ? "Better Comfort" : "Elite Comfort";
 
-  let recommendedName = "Better Comfort";
-
-if (tons <= 2) recommendedName = "Basic Comfort";
-else if (tons <= 3) recommendedName = "Better Comfort";
-else recommendedName = "Elite Comfort";
-
-  const options = [
-  {
-    name: "Basic Comfort",
-    price: formatMoney(basicPrice),
-   
-    features: [
-      "Properly sized system",
-      "Standard efficiency equipment",
-      "Professional installation",
-    ],
-  },
-  {
-    name: "Better Comfort",
-    price: formatMoney(premiumPrice),
-   
-    features: [
-      "Properly sized system",
-      "High efficiency equipment",
-      "Enhanced airflow balance",
-      "Professional installation",
-    ],
-  },
-  {
-    name: "Elite Comfort",
-    price: formatMoney(elitePrice),
-   
-    features: [
-      "Properly sized system",
-      "Premium high-efficiency system",
-      "Advanced airflow design",
-      "Maximum comfort performance",
-      "Priority installation",
-    ],
-  },
-];
-const activePrice =
-  selectedOption?.name === "Basic Comfort"
-    ? basicPrice
-    : selectedOption?.name === "Elite Comfort"
-    ? elitePrice
-    : premiumPrice;
+  const options: ProposalOption[] = [
+    {
+      name: "Basic Comfort",
+      priceValue: basicPrice,
+      features: [
+        "Properly sized system",
+        "Standard efficiency equipment",
+        "Professional installation",
+      ],
+    },
+    {
+      name: "Better Comfort",
+      priceValue: premiumPrice,
+      features: [
+        "Properly sized system",
+        "High efficiency equipment",
+        "Enhanced airflow balance",
+        "Professional installation",
+      ],
+    },
+    {
+      name: "Elite Comfort",
+      priceValue: elitePrice,
+      features: [
+        "Properly sized system",
+        "Premium high-efficiency system",
+        "Advanced airflow design",
+        "Maximum comfort performance",
+        "Priority installation",
+      ],
+    },
+  ];
 
   const getRecommendationReason = () => {
     if (homeType === "new") {
@@ -88,8 +82,9 @@ const activePrice =
     return "Extra capacity helps handle heat loss and peak demand in older homes.";
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handleSelect = (option: ProposalOption) => {
+    setSelectedOption(option);
+    setProposalConfirmed(false);
   };
 
   return (
@@ -97,190 +92,132 @@ const activePrice =
       <style>{printStyles}</style>
 
       <div style={proposalBoxStyle} className="no-print">
-        <div>
-          <p style={smallLabelStyle}>Panda Heating & Cooling</p>
-          <h2 style={titleStyle}>HVAC Proposal</h2>
-          <p style={{ fontWeight: 700 }}>
-            Recommended System: {tons} Ton System
-          </p>
-          <p style={subTextStyle}>
-            Clear system options built around comfort, efficiency, and long-term reliability.
-          </p>
-        </div>
+        <p style={smallLabelStyle}>Panda Heating & Cooling</p>
+        <h2 style={titleStyle}>HVAC Proposal</h2>
+
+        <p style={{ fontWeight: 800 }}>
+          Recommended System: {tons} Ton System
+        </p>
+
+        <p style={subTextStyle}>
+          Clear system options built around comfort, efficiency, and long-term reliability.
+        </p>
 
         <div style={infoGridStyle}>
-          <input style={inputStyle} placeholder="Customer name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-          <input style={inputStyle} placeholder="Job address" value={jobAddress} onChange={(e) => setJobAddress(e.target.value)} />
-          <input style={inputStyle} placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          <input style={inputStyle} placeholder="System type" value={systemType} onChange={(e) => setSystemType(e.target.value)} />
+          <input
+            style={inputStyle}
+            placeholder="Customer name"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+          />
+
+          <input
+            style={inputStyle}
+            placeholder="Job address"
+            value={jobAddress}
+            onChange={(e) => setJobAddress(e.target.value)}
+          />
+
+          <input
+            style={inputStyle}
+            placeholder="Phone number"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+
+          <input
+            style={inputStyle}
+            placeholder="System type"
+            value={systemType}
+            onChange={(e) => setSystemType(e.target.value)}
+          />
         </div>
 
-        <div
-  style={{
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "16px",
-    marginTop: "16px",
-  }}
->
-  {options.map((option) => (
-    <div
-      key={option.name}
-      onClick={() => {
-        setSelectedOption(option);
-        setProposalConfirmed(false);
-      }}
-      style={{
-  ...optionCardStyle,
+        <div style={cardsGridStyle}>
+          {options.map((option) => {
+            const isSelected = selectedOption?.name === option.name;
+            const monthlyPrice = Math.round(option.priceValue / 60);
+            const upgradeMonthly =
+              option.name === "Better Comfort"
+                ? Math.round((premiumPrice - basicPrice) / 60)
+                : option.name === "Elite Comfort"
+                ? Math.round((elitePrice - premiumPrice) / 60)
+                : 0;
 
-  border:
-    selectedOption?.name === option.name
-      ? "2px solid #d4af37"
-      : selectedOption?.name === option.name
-      ? "2px solid #c89b3c"
-      : "1px solid #e5e5e5",
+            return (
+              <div
+                key={option.name}
+                onClick={() => handleSelect(option)}
+                style={{
+                  ...optionCardStyle,
+                  border: isSelected ? "2px solid #d4af37" : "1px solid #e5e7eb",
+                  background: isSelected
+                    ? "linear-gradient(180deg, #0f0f0f 0%, #1c1c1c 100%)"
+                    : "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+                  color: isSelected ? "white" : "#111827",
+                  boxShadow: isSelected
+                    ? "0 0 24px rgba(250, 204, 21, 0.35)"
+                    : "0 14px 30px rgba(15, 23, 42, 0.08)",
+                  transform: isSelected ? "scale(1.04)" : "scale(1)",
+                }}
+              >
+                <h3 style={optionTitleStyle}>{option.name}</h3>
 
-  background:
-    selectedOption?.name === option.name
-      ? "linear-gradient(180deg, #0f0f0f 0%, #1c1c1c 100%)"
-      : selectedOption?.name === option.name
-      ? "linear-gradient(180deg, #fff7e6 0%, #ffffff 100%)"
-      : "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+                {option.name === "Better Comfort" && (
+                  <div style={popularBadgeStyle}>⭐ Most Popular</div>
+                )}
 
-  color:
-    selectedOption?.name === option.name ? "white" : "#111",
+                {option.name === recommendedName && (
+                  <div style={recommendedBadgeStyle}>Recommended</div>
+                )}
 
-  boxShadow:
-  selectedOption?.name === option.name
-    ? "0 0 20px rgba(250,204,21,0.35)"
-    : option.name === "Better Confort"
-    ? "0 0 10px rgba(250,204,21,0.15)"
-    : "none",
+                <div style={priceStyle}>{formatMoney(option.priceValue)}</div>
 
-  transform:
-    selectedOption?.name === option.name
-      ? "scale(1.06)"
-      : selectedOption?.name === option.name
-      ? "scale(1.02)"
-      : "scale(1)",
+                <p style={monthlyStyle}>
+                  ${monthlyPrice.toLocaleString()}/mo with financing
+                </p>
 
-  transition: "all 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
-  cursor: "pointer",
-}}
-    >
-      <h3 style={optionTitleStyle}>{option.name}</h3>
+                <p style={finePrintStyle}>
+                  Estimated based on 60 months financing. Subject to credit approval.
+                </p>
 
-{option.name === "Better Comfort" && (
-  <div
-    style={{
-      marginTop: "6px",
-      display: "inline-block",
-      padding: "4px 10px",
-      borderRadius: "999px",
-      background: "linear-gradient(90deg, #facc15, #eab308)",
-      color: "#111",
-      fontSize: "12px",
-      fontWeight: "600"
-    }}
-  >
-    ⭐ Most Popular
-  </div>
-)}
+                {option.name !== "Basic Comfort" && (
+                  <p style={upgradeStyle}>
+                    Only +${upgradeMonthly.toLocaleString()}/mo to upgrade
+                  </p>
+                )}
 
-      {option.name === recommendedName && (
-        <p style={{ margin: 0, fontSize: "12px", color: "#666" }}>
-          Recommended
-        </p>
-      )}
+                <p style={investmentLabelStyle}>Estimated System Investment</p>
 
-      {option.name === recommendedName && (
-        <p style={{ margin: 0, fontSize: "12px", color: "#666" }}>
-          {getRecommendationReason()}
-        </p>
-      )}
+                <div style={investmentBoxStyle}>
+                  This investment reflects a properly sized system designed for long-term
+                  performance, efficiency, and reliability.
+                </div>
 
-<div
-  style={{
-    ...priceStyle,
-    transition: "all 0.3s ease",
-    transform:
-      selectedOption?.name === option.name ? "scale(1.05)" : "scale(1)",
-  }}
->
-  {selectedOption?.name === option.name
-    ? formatMoney(activePrice)
-    : option.price}
-</div>
+                <div style={featuresStyle}>
+                  {option.features.map((feature) => (
+                    <div key={feature}>✔ {feature}</div>
+                  ))}
+                </div>
 
-<p
-  style={{
-    color: "#94a3b8",
-    fontSize: "14px",
-    marginTop: "8px",
-  }}
->
-  Estimated System Investment
-</p>
+                {isSelected && (
+                  <p style={selectedTextStyle}>✔ Selected Package</p>
+                )}
 
-<div
-  style={{
-    marginTop: "16px",
-    padding: "18px",
-    borderRadius: "18px",
-    background:
-      "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(255,255,255,0.03))",
-    border: "1px solid rgba(250,204,21,0.22)",
-    boxShadow: "0 14px 35px rgba(0,0,0,0.18)",
-  }}
->
-  <p
-    style={{
-      margin: 0,
-      fontSize: "13px",
-      color: "#cbd5e1",
-      lineHeight: "1.6",
-    }}
-  >
-    This investment reflects a properly sized system designed for long-term
-    performance, efficiency, and reliability. Pricing includes equipment,
-    professional installation, and adjustments based on your home's layout
-    and installation difficulty. Our goal is to ensure the system runs
-    correctly the first time — avoiding airflow issues, inefficiency, and
-    premature failure.
-  </p>
-</div>
-<div
-  style={{
-    marginTop: "12px",
-    display: "grid",
-    gap: "6px",
-    fontSize: "12px",
-    color: "#94a3b8",
-  }}
->
-  {option.features?.map((feature: string, index: number) => (
-    <div key={index}>✔ {feature}</div>
-  ))}
-</div>
-{selectedOption?.name === option.name && (
-  <p style={{ color: "#d4af37", marginTop: "8px", fontSize: "12px" }}>
-    ✔ Selected Package
-  </p>
-)}
-      <button
-        type="button"
-        style={selectButtonStyle}
-        onClick={(e) => {
-          e.stopPropagation();
-          setSelectedOption(option);
-          setProposalConfirmed(false);
-        }}
-      >
-        Select {option.name}
-      </button>
-    </div>
-  ))}
-</div>
+                <button
+                  type="button"
+                  style={selectButtonStyle}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelect(option);
+                  }}
+                >
+                  Select {option.name}
+                </button>
+              </div>
+            );
+          })}
+        </div>
 
         {selectedOption && (
           <div style={selectedBoxStyle}>
@@ -297,7 +234,7 @@ const activePrice =
             </p>
 
             <h1 style={{ margin: 0, fontSize: "38px" }}>
-              {selectedOption.price}
+              {formatMoney(selectedOption.priceValue)}
             </h1>
 
             <button
@@ -324,21 +261,21 @@ const activePrice =
 
         <button
           type="button"
-         style={{
-  ...mainButtonStyle,
+          style={{
+            ...mainButtonStyle,
             opacity: proposalConfirmed ? 1 : 0.5,
             cursor: proposalConfirmed ? "pointer" : "not-allowed",
           }}
           onClick={() => {
             if (!proposalConfirmed) return;
-            handlePrint();
+            window.print();
           }}
         >
-          Generate Proposal (PDF)
+          Generate Proposal PDF
         </button>
       </div>
 
-      <div className="print-only" style={{ ...printProposalStyle, pointerEvents: "none" }}>
+      <div className="print-only" style={printProposalStyle}>
         <h1 style={printTitleStyle}>Panda Heating & Cooling</h1>
         <h2>HVAC System Proposal</h2>
 
@@ -353,7 +290,7 @@ const activePrice =
 
         <p><strong>Selected Package:</strong> {selectedOption?.name}</p>
         <p><strong>System Size:</strong> {tons} Ton</p>
-        <p><strong>Price:</strong> {selectedOption?.price}</p>
+        <p><strong>Price:</strong> {selectedOption ? formatMoney(selectedOption.priceValue) : ""}</p>
 
         <hr />
 
@@ -369,6 +306,10 @@ const activePrice =
 }
 
 const printStyles = `
+.print-only {
+  display: none;
+}
+
 @media print {
   body {
     background: white !important;
@@ -381,162 +322,229 @@ const printStyles = `
   .print-only {
     display: block !important;
   }
-
-  @page {
-    size: letter;
-    margin: 0.5in;
-  }
-}
-
-@media screen {
-  .print-only {
-    display: none !important;
-  }
 }
 `;
 
 const proposalBoxStyle: React.CSSProperties = {
-  background: "white",
-  borderRadius: "24px",
-  padding: "24px",
+  padding: "32px",
+  borderRadius: "32px",
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+  border: "1px solid #e2e8f0",
+  boxShadow: "0 25px 60px rgba(15, 23, 42, 0.10)",
   display: "grid",
   gap: "22px",
-  boxShadow: "0 20px 50px rgba(0,0,0,0.08)",
 };
 
 const smallLabelStyle: React.CSSProperties = {
-  fontSize: "13px",
-  fontWeight: 700,
-  color: "#777",
   margin: 0,
+  fontSize: "13px",
+  fontWeight: 900,
+  letterSpacing: "0.14em",
+  textTransform: "uppercase",
+  color: "#d4af37",
 };
 
 const titleStyle: React.CSSProperties = {
-  fontSize: "30px",
+  margin: "6px 0",
+  fontSize: "34px",
   fontWeight: 900,
-  margin: "4px 0",
-  color: "#111",
 };
 
 const subTextStyle: React.CSSProperties = {
+  color: "#64748b",
   fontSize: "15px",
-  color: "#666",
-  margin: 0,
 };
 
 const infoGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(2, 1fr)",
   gap: "12px",
+  marginTop: "18px",
 };
 
 const inputStyle: React.CSSProperties = {
-  padding: "14px",
-  borderRadius: "14px",
-  border: "1px solid #ddd",
+  width: "100%",
+  padding: "16px 18px",
+  borderRadius: "16px",
+  border: "1px solid #dbe1e8",
+  background: "#ffffff",
   fontSize: "15px",
-  color: "#111",
-  background: "white",
+  fontWeight: 500,
+  outline: "none",
+  transition: "all 0.2s ease",
+  boxSizing: "border-box",
 };
 
-const optionGridStyle: React.CSSProperties = {
+const cardsGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gridTemplateColumns: "repeat(3, 1fr)",
   gap: "18px",
+  marginTop: "20px",
+  alignItems: "stretch",
 };
 
 const optionCardStyle: React.CSSProperties = {
-  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  padding: "22px",
-  borderRadius: "20px",
-  display: "grid",
-  gap: "14px",
-  boxShadow: "0 15px 40px rgba(0,0,0,0.08)",
+  padding: "18px",
+  minHeight: "auto",
+  borderRadius: "24px",
+  cursor: "pointer",
   transition: "all 0.25s ease",
+  background: "#ffffff",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  boxShadow: "0 14px 30px rgba(15, 23, 42, 0.08)",
 };
 
 const optionTitleStyle: React.CSSProperties = {
-  fontSize: "22px",
-  fontWeight: 900,
   margin: 0,
+  fontSize: "20px",
+  fontWeight: 900,
+};
+
+const popularBadgeStyle: React.CSSProperties = {
+  marginTop: "8px",
+  display: "inline-block",
+  padding: "5px 12px",
+  borderRadius: "999px",
+  background: "linear-gradient(90deg, #facc15, #eab308)",
   color: "#111",
+  fontSize: "12px",
+  fontWeight: 800,
+};
+
+const recommendedBadgeStyle: React.CSSProperties = {
+  marginTop: "8px",
+  display: "inline-block",
+  padding: "5px 12px",
+  borderRadius: "999px",
+  background: "#111827",
+  color: "#facc15",
+  fontSize: "12px",
+  fontWeight: 800,
 };
 
 const priceStyle: React.CSSProperties = {
-  fontSize: "28px",
-  fontWeight: 900,
+  marginTop: "14px",
+  fontSize: "36px",
+  fontWeight: 950,
+  letterSpacing: "-1px",
+};
+
+const monthlyStyle: React.CSSProperties = {
+  fontSize: "14px",
+  color: "#00c853",
+  fontWeight: 800,
   margin: "6px 0",
 };
 
-const optionTextStyle: React.CSSProperties = {
+const finePrintStyle: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#94a3b8",
+  lineHeight: 1.4,
+};
+
+const upgradeStyle: React.CSSProperties = {
   fontSize: "13px",
-  color: "#666",
-  lineHeight: 1.5,
+  color: "#ffd54f",
+  fontWeight: 800,
+};
+
+const investmentLabelStyle: React.CSSProperties = {
+  color: "#94a3b8",
+  fontSize: "14px",
+  marginTop: "14px",
+};
+
+const investmentBoxStyle: React.CSSProperties = {
+  marginTop: "10px",
+  padding: "16px",
+  borderRadius: "18px",
+  background: "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(255,255,255,0.9))",
+  border: "1px solid rgba(250,204,21,0.22)",
+  fontSize: "13px",
+  color: "#334155",
+  lineHeight: 1.6,
+};
+
+const featuresStyle: React.CSSProperties = {
+  marginTop: "14px",
+  display: "grid",
+  gap: "8px",
+  fontSize: "13px",
+  color: "#334155",
+  fontWeight: 500,
+};
+
+const selectedTextStyle: React.CSSProperties = {
+  color: "#d4af37",
+  marginTop: "10px",
+  fontSize: "13px",
+  fontWeight: 900,
 };
 
 const selectButtonStyle: React.CSSProperties = {
-  padding: "14px",
-  borderRadius: "16px",
+  width: "100%",
+  marginTop: "16px",
+  padding: "12px",
+  borderRadius: "999px",
   border: "none",
-  background: "#111",
+  background: "linear-gradient(90deg, #111827, #000000)",
   color: "white",
   fontWeight: 900,
   cursor: "pointer",
-  boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
 };
 
 const selectedBoxStyle: React.CSSProperties = {
-  marginTop: "20px",
-  padding: "22px",
-  borderRadius: "18px",
-  background: "#111",
+  marginTop: "22px",
+  padding: "24px",
+  borderRadius: "24px",
+  background: "linear-gradient(135deg, #111827, #000000)",
   color: "white",
   display: "grid",
-  gap: "10px",
+  gap: "8px",
 };
 
 const confirmButtonStyle: React.CSSProperties = {
-  marginTop: "10px",
-  padding: "14px",
-  borderRadius: "14px",
+  marginTop: "12px",
+  padding: "14px 18px",
+  borderRadius: "999px",
   border: "none",
-  background: "white",
+  background: "linear-gradient(90deg, #facc15, #d4af37)",
   color: "#111",
-  fontWeight: 900,
+  fontWeight: 950,
   cursor: "pointer",
 };
 
 const notesStyle: React.CSSProperties = {
-  minHeight: "120px",
+  width: "100%",
+  minHeight: "100px",
+  marginTop: "18px",
   padding: "16px",
-  borderRadius: "16px",
-  border: "1px solid #ddd",
-  fontSize: "15px",
-  resize: "vertical",
+  borderRadius: "18px",
+  border: "1px solid #d1d5db",
+  fontSize: "14px",
 };
 
 const mainButtonStyle: React.CSSProperties = {
+  width: "100%",
+  marginTop: "16px",
   padding: "16px",
   borderRadius: "999px",
   border: "none",
-  background: "linear-gradient(135deg, #111 0%, #2b2b2b 100%)",
+  background: "linear-gradient(90deg, #111827, #000000)",
   color: "white",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(0,0,0,0.22)",
-  transition: "all 0.2s ease",
+  fontWeight: 950,
+  fontSize: "15px",
 };
 
-
 const printProposalStyle: React.CSSProperties = {
+  padding: "40px",
   fontFamily: "Arial, sans-serif",
   color: "#111",
-  padding: "20px",
-  fontSize: "14px",
-  lineHeight: 1.6,
 };
 
 const printTitleStyle: React.CSSProperties = {
-  fontSize: "28px",
-  marginBottom: "4px",
+  fontSize: "32px",
+  fontWeight: 900,
 };
