@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Bell, BookOpen, Briefcase, Calculator, Cpu, Crown, DollarSign, FileText, Home, Layers, Mail, Percent, PlusCircle, Settings, Shield, Thermometer, TrendingUp, Users, Zap } from "lucide-react";
 import CustomerProposal from "./components/CustomerProposal";
 import LoadCalculator from "./components/LoadCalculator";
@@ -46,6 +47,8 @@ const quickActions: { title: string; description: string; icon: string; screen: 
   { title: "Customers", description: "Access customer profiles", icon: "Customers", screen: "customers" },
 ];
 
+const pandaLogoSrc = "/panda-refrigeration-program-logo.png";
+
 const getOregonZipMultiplier = (zip: string) => {
   const prefix = zip.trim().slice(0, 3);
   if (/^97\d{3}$/.test(zip.trim())) {
@@ -54,6 +57,19 @@ const getOregonZipMultiplier = (zip: string) => {
 
   return 1.08;
 };
+
+const PandaLogoImage = ({ size }: { size: "large" | "small" }) => (
+  <Image
+    src={pandaLogoSrc}
+    alt="Panda Refrigeration Program"
+    fill
+    sizes={size === "large" ? "70px" : "28px"}
+    className="panda-brand-logo-img"
+    style={size === "large" ? sidebarLogoImageStyle : technicianLogoImageStyle}
+    priority={size === "large"}
+    unoptimized
+  />
+);
 
 const IconSvg = ({ name }: { name: string }) => {
   const common = { size: 18, strokeWidth: 1.8 };
@@ -184,8 +200,8 @@ const formatMoney = (value: number) =>
     <div className="panda-app-shell" style={appGridStyle}>
       <aside className="panda-sidebar" style={sidebarStyle}>
         <div style={sidebarBrandStyle}>
-          <div style={sidebarLogoStyle}>
-            <IconSvg name="PandaLogo" />
+          <div className="panda-brand-logo" style={sidebarLogoStyle}>
+            <PandaLogoImage size="large" />
           </div>
           <div>
             <p style={sidebarNameStyle}>PANDA HVAC</p>
@@ -220,8 +236,8 @@ const formatMoney = (value: number) =>
 
         <div style={sidebarFooterStyle}>
           <div style={technicianProfileStyle}>
-            <div style={technicianAvatarStyle}>
-              <IconSvg name="PandaLogo" />
+            <div className="panda-brand-logo-small" style={technicianAvatarStyle}>
+              <PandaLogoImage size="small" />
             </div>
             <div>
               <p style={technicianNameStyle}>John Doe</p>
@@ -355,6 +371,16 @@ const formatMoney = (value: number) =>
             .panda-app-shell {
               padding: 10px !important;
               gap: 12px !important;
+            }
+
+            .panda-brand-logo {
+              width: 58px !important;
+              height: 58px !important;
+              border-radius: 18px !important;
+            }
+
+            .panda-brand-logo-img {
+              padding: 5px !important;
             }
 
             .panda-sidebar {
@@ -745,14 +771,25 @@ const sidebarLogoStyle: React.CSSProperties = {
   width: "70px",
   height: "70px",
   borderRadius: "20px",
-  background: "linear-gradient(135deg, rgba(212,175,55,0.3), rgba(255,255,255,0.1))",
-  border: "1px solid rgba(255,255,255,0.15)",
+  background: "linear-gradient(135deg, rgba(212,175,55,0.24), rgba(59,130,246,0.12), rgba(255,255,255,0.08))",
+  border: "1px solid rgba(212,175,55,0.24)",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   fontSize: "26px",
   fontWeight: 800,
-  boxShadow: "0 8px 24px rgba(212,175,55,0.25)",
+  boxShadow: "0 10px 30px rgba(212,175,55,0.28), 0 0 28px rgba(59,130,246,0.16)",
+  overflow: "hidden",
+  position: "relative",
+};
+
+const sidebarLogoImageStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain",
+  padding: "6px",
+  display: "block",
+  filter: "drop-shadow(0 8px 14px rgba(212,175,55,0.22))",
 };
 
 const sidebarNameStyle: React.CSSProperties = {
@@ -846,16 +883,25 @@ const technicianAvatarStyle: React.CSSProperties = {
   width: "28px",
   height: "28px",
   borderRadius: "50%",
-  background: "rgba(212,175,55,0.18)",
+  background: "linear-gradient(135deg, rgba(212,175,55,0.24), rgba(59,130,246,0.12))",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   color: "#d4af37",
-  border: "1px solid rgba(212,175,55,0.15)",
-  boxShadow: "0 4px 12px rgba(212,175,55,0.1)",
+  border: "1px solid rgba(212,175,55,0.22)",
+  boxShadow: "0 4px 14px rgba(212,175,55,0.18), 0 0 14px rgba(59,130,246,0.12)",
   transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
   fontSize: "12px",
   fontWeight: 800,
+  overflow: "hidden",
+  position: "relative",
+};
+
+const technicianLogoImageStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
 };
 
 const technicianNameStyle: React.CSSProperties = {
