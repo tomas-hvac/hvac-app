@@ -23,4 +23,60 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+@media (max-width: 1024px) {
+  html,
+  body {
+    touch-action: manipulation;
+    width: 100%;
+    max-width: 100%;
+    overscroll-behavior-x: none;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(212, 175, 55, 0.22);
+  }
+
+  button,
+  [role="button"] {
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px !important;
+    max-width: 100%;
+  }
+
+  svg {
+    pointer-events: none;
+  }
 }

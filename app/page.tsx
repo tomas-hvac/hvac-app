@@ -18,6 +18,34 @@ const oregonZipMultiplierMap: Record<string, number> = {
   979: 1.10,
 };
 
+type ActiveScreen =
+  | "dashboard"
+  | "load"
+  | "proposal"
+  | "tech"
+  | "manuals"
+  | "pricing"
+  | "customers";
+
+const sidebarItems: { label: string; icon: string; screen: ActiveScreen }[] = [
+  { label: "Dashboard", icon: "Dashboard", screen: "dashboard" },
+  { label: "Proposals", icon: "Proposals", screen: "proposal" },
+  { label: "Load Calculator", icon: "Load Calculator", screen: "load" },
+  { label: "Tech Hub", icon: "Tech Hub", screen: "tech" },
+  { label: "Manuals", icon: "Manuals", screen: "manuals" },
+  { label: "Pricing Options", icon: "Pricing Options", screen: "pricing" },
+  { label: "Customers", icon: "Customers", screen: "customers" },
+];
+
+const quickActions: { title: string; description: string; icon: string; screen: ActiveScreen }[] = [
+  { title: "New Proposal", description: "Build a tailored contract", icon: "New Proposal", screen: "proposal" },
+  { title: "Load Calculator", description: "Run Manual J estimates", icon: "Load Calculator", screen: "load" },
+  { title: "Tech Hub", description: "Field tools and notes", icon: "Tech Hub", screen: "tech" },
+  { title: "Manuals", description: "Specs & installation guides", icon: "Manuals", screen: "manuals" },
+  { title: "Pricing Options", description: "Compare tiered offers", icon: "Pricing Options", screen: "pricing" },
+  { title: "Customers", description: "Access customer profiles", icon: "Customers", screen: "customers" },
+];
+
 const getOregonZipMultiplier = (zip: string) => {
   const prefix = zip.trim().slice(0, 3);
   if (/^97\d{3}$/.test(zip.trim())) {
@@ -80,7 +108,7 @@ export default function HVACAppPage() {
   const [ceilingHeight, setCeilingHeight] = useState(8);
   const [homeType, setHomeType] = useState("modern");
   const [zipCode, setZipCode] = useState("97201");
-  const [activeSection, setActiveSection] = useState("Dashboard");
+  const [activeScreen, setActiveScreen] = useState<ActiveScreen>("dashboard");
 
   const [rooms, setRooms] = useState<any[]>([
     { name: "Living Room", squareFeet: 420 },
@@ -153,8 +181,8 @@ const formatMoney = (value: number) =>
   });
 
   return (
-    <div style={appGridStyle}>
-      <aside style={sidebarStyle}>
+    <div className="panda-app-shell" style={appGridStyle}>
+      <aside className="panda-sidebar" style={sidebarStyle}>
         <div style={sidebarBrandStyle}>
           <div style={sidebarLogoStyle}>
             <IconSvg name="PandaLogo" />
@@ -164,26 +192,16 @@ const formatMoney = (value: number) =>
           </div>
         </div>
 
-        <nav style={navStyle}>
-          {[
-            { label: 'Dashboard', icon: 'Dashboard' },
-            { label: 'Proposals', icon: 'Proposals' },
-            { label: 'Jobs', icon: 'Jobs' },
-            { label: 'Load Calculator', icon: 'Load Calculator' },
-            { label: 'Tech Hub', icon: 'Tech Hub' },
-            { label: 'Manuals', icon: 'Manuals' },
-            { label: 'Pricing Options', icon: 'Pricing Options' },
-            { label: 'Customers', icon: 'Customers' },
-            { label: 'Settings', icon: 'Settings' },
-          ].map((item) => {
-            const isActive = activeSection === item.label;
+        <nav className="panda-sidebar-nav" style={navStyle}>
+          {sidebarItems.map((item) => {
+            const isActive = activeScreen === item.screen;
             return (
               <button
                 key={item.label}
                 type="button"
                 className="sidebar-nav-item"
                 title={item.label}
-                onClick={() => setActiveSection(item.label as any)}
+                onClick={() => setActiveScreen(item.screen)}
                 style={{
                   ...navItemStyle,
                   background: isActive ? 'rgba(212,175,55,0.12)' : 'transparent',
@@ -221,6 +239,21 @@ const formatMoney = (value: number) =>
 
       <style dangerouslySetInnerHTML={{
         __html: `
+          html,
+          body {
+            overflow-x: hidden;
+          }
+
+          .panda-app-shell,
+          .panda-app-main,
+          .panda-dashboard-grid,
+          .panda-metric-grid,
+          .panda-bottom-banner,
+          .panda-proposal-header,
+          .panda-proposal-shell {
+            min-width: 0;
+          }
+
           .sidebar-nav-item:hover {
             transform: translateY(-2px);
             background: rgba(212,175,55,0.08);
@@ -243,11 +276,151 @@ const formatMoney = (value: number) =>
             transform: scale(1.05);
             box-shadow: 0 6px 16px rgba(212,175,55,0.2) !important;
           }
+
+          @media (hover: none), (pointer: coarse) {
+            .sidebar-nav-item:hover,
+            .quick-action-button:hover {
+              transform: none !important;
+            }
+
+            .quick-action-button:hover .action-icon-el {
+              transform: none !important;
+            }
+          }
+
+          @media (max-width: 1024px) {
+            .panda-app-shell {
+              grid-template-columns: 1fr !important;
+              padding: 14px !important;
+              gap: 14px !important;
+              width: 100% !important;
+              max-width: 100% !important;
+            }
+
+            .panda-sidebar {
+              min-height: auto !important;
+              border-radius: 26px !important;
+              padding: 14px !important;
+              gap: 14px !important;
+              position: relative !important;
+              z-index: 1 !important;
+              backdrop-filter: none !important;
+              -webkit-backdrop-filter: none !important;
+            }
+
+            .panda-sidebar-nav {
+              display: flex !important;
+              gap: 10px !important;
+              overflow-x: auto !important;
+              padding-bottom: 4px !important;
+              scrollbar-width: none;
+              -webkit-overflow-scrolling: touch;
+              position: relative !important;
+              z-index: 1 !important;
+            }
+
+            .panda-sidebar-nav::-webkit-scrollbar {
+              display: none;
+            }
+
+            .sidebar-nav-item {
+              flex: 0 0 auto !important;
+              min-height: 44px !important;
+              white-space: nowrap !important;
+              padding: 10px 12px !important;
+              pointer-events: auto !important;
+              position: relative !important;
+              z-index: 2 !important;
+            }
+
+            .panda-app-main {
+              width: 100% !important;
+              position: relative !important;
+              z-index: 5 !important;
+              pointer-events: auto !important;
+            }
+
+            .panda-metric-grid,
+            .panda-dashboard-grid,
+            .panda-bottom-banner {
+              grid-template-columns: 1fr !important;
+            }
+
+            .panda-quick-actions-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
+          }
+
+          @media (max-width: 640px) {
+            .panda-app-shell {
+              padding: 10px !important;
+              gap: 12px !important;
+            }
+
+            .panda-sidebar {
+              border-radius: 22px !important;
+            }
+
+            .panda-sidebar > div:last-child {
+              display: none !important;
+            }
+
+            .panda-main-header,
+            .panda-proposal-header {
+              display: grid !important;
+              grid-template-columns: 1fr !important;
+              gap: 14px !important;
+              padding: 18px !important;
+            }
+
+            .panda-proposal-actions {
+              width: 100% !important;
+              display: grid !important;
+              grid-template-columns: 1fr 1fr !important;
+            }
+
+            .panda-main-header h1 {
+              font-size: 34px !important;
+              letter-spacing: 0 !important;
+            }
+
+            .panda-quick-actions-grid,
+            .panda-mini-options-grid {
+              grid-template-columns: 1fr !important;
+            }
+
+            .quick-action-button {
+              min-height: 72px !important;
+              padding: 14px !important;
+            }
+
+            .panda-bottom-banner {
+              padding: 18px !important;
+              border-radius: 24px !important;
+            }
+
+            .panda-proposal-shell {
+              border-radius: 24px !important;
+              overflow-x: hidden !important;
+            }
+
+            button,
+            input,
+            select,
+            textarea {
+              min-height: 44px;
+              pointer-events: auto !important;
+              position: relative !important;
+              z-index: 10 !important;
+              touch-action: manipulation !important;
+              -webkit-tap-highlight-color: rgba(212,175,55,0.22);
+            }
+          }
         `
       }} />
 
-      <main style={mainStyle}>
-        <header style={mainHeaderStyle}>
+      <main className="panda-app-main" style={mainStyle}>
+        <header className="panda-main-header" style={mainHeaderStyle}>
           <div>
             <p style={welcomeStyle}>Welcome back,</p>
             <div style={pageTitleRowStyle}>
@@ -279,9 +452,9 @@ const formatMoney = (value: number) =>
           </button>
         </header>
 
-        {activeSection === "Dashboard" ? (
+        {activeScreen === "dashboard" && (
           <>
-            <div style={metricGridStyle}>
+            <div className="panda-metric-grid" style={metricGridStyle}>
               {[
                 { icon: 'Active Jobs', label: 'Active Jobs', value: '14' },
                 { icon: 'ProposalsMetric', label: 'Proposals', value: '9' },
@@ -298,7 +471,7 @@ const formatMoney = (value: number) =>
               ))}
             </div>
 
-            <div style={dashboardGridStyle}>
+            <div className="panda-dashboard-grid" style={dashboardGridStyle}>
               <section style={sectionCardStyle}>
                 <div style={sectionHeadingStyle}>Recent Jobs</div>
                 <div style={recentJobsStyle}>
@@ -342,20 +515,19 @@ const formatMoney = (value: number) =>
 
               <section style={sectionCardStyle}>
                 <div style={sectionHeadingStyle}>Quick Actions</div>
-                <div style={quickActionsButtonGridStyle}>
-                  {[
-                    { title: 'New Proposal', description: 'Build a tailored contract', icon: 'New Proposal' },
-                    { title: 'Load Calculator', description: 'Run Manual J estimates', icon: 'Load Calculator' },
-                    { title: 'Tech Hub', description: 'Field tools and notes', icon: 'Tech Hub' },
-                    { title: 'Manuals', description: 'Specs & installation guides', icon: 'Manuals' },
-                    { title: 'Pricing Options', description: 'Compare tiered offers', icon: 'Pricing Options' },
-                    { title: 'Customers', description: 'Access customer profiles', icon: 'Customers' },
-                  ].map((action) => (
-                    <button key={action.title} type="button" className="quick-action-button" style={quickActionButtonStyle}>
-                      <div className="action-icon-el" style={actionIconStyle}>
+                <div className="panda-quick-actions-grid" style={quickActionsButtonGridStyle}>
+                  {quickActions.map((action) => (
+                    <button
+                      key={action.title}
+                      type="button"
+                      className="quick-action-button"
+                      style={quickActionButtonStyle}
+                      onClick={() => setActiveScreen(action.screen)}
+                    >
+                      <div className="action-icon-el" style={{ ...actionIconStyle, pointerEvents: "none" }}>
                         <IconSvg name={action.icon} />
                       </div>
-                      <div>
+                      <div style={{ pointerEvents: "none" }}>
                         <p style={quickActionTitleStyle}>{action.title}</p>
                         <p style={quickActionDescStyle}>{action.description}</p>
                       </div>
@@ -372,7 +544,7 @@ const formatMoney = (value: number) =>
                     <p style={miniProposalNumberStyle}>Proposal #P-1074</p>
                     <p style={miniHomeTypeStyle}>Modern Ranch • 2,200 sq ft</p>
                   </div>
-                  <div style={miniOptionsGridStyle}>
+                  <div className="panda-mini-options-grid" style={miniOptionsGridStyle}>
                     {[
                       { name: 'Basic Comfort', price: basicPrice, tier: 'GOOD' },
                       { name: 'Better Comfort', price: premiumPrice, tier: 'BETTER' },
@@ -385,14 +557,18 @@ const formatMoney = (value: number) =>
                       </div>
                     ))}
                   </div>
-                  <button type="button" style={miniViewButtonStyle}>
+                  <button
+                    type="button"
+                    style={miniViewButtonStyle}
+                    onClick={() => setActiveScreen("proposal")}
+                  >
                     View Full Proposal
                   </button>
                 </div>
               </section>
             </div>
 
-            <div style={bottomBannerStyle}>
+            <div className="panda-bottom-banner" style={bottomBannerStyle}>
               <div style={bannerTextWrapperStyle}>
                 <p style={bannerTagStyle}>Three Levels. One Goal.</p>
                 <h2 style={bannerTitleStyle}>Good. Better. Best. Help your customer choose the right comfort for their home.</h2>
@@ -411,14 +587,16 @@ const formatMoney = (value: number) =>
               </div>
             </div>
           </>
-        ) : activeSection === "Proposals" ? (
+        )}
+
+        {activeScreen === "proposal" && (
           <>
-            <div style={proposalPageHeaderStyle}>
-              <button type="button" style={backButtonStyle} onClick={() => setActiveSection('Dashboard')}>
+            <div className="panda-proposal-header" style={proposalPageHeaderStyle}>
+              <button type="button" style={backButtonStyle} onClick={() => setActiveScreen("dashboard")}>
                 ← Back
               </button>
               <div style={proposalPageTitleStyle}>Proposal #P-1007</div>
-              <div style={proposalPageActionsStyle}>
+              <div className="panda-proposal-actions" style={proposalPageActionsStyle}>
                 <button type="button" style={iconButtonStyle}>
                   Edit
                 </button>
@@ -427,7 +605,7 @@ const formatMoney = (value: number) =>
                 </button>
               </div>
             </div>
-            <div style={proposalShellStyle}>
+            <div className="panda-proposal-shell" style={proposalShellStyle}>
               <CustomerProposal
                 tons={tons}
                 homeType={homeType}
@@ -439,9 +617,13 @@ const formatMoney = (value: number) =>
               />
             </div>
           </>
-        ) : activeSection === "Load Calculator" ? (
+        )}
+
+        {activeScreen === "load" && (
           <LoadCalculator />
-        ) : (
+        )}
+
+        {activeScreen !== "dashboard" && activeScreen !== "proposal" && activeScreen !== "load" && (
           <div style={sectionCardStyle}>
             <div style={sectionHeadingStyle}>Coming Soon</div>
             <p style={dashboardSummaryStyle}>This section is a placeholder for future content. Use Dashboard or Proposals to continue.</p>
@@ -609,6 +791,8 @@ const navItemStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
   background: "transparent",
   color: "#94a3b8",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const navIconStyle: React.CSSProperties = {
@@ -886,6 +1070,8 @@ const quickActionButtonStyle: React.CSSProperties = {
   textAlign: "left",
   cursor: "pointer",
   transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const quickActionTitleStyle: React.CSSProperties = {
@@ -1004,6 +1190,8 @@ const miniViewButtonStyle: React.CSSProperties = {
   fontSize: "13px",
   cursor: "pointer",
   transition: "all 0.2s ease",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const sectionCardStyle: React.CSSProperties = {

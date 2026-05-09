@@ -87,11 +87,38 @@ export default function CustomerProposal({
     setProposalConfirmed(false);
   };
 
+  const handlePointerSelect = (option: ProposalOption) => (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse") return;
+    event.preventDefault();
+    handleSelect(option);
+  };
+
+  const handleConfirmProposal = () => {
+    setProposalConfirmed(true);
+  };
+
+  const handlePointerConfirm = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse") return;
+    event.preventDefault();
+    handleConfirmProposal();
+  };
+
+  const handleGeneratePdf = () => {
+    if (!proposalConfirmed) return;
+    window.print();
+  };
+
+  const handlePointerGeneratePdf = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse") return;
+    event.preventDefault();
+    handleGeneratePdf();
+  };
+
   return (
     <>
       <style>{printStyles}</style>
 
-      <div style={proposalBoxStyle} className="no-print">
+      <div style={proposalBoxStyle} className="no-print customer-proposal-box">
         <p style={smallLabelStyle}>Panda Heating & Cooling</p>
         <h2 style={titleStyle}>HVAC Proposal</h2>
 
@@ -103,7 +130,7 @@ export default function CustomerProposal({
           Clear system options built around comfort, efficiency, and long-term reliability.
         </p>
 
-        <div style={infoGridStyle}>
+        <div className="customer-proposal-info-grid" style={infoGridStyle}>
           <input
             style={inputStyle}
             placeholder="Customer name"
@@ -133,7 +160,7 @@ export default function CustomerProposal({
           />
         </div>
 
-        <div style={cardsGridStyle}>
+        <div className="customer-proposal-cards-grid" style={cardsGridStyle}>
           {options.map((option) => {
             const isSelected = selectedOption?.name === option.name;
             const monthlyPrice = Math.round(option.priceValue / 60);
@@ -145,9 +172,16 @@ export default function CustomerProposal({
                 : 0;
 
             return (
-              <div
+              <button
+                type="button"
                 key={option.name}
+                className="customer-proposal-option-card"
                 onClick={() => handleSelect(option)}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  handleSelect(option);
+                }}
+                onPointerUp={handlePointerSelect(option)}
                 style={{
                   ...optionCardStyle,
                   border: isSelected ? "2px solid #d4af37" : "1px solid #e5e7eb",
@@ -204,17 +238,12 @@ export default function CustomerProposal({
                   <p style={selectedTextStyle}>✔ Selected Package</p>
                 )}
 
-                <button
-                  type="button"
+                <div
                   style={selectButtonStyle}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelect(option);
-                  }}
                 >
                   Select {option.name}
-                </button>
-              </div>
+                </div>
+              </button>
             );
           })}
         </div>
@@ -239,7 +268,12 @@ export default function CustomerProposal({
 
             <button
               type="button"
-              onClick={() => setProposalConfirmed(true)}
+              onClick={handleConfirmProposal}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                handleConfirmProposal();
+              }}
+              onPointerUp={handlePointerConfirm}
               style={confirmButtonStyle}
             >
               Confirm Proposal
@@ -266,10 +300,12 @@ export default function CustomerProposal({
             opacity: proposalConfirmed ? 1 : 0.5,
             cursor: proposalConfirmed ? "pointer" : "not-allowed",
           }}
-          onClick={() => {
-            if (!proposalConfirmed) return;
-            window.print();
+          onClick={handleGeneratePdf}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            handleGeneratePdf();
           }}
+          onPointerUp={handlePointerGeneratePdf}
         >
           Generate Proposal PDF
         </button>
@@ -308,6 +344,29 @@ export default function CustomerProposal({
 const printStyles = `
 .print-only {
   display: none;
+}
+
+@media (max-width: 760px) {
+  .customer-proposal-box {
+    padding: 20px !important;
+    border-radius: 24px !important;
+  }
+
+  .customer-proposal-info-grid,
+  .customer-proposal-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .customer-proposal-box input,
+  .customer-proposal-box button,
+  .customer-proposal-box textarea,
+  .customer-proposal-option-card {
+    min-height: 44px;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1 !important;
+    touch-action: manipulation;
+  }
 }
 
 @media print {
@@ -394,6 +453,10 @@ const optionCardStyle: React.CSSProperties = {
   flexDirection: "column",
   justifyContent: "space-between",
   boxShadow: "0 14px 30px rgba(15, 23, 42, 0.08)",
+  textAlign: "left",
+  font: "inherit",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const optionTitleStyle: React.CSSProperties = {
@@ -514,6 +577,8 @@ const confirmButtonStyle: React.CSSProperties = {
   color: "#111",
   fontWeight: 950,
   cursor: "pointer",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const notesStyle: React.CSSProperties = {
@@ -536,6 +601,8 @@ const mainButtonStyle: React.CSSProperties = {
   color: "white",
   fontWeight: 950,
   fontSize: "15px",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const printProposalStyle: React.CSSProperties = {
