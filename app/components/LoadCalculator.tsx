@@ -3,8 +3,58 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium } from "lucide-react";
 import { calculateManualJLoad, ManualJInputs } from "../lib/manualJCalculations";
+import ManualDPanel, { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
 
-type Option = { label: string; value: string };
+type LoadCalculatorView = "customer" | "technician";
+type TechnicianSection = ManualDPanelSection | "manual-room-takeoff";
+
+type SavedProposalSnapshot = {
+  customerName: string;
+  jobAddress: string;
+  phone: string;
+  systemType: string;
+  selectedOptionName: string | null;
+  proposalConfirmed: boolean;
+};
+
+type SavedLoadCalculatorState = {
+  squareFeet: string;
+  ceilingHeight: string;
+  insulationQuality: string;
+  windowCount: string;
+  windowArea: string;
+  windowEfficiency: string;
+  windowOrientation: string;
+  climateZone: string;
+  oregonRegion: string;
+  numberOfRooms: string;
+  homeAge: string;
+  ductLocation: string;
+  ductCondition: string;
+  infiltrationTightness: string;
+  existingSystemSize: string;
+  comfortPriority: string;
+  occupancy: string;
+  blueprintRoomName: string;
+  blueprintLength: string;
+  blueprintWidth: string;
+  blueprintCeilingHeight: string;
+  blueprintFloorLevel: string;
+  blueprintRoomsForManualD: ManualDBlueprintRoom[];
+};
+
+type SavedProject = {
+  id: string;
+  name: string;
+  savedAt: string;
+  customerInfo: SavedProposalSnapshot | null;
+  proposalSelection: SavedProposalSnapshot | null;
+  loadCalculator: SavedLoadCalculatorState;
+  manualD: ManualDProjectState | null;
+};
+
+const SAVED_PROJECTS_STORAGE_KEY = "panda-hvac-saved-projects";
+const CURRENT_PROPOSAL_STORAGE_KEY = "panda-hvac-current-proposal";
 
 type InputFieldProps = {
   icon: React.ReactNode;
@@ -27,6 +77,8 @@ const InputField = ({ icon, title, description, children }: InputFieldProps) => 
 );
 
 export default function LoadCalculator() {
+  const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
+  const [activeTechnicianSection, setActiveTechnicianSection] = useState<TechnicianSection>("manual-d");
   const [squareFeet, setSquareFeet] = useState("2200");
   const [ceilingHeight, setCeilingHeight] = useState("9");
   const [insulationQuality, setInsulationQuality] = useState("Average");
@@ -46,6 +98,15 @@ export default function LoadCalculator() {
   const [occupancy, setOccupancy] = useState("3 People");
   const [isCalculating, setIsCalculating] = useState(false);
   const [animateResults, setAnimateResults] = useState(false);
+  const [blueprintRoomName, setBlueprintRoomName] = useState("New Room");
+  const [blueprintLength, setBlueprintLength] = useState("12");
+  const [blueprintWidth, setBlueprintWidth] = useState("12");
+  const [blueprintCeilingHeight, setBlueprintCeilingHeight] = useState("8");
+  const [blueprintFloorLevel, setBlueprintFloorLevel] = useState("1");
+  const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<ManualDBlueprintRoom[]>([]);
+  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+  const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
+  const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
 
   const options = {
     insulation: [
@@ -123,6 +184,138 @@ export default function LoadCalculator() {
     ],
   };
 
+  const blueprintSquareFeet =
+    Math.max(0, Number(blueprintLength) || 0) * Math.max(0, Number(blueprintWidth) || 0);
+
+  useEffect(() => {
+    const savedProjectJson = window.localStorage.getItem(SAVED_PROJECTS_STORAGE_KEY);
+    if (!savedProjectJson) return;
+
+    try {
+      const parsedProjects = JSON.parse(savedProjectJson) as SavedProject[];
+      if (Array.isArray(parsedProjects)) {
+        setSavedProjects(parsedProjects);
+      }
+    } catch {
+      setSavedProjects([]);
+    }
+  }, []);
+
+  const persistSavedProjects = (projects: SavedProject[]) => {
+    setSavedProjects(projects);
+    window.localStorage.setItem(SAVED_PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+  };
+
+  const getCurrentProposalSnapshot = (): SavedProposalSnapshot | null => {
+    const proposalJson = window.localStorage.getItem(CURRENT_PROPOSAL_STORAGE_KEY);
+    if (!proposalJson) return null;
+
+    try {
+      return JSON.parse(proposalJson) as SavedProposalSnapshot;
+    } catch {
+      return null;
+    }
+  };
+
+  const getLoadCalculatorSnapshot = (): SavedLoadCalculatorState => ({
+    squareFeet,
+    ceilingHeight,
+    insulationQuality,
+    windowCount,
+    windowArea,
+    windowEfficiency,
+    windowOrientation,
+    climateZone,
+    oregonRegion,
+    numberOfRooms,
+    homeAge,
+    ductLocation,
+    ductCondition,
+    infiltrationTightness,
+    existingSystemSize,
+    comfortPriority,
+    occupancy,
+    blueprintRoomName,
+    blueprintLength,
+    blueprintWidth,
+    blueprintCeilingHeight,
+    blueprintFloorLevel,
+    blueprintRoomsForManualD,
+  });
+
+  const handleSaveProject = () => {
+    const proposalSnapshot = getCurrentProposalSnapshot();
+    const projectName =
+      proposalSnapshot?.customerName ||
+      proposalSnapshot?.jobAddress ||
+      `Project ${new Date().toLocaleDateString()}`;
+    const nextProject: SavedProject = {
+      id: `project-${Date.now()}`,
+      name: projectName,
+      savedAt: new Date().toISOString(),
+      customerInfo: proposalSnapshot,
+      proposalSelection: proposalSnapshot,
+      loadCalculator: getLoadCalculatorSnapshot(),
+      manualD: manualDProjectState,
+    };
+    const nextProjects = [nextProject, ...savedProjects];
+    persistSavedProjects(nextProjects);
+  };
+
+  const handleLoadProject = (project: SavedProject) => {
+    setSquareFeet(project.loadCalculator.squareFeet);
+    setCeilingHeight(project.loadCalculator.ceilingHeight);
+    setInsulationQuality(project.loadCalculator.insulationQuality);
+    setWindowCount(project.loadCalculator.windowCount);
+    setWindowArea(project.loadCalculator.windowArea);
+    setWindowEfficiency(project.loadCalculator.windowEfficiency);
+    setWindowOrientation(project.loadCalculator.windowOrientation);
+    setClimateZone(project.loadCalculator.climateZone);
+    setOregonRegion(project.loadCalculator.oregonRegion);
+    setNumberOfRooms(project.loadCalculator.numberOfRooms);
+    setHomeAge(project.loadCalculator.homeAge);
+    setDuctLocation(project.loadCalculator.ductLocation);
+    setDuctCondition(project.loadCalculator.ductCondition);
+    setInfiltrationTightness(project.loadCalculator.infiltrationTightness);
+    setExistingSystemSize(project.loadCalculator.existingSystemSize);
+    setComfortPriority(project.loadCalculator.comfortPriority);
+    setOccupancy(project.loadCalculator.occupancy);
+    setBlueprintRoomName(project.loadCalculator.blueprintRoomName);
+    setBlueprintLength(project.loadCalculator.blueprintLength);
+    setBlueprintWidth(project.loadCalculator.blueprintWidth);
+    setBlueprintCeilingHeight(project.loadCalculator.blueprintCeilingHeight);
+    setBlueprintFloorLevel(project.loadCalculator.blueprintFloorLevel);
+    setBlueprintRoomsForManualD(project.loadCalculator.blueprintRoomsForManualD.map((room) => ({ ...room })));
+    setLoadedManualDProjectState(
+      project.manualD
+        ? {
+            settings: { ...project.manualD.settings },
+            rooms: project.manualD.rooms.map((room) => ({ ...room })),
+          }
+        : null
+    );
+
+    if (project.proposalSelection) {
+      window.localStorage.setItem(CURRENT_PROPOSAL_STORAGE_KEY, JSON.stringify(project.proposalSelection));
+    }
+  };
+
+  const addBlueprintRoomToManualD = () => {
+    const calculatedSquareFeet = Math.round(blueprintSquareFeet);
+    if (calculatedSquareFeet <= 0) return;
+
+    setBlueprintRoomsForManualD((currentRooms) => [
+      ...currentRooms,
+      {
+        id: `blueprint-room-${Date.now()}-${currentRooms.length + 1}`,
+        name: blueprintRoomName.trim() || "New Room",
+        squareFeet: calculatedSquareFeet,
+        ceilingHeight: blueprintCeilingHeight,
+        floorLevel: blueprintFloorLevel,
+      },
+    ]);
+  };
+
   const result = useMemo(() => {
     const inputs: ManualJInputs = {
       squareFeet: Math.max(0, parseInt(squareFeet, 10) || 0),
@@ -153,7 +346,6 @@ export default function LoadCalculator() {
     const sqft = Math.max(0, parseInt(squareFeet, 10) || 0);
     const windows = Math.max(0, parseInt(windowCount, 10) || 0);
     const glassArea = Math.max(0, parseFloat(windowArea) || 0);
-    const rooms = Math.max(1, parseInt(numberOfRooms, 10) || 1);
     const [minTon, maxTon] = result.recommendedTonnage
   .split("–")
   .map((value) => parseFloat(value.replace(/[^\d.]/g, "")) || 0);
@@ -239,7 +431,7 @@ const averageTonnage = (minTon + maxTon) / 2;
       : `Balanced recommendation for a ${homeAge.toLowerCase()} home with ${sizePhrase}`;
 
     return `${loadPhrase}. ${insulationPhrase}, ${windowPhrase}, ${countPhrase}, ${areaPhrase}, ${orientationPhrase}, ${regionPhrase}, ${infiltrationPhrase}, ${ductConditionPhrase}, ${comfortPriorityPhrase}, and ${sqft > 2200 ? "square footage increases demand" : "square footage keeps the load moderate"}. ${ductPhrase}. ${existingSystemPhrase ? `${existingSystemPhrase} ` : ""}${result.confidenceExplanation}`;
-  }, [squareFeet, windowCount, windowArea, numberOfRooms, insulationQuality, windowEfficiency, windowOrientation, oregonRegion, ductLocation, ductCondition, infiltrationTightness, existingSystemSize, comfortPriority, homeAge, result]);
+  }, [squareFeet, windowCount, windowArea, insulationQuality, windowEfficiency, windowOrientation, oregonRegion, ductLocation, ductCondition, infiltrationTightness, existingSystemSize, comfortPriority, homeAge, result]);
 
   useEffect(() => {
     setDisplayedResult(result);
@@ -261,6 +453,38 @@ const averageTonnage = (minTon + maxTon) / 2;
     event.preventDefault();
     handleCalculate();
   };
+
+  const technicianSections: Array<{
+    id: TechnicianSection;
+    title: string;
+    description: string;
+  }> = [
+    {
+      id: "manual-d",
+      title: "Manual D",
+      description: "System airflow, trunk sizing, and fitting equivalent length.",
+    },
+    {
+      id: "room-airflow",
+      title: "Room-by-Room Airflow",
+      description: "Room loads, branch ducts, register airflow, and status messages.",
+    },
+    {
+      id: "return-air",
+      title: "Return Air Design",
+      description: "Return paths, grille guidance, and quiet airflow checks.",
+    },
+    {
+      id: "manual-room-takeoff",
+      title: "Manual Room Takeoff",
+      description: "Measure length and width, then add rooms into Manual D.",
+    },
+    {
+      id: "reports",
+      title: "Reports",
+      description: "Validation warnings, field notes, and print-ready Manual D report.",
+    },
+  ];
 
   return (
     <div className="load-calculator-page" style={calcPageStyle}>
@@ -411,6 +635,10 @@ const averageTonnage = (minTon + maxTon) / 2;
               touch-action: manipulation !important;
             }
 
+            .load-view-tabs {
+              grid-template-columns: 1fr !important;
+            }
+
             .load-section-panel,
             .result-card,
             .load-verification-card {
@@ -443,6 +671,10 @@ const averageTonnage = (minTon + maxTon) / 2;
               border-radius: 22px !important;
             }
 
+            .manual-d-output-grid {
+              grid-template-columns: 1fr !important;
+            }
+
             .load-result-value {
               font-size: 22px !important;
               line-height: 1.2 !important;
@@ -453,7 +685,8 @@ const averageTonnage = (minTon + maxTon) / 2;
             .load-calculator-left,
             .load-calculator-right,
             .load-section-panel,
-            .load-result-grid {
+            .load-result-grid,
+            .manual-d-output-grid {
               width: 100% !important;
               max-width: 100% !important;
               overflow-x: hidden !important;
@@ -489,9 +722,124 @@ const averageTonnage = (minTon + maxTon) / 2;
           }
         `
       }} />
+
+      <div className="load-view-tabs" style={loadViewTabsStyle}>
+        <button
+          type="button"
+          style={activeLoadView === "customer" ? loadViewTabActiveStyle : loadViewTabStyle}
+          onClick={() => setActiveLoadView("customer")}
+        >
+          Customer View
+        </button>
+        <button
+          type="button"
+          style={activeLoadView === "technician" ? loadViewTabActiveStyle : loadViewTabStyle}
+          onClick={() => setActiveLoadView("technician")}
+        >
+          Technician View
+        </button>
+      </div>
+
       <div className="load-calculator-grid" style={calcGridStyle}>
         <div className="load-calculator-left" style={leftColumnStyle}>
-          <div className="load-section-panel" style={sectionPanelStyle}>
+          {activeLoadView === "customer" ? (
+            <div className="load-section-panel" style={sectionPanelStyle}>
+              <div style={sectionPanelHeaderStyle}>
+                <div style={sectionPanelIconStyle}>
+                  <Home size={18} strokeWidth={1.8} />
+                </div>
+                <div>
+                  <p style={sectionPanelTitleStyle}>Customer Estimate Inputs</p>
+                  <p style={sectionPanelDescriptionStyle}>Simple project details for homeowner review.</p>
+                </div>
+              </div>
+
+              <div style={inputGridStyle}>
+                <InputField
+                  icon={<Thermometer size={18} strokeWidth={1.8} />}
+                  title="Square Footage"
+                  description="Total heated area"
+                >
+                  <input
+                    className="load-input"
+                    type="number"
+                    value={squareFeet}
+                    onChange={(e) => setSquareFeet(e.target.value)}
+                    style={inputControlStyle}
+                  />
+                </InputField>
+
+                <InputField
+                  icon={<SunMedium size={18} strokeWidth={1.8} />}
+                  title="Home Type"
+                  description="Construction era"
+                >
+                  <select className="load-select" value={homeAge} onChange={(e) => setHomeAge(e.target.value)} style={selectControlStyle}>
+                    {options.homeAge.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </InputField>
+              </div>
+            </div>
+          ) : (
+            <>
+          <div style={technicianAccordionStyle}>
+            {technicianSections.map((section) => {
+              const isActive = activeTechnicianSection === section.id;
+
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  style={isActive ? technicianAccordionButtonActiveStyle : technicianAccordionButtonStyle}
+                  onClick={() => setActiveTechnicianSection(section.id)}
+                  aria-expanded={isActive}
+                >
+                  <span style={technicianAccordionTitleStyle}>{section.title}</span>
+                  <span style={technicianAccordionDescriptionStyle}>{section.description}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="load-section-panel" style={projectSavePanelStyle}>
+            <div style={projectSaveHeaderStyle}>
+              <div>
+                <p style={sectionPanelTitleStyle}>Saved Projects</p>
+                <p style={sectionPanelDescriptionStyle}>Save and reload local project snapshots.</p>
+              </div>
+              <button type="button" style={calcActionButtonStyle} onClick={handleSaveProject}>
+                Save Project
+              </button>
+            </div>
+
+            {savedProjects.length > 0 ? (
+              <div style={projectListStyle}>
+                {savedProjects.map((project) => (
+                  <div key={project.id} style={projectListItemStyle}>
+                    <div>
+                      <p style={projectListTitleStyle}>{project.name}</p>
+                      <p style={projectListMetaStyle}>
+                        Saved {new Date(project.savedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      style={projectLoadButtonStyle}
+                      onClick={() => handleLoadProject(project)}
+                    >
+                      Load Project
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={projectListMetaStyle}>No saved projects yet.</p>
+            )}
+          </div>
+
+          <div className="load-section-panel" style={{ ...sectionPanelStyle, display: "none" }}>
             <div style={sectionPanelHeaderStyle}>
               <div style={sectionPanelIconStyle}>
                 <Home size={18} strokeWidth={1.8} />
@@ -560,7 +908,7 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
           </div>
 
-          <div className="load-section-panel" style={sectionPanelStyle}>
+          <div className="load-section-panel" style={{ ...sectionPanelStyle, display: "none" }}>
             <div style={sectionPanelHeaderStyle}>
               <div style={sectionPanelIconStyle}>
                 <Droplet size={18} strokeWidth={1.8} />
@@ -662,7 +1010,7 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
           </div>
 
-          <div className="load-section-panel" style={sectionPanelStyle}>
+          <div className="load-section-panel" style={{ ...sectionPanelStyle, display: "none" }}>
             <div style={sectionPanelHeaderStyle}>
               <div style={sectionPanelIconStyle}>
                 <Users size={18} strokeWidth={1.8} />
@@ -747,9 +1095,169 @@ const averageTonnage = (minTon + maxTon) / 2;
               </InputField>
             </div>
           </div>
+
+          <div
+            className="load-section-panel"
+            style={{
+              ...sectionPanelStyle,
+              display: activeTechnicianSection === "manual-room-takeoff" ? "grid" : "none",
+            }}
+          >
+            <div style={sectionPanelHeaderStyle}>
+              <div style={sectionPanelIconStyle}>
+                <Layers size={18} strokeWidth={1.8} />
+              </div>
+              <div>
+                <p style={sectionPanelTitleStyle}>Manual Room Takeoff</p>
+                <p style={sectionPanelDescriptionStyle}>Measure rooms and send them into Manual D.</p>
+              </div>
+            </div>
+
+            <p style={blueprintTakeoffNoteStyle}>
+              Future upgrade: upload blueprint PDF or image and auto-detect rooms.
+            </p>
+
+            <div style={blueprintTakeoffGridStyle}>
+              <label style={blueprintTakeoffInputGroupStyle}>
+                <span style={blueprintTakeoffInputLabelStyle}>Room Name</span>
+                <input
+                  className="load-input"
+                  type="text"
+                  aria-label="Blueprint takeoff room name"
+                  value={blueprintRoomName}
+                  onChange={(event) => setBlueprintRoomName(event.target.value)}
+                  style={inputControlStyle}
+                />
+              </label>
+              <label style={blueprintTakeoffInputGroupStyle}>
+                <span style={blueprintTakeoffInputLabelStyle}>Length</span>
+                <input
+                  className="load-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  aria-label="Blueprint takeoff room length"
+                  value={blueprintLength}
+                  onChange={(event) => setBlueprintLength(event.target.value)}
+                  style={inputControlStyle}
+                />
+              </label>
+              <label style={blueprintTakeoffInputGroupStyle}>
+                <span style={blueprintTakeoffInputLabelStyle}>Width</span>
+                <input
+                  className="load-input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  aria-label="Blueprint takeoff room width"
+                  value={blueprintWidth}
+                  onChange={(event) => setBlueprintWidth(event.target.value)}
+                  style={inputControlStyle}
+                />
+              </label>
+              <label style={blueprintTakeoffInputGroupStyle}>
+                <span style={blueprintTakeoffInputLabelStyle}>Ceiling Height</span>
+                <input
+                  className="load-input"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  aria-label="Blueprint takeoff ceiling height"
+                  value={blueprintCeilingHeight}
+                  onChange={(event) => setBlueprintCeilingHeight(event.target.value)}
+                  style={inputControlStyle}
+                />
+              </label>
+              <label style={blueprintTakeoffInputGroupStyle}>
+                <span style={blueprintTakeoffInputLabelStyle}>Floor / Level</span>
+                <input
+                  className="load-input"
+                  type="number"
+                  min="1"
+                  aria-label="Blueprint takeoff floor or level"
+                  value={blueprintFloorLevel}
+                  onChange={(event) => setBlueprintFloorLevel(event.target.value)}
+                  style={inputControlStyle}
+                />
+              </label>
+            </div>
+
+            <div style={blueprintTakeoffFooterStyle}>
+              <div style={blueprintTakeoffResultStyle}>
+                <p style={blueprintTakeoffLabelStyle}>Calculated Sq. Ft.</p>
+                <p style={blueprintTakeoffValueStyle}>
+                  {Math.round(blueprintSquareFeet).toLocaleString()} sq ft
+                </p>
+              </div>
+              <button
+                type="button"
+                style={calcActionButtonStyle}
+                onClick={addBlueprintRoomToManualD}
+              >
+                Add to Manual D
+              </button>
+            </div>
+          </div>
+
+          <ManualDPanel
+            squareFeet={squareFeet}
+            blueprintRooms={blueprintRoomsForManualD}
+            savedProjectState={loadedManualDProjectState}
+            onProjectStateChange={setManualDProjectState}
+            activeSection={
+              activeTechnicianSection === "manual-room-takeoff"
+                ? "hidden"
+                : activeTechnicianSection
+            }
+          />
+            </>
+          )}
         </div>
 
         <div className="load-calculator-right" style={rightColumnStyle}>
+          {activeLoadView === "customer" ? (
+            <>
+              <div className="load-result-header" style={resultHeaderCardStyle}>
+                <div>
+                  <p style={resultHeaderLabelStyle}>Customer Estimate</p>
+                  <h3 style={resultHeaderTitleStyle}>Recommended system size</h3>
+                  <p style={resultHeaderTextStyle}>
+                    A clean homeowner-facing summary based on the current square footage and home type.
+                  </p>
+                </div>
+                <div style={resultScoreBadgeStyle}>Panda</div>
+              </div>
+
+              <div className="load-result-grid" style={resultGridStyle}>
+                {[
+                  {
+                    icon: <Thermometer size={18} strokeWidth={1.8} />,
+                    label: "Recommended System Size",
+                    value: isCalculating ? "Loading..." : displayedResult.recommendedTonnage,
+                    detail: isCalculating ? "" : displayedResult.whyText,
+                  },
+                  {
+                    icon: <Sparkles size={18} strokeWidth={1.8} />,
+                    label: "Proposal / Pricing",
+                    value: "Ready for proposal",
+                    detail: "Pricing is handled by the existing proposal workflow and has not been changed.",
+                  },
+                ].map((card) => (
+                  <div
+                    key={card.label}
+                    className={`result-card ${animateResults ? "result-card-active" : ""} ${isCalculating ? "result-card-loading" : ""}`}
+                    style={resultCardStyle}
+                  >
+                    <div style={resultCardIconStyle}>{card.icon}</div>
+                    <p style={resultCardLabelStyle}>{card.label}</p>
+                    <p className="load-result-value" style={resultCardValueStyle}>{card.value}</p>
+                    {card.detail ? <p style={resultCardDetailStyle}>{card.detail}</p> : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
           <div className="load-result-header" style={resultHeaderCardStyle}>
             <div>
               <p style={resultHeaderLabelStyle}>Estimate Snapshot</p>
@@ -919,6 +1427,8 @@ const averageTonnage = (minTon + maxTon) / 2;
               ))}
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -993,6 +1503,133 @@ const calcActionButtonStyle: React.CSSProperties = {
   transition: "all 0.2s ease",
   touchAction: "manipulation",
   WebkitTapHighlightColor: "transparent",
+};
+
+const loadViewTabsStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "12px",
+  padding: "10px",
+  borderRadius: "24px",
+  background: "rgba(15, 23, 42, 0.94)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  boxShadow: "0 18px 45px rgba(0,0,0,0.18)",
+};
+
+const loadViewTabStyle: React.CSSProperties = {
+  minHeight: "48px",
+  padding: "13px 16px",
+  borderRadius: "16px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.04)",
+  color: "#cbd5e1",
+  fontSize: "13px",
+  fontWeight: 900,
+  cursor: "pointer",
+  touchAction: "manipulation",
+};
+
+const loadViewTabActiveStyle: React.CSSProperties = {
+  ...loadViewTabStyle,
+  border: "1px solid rgba(212,175,55,0.34)",
+  background: "rgba(212,175,55,0.18)",
+  color: "#f8fafc",
+  boxShadow: "0 12px 28px rgba(212,175,55,0.12)",
+};
+
+const technicianAccordionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "10px",
+};
+
+const technicianAccordionButtonStyle: React.CSSProperties = {
+  width: "100%",
+  minHeight: "66px",
+  padding: "15px 18px",
+  borderRadius: "20px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(15, 23, 42, 0.92)",
+  color: "#f8fafc",
+  cursor: "pointer",
+  display: "grid",
+  gap: "5px",
+  textAlign: "left",
+  boxShadow: "0 18px 44px rgba(0,0,0,0.18)",
+  touchAction: "manipulation",
+};
+
+const technicianAccordionButtonActiveStyle: React.CSSProperties = {
+  ...technicianAccordionButtonStyle,
+  border: "1px solid rgba(212,175,55,0.34)",
+  background: "rgba(212,175,55,0.16)",
+  boxShadow: "0 20px 52px rgba(212,175,55,0.12)",
+};
+
+const technicianAccordionTitleStyle: React.CSSProperties = {
+  color: "#f8fafc",
+  fontSize: "14px",
+  fontWeight: 900,
+};
+
+const technicianAccordionDescriptionStyle: React.CSSProperties = {
+  color: "#cbd5e1",
+  fontSize: "12px",
+  lineHeight: 1.4,
+};
+
+const projectSavePanelStyle: React.CSSProperties = {
+  background: "rgba(15, 23, 42, 0.94)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "28px",
+  padding: "22px",
+  boxShadow: "0 28px 70px rgba(0,0,0,0.22)",
+  display: "grid",
+  gap: "14px",
+};
+
+const projectSaveHeaderStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: "12px",
+};
+
+const projectListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "10px",
+};
+
+const projectListItemStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: "12px",
+  padding: "12px",
+  borderRadius: "16px",
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const projectListTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#f8fafc",
+  fontSize: "13px",
+  fontWeight: 900,
+};
+
+const projectListMetaStyle: React.CSSProperties = {
+  margin: "5px 0 0",
+  color: "#94a3b8",
+  fontSize: "12px",
+  lineHeight: 1.4,
+};
+
+const projectLoadButtonStyle: React.CSSProperties = {
+  ...calcActionButtonStyle,
+  minHeight: "42px",
+  padding: "11px 14px",
+  borderRadius: "14px",
+  fontSize: "12px",
 };
 
 const calcGridStyle: React.CSSProperties = {
@@ -1101,6 +1738,62 @@ const inputControlStyle: React.CSSProperties = {
   background: "rgba(10, 13, 24, 0.96)",
   color: "#f8fafc",
   fontSize: "14px",
+};
+
+const blueprintTakeoffGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(160px, 1.4fr) repeat(4, minmax(90px, 0.75fr))",
+  gap: "10px",
+};
+
+const blueprintTakeoffNoteStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#cbd5e1",
+  fontSize: "12px",
+  lineHeight: 1.5,
+};
+
+const blueprintTakeoffInputGroupStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "7px",
+};
+
+const blueprintTakeoffInputLabelStyle: React.CSSProperties = {
+  color: "#cbd5e1",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const blueprintTakeoffFooterStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: "12px",
+};
+
+const blueprintTakeoffResultStyle: React.CSSProperties = {
+  padding: "14px",
+  borderRadius: "16px",
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const blueprintTakeoffLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#94a3b8",
+  fontSize: "11px",
+  fontWeight: 800,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+};
+
+const blueprintTakeoffValueStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#f8fafc",
+  fontSize: "15px",
+  fontWeight: 900,
 };
 
 const selectControlStyle: React.CSSProperties = {

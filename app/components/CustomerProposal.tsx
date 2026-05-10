@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   tons: number;
@@ -18,6 +18,17 @@ type ProposalOption = {
   features: string[];
 };
 
+type SavedProposalSnapshot = {
+  customerName: string;
+  jobAddress: string;
+  phone: string;
+  systemType: string;
+  selectedOptionName: ProposalOption["name"] | null;
+  proposalConfirmed: boolean;
+};
+
+const CURRENT_PROPOSAL_STORAGE_KEY = "panda-hvac-current-proposal";
+
 export default function CustomerProposal({
   tons,
   homeType,
@@ -26,6 +37,7 @@ export default function CustomerProposal({
   elitePrice,
   formatMoney,
 }: Props) {
+  const hasLoadedSavedProposal = useRef(false);
   const [selectedOption, setSelectedOption] = useState<ProposalOption | null>(null);
   const [proposalConfirmed, setProposalConfirmed] = useState(false);
 
@@ -37,38 +49,41 @@ export default function CustomerProposal({
   const recommendedName =
     tons <= 2 ? "Basic Comfort" : tons <= 3 ? "Better Comfort" : "Elite Comfort";
 
-  const options: ProposalOption[] = [
-    {
-      name: "Basic Comfort",
-      priceValue: basicPrice,
-      features: [
-        "Properly sized system",
-        "Standard efficiency equipment",
-        "Professional installation",
-      ],
-    },
-    {
-      name: "Better Comfort",
-      priceValue: premiumPrice,
-      features: [
-        "Properly sized system",
-        "High efficiency equipment",
-        "Enhanced airflow balance",
-        "Professional installation",
-      ],
-    },
-    {
-      name: "Elite Comfort",
-      priceValue: elitePrice,
-      features: [
-        "Properly sized system",
-        "Premium high-efficiency system",
-        "Advanced airflow design",
-        "Maximum comfort performance",
-        "Priority installation",
-      ],
-    },
-  ];
+  const options: ProposalOption[] = useMemo(
+    () => [
+      {
+        name: "Basic Comfort",
+        priceValue: basicPrice,
+        features: [
+          "Properly sized system",
+          "Standard efficiency equipment",
+          "Professional installation",
+        ],
+      },
+      {
+        name: "Better Comfort",
+        priceValue: premiumPrice,
+        features: [
+          "Properly sized system",
+          "High efficiency equipment",
+          "Enhanced airflow balance",
+          "Professional installation",
+        ],
+      },
+      {
+        name: "Elite Comfort",
+        priceValue: elitePrice,
+        features: [
+          "Properly sized system",
+          "Premium high-efficiency system",
+          "Advanced airflow design",
+          "Maximum comfort performance",
+          "Priority installation",
+        ],
+      },
+    ],
+    [basicPrice, elitePrice, premiumPrice]
+  );
 
   const getRecommendationReason = () => {
     if (homeType === "new") {
@@ -86,6 +101,45 @@ export default function CustomerProposal({
     setSelectedOption(option);
     setProposalConfirmed(false);
   };
+
+  useEffect(() => {
+    const proposalJson = window.localStorage.getItem(CURRENT_PROPOSAL_STORAGE_KEY);
+    if (!proposalJson) {
+      hasLoadedSavedProposal.current = true;
+      return;
+    }
+
+    try {
+      const savedProposal = JSON.parse(proposalJson) as SavedProposalSnapshot;
+      setCustomerName(savedProposal.customerName || "");
+      setJobAddress(savedProposal.jobAddress || "");
+      setPhone(savedProposal.phone || "");
+      setSystemType(savedProposal.systemType || "");
+      setProposalConfirmed(Boolean(savedProposal.proposalConfirmed));
+      setSelectedOption(
+        options.find((option) => option.name === savedProposal.selectedOptionName) ?? null
+      );
+    } catch {
+      window.localStorage.removeItem(CURRENT_PROPOSAL_STORAGE_KEY);
+    } finally {
+      hasLoadedSavedProposal.current = true;
+    }
+  }, [options]);
+
+  useEffect(() => {
+    if (!hasLoadedSavedProposal.current) return;
+
+    const proposalSnapshot: SavedProposalSnapshot = {
+      customerName,
+      jobAddress,
+      phone,
+      systemType,
+      selectedOptionName: selectedOption?.name ?? null,
+      proposalConfirmed,
+    };
+
+    window.localStorage.setItem(CURRENT_PROPOSAL_STORAGE_KEY, JSON.stringify(proposalSnapshot));
+  }, [customerName, jobAddress, phone, proposalConfirmed, selectedOption, systemType]);
 
   const handlePointerSelect = (option: ProposalOption) => (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === "mouse") return;
@@ -122,7 +176,9 @@ export default function CustomerProposal({
         <p style={smallLabelStyle}>Panda Heating & Cooling</p>
         <h2 style={titleStyle}>HVAC Proposal</h2>
 
-        <p style={{ fontWeight: 800 }}>
+        <p
+          style={recommendedSystemStyle}
+        >
           Recommended System: {tons} Ton System
         </p>
 
@@ -170,6 +226,20 @@ export default function CustomerProposal({
                 : option.name === "Elite Comfort"
                 ? Math.round((elitePrice - premiumPrice) / 60)
                 : 0;
+            const cardTextColor = isSelected ? "#f8fafc" : "#0f172a";
+            const cardMutedColor = isSelected ? "#cbd5e1" : "#475569";
+            const cardSubtleColor = isSelected ? "#d1d5db" : "#64748b";
+            const cardAccentColor = isSelected ? "#fde68a" : "#047857";
+            const cardPanelStyle: React.CSSProperties = {
+              ...investmentBoxStyle,
+              background: isSelected
+                ? "rgba(255, 255, 255, 0.08)"
+                : investmentBoxStyle.background,
+              border: isSelected
+                ? "1px solid rgba(250,204,21,0.28)"
+                : investmentBoxStyle.border,
+              color: isSelected ? "#f8fafc" : investmentBoxStyle.color,
+            };
 
             return (
               <button
@@ -192,50 +262,52 @@ export default function CustomerProposal({
                   boxShadow: isSelected
                     ? "0 0 24px rgba(250, 204, 21, 0.35)"
                     : "0 14px 30px rgba(15, 23, 42, 0.08)",
-                  transform: isSelected ? "scale(1.04)" : "scale(1)",
+                  transform: isSelected ? "translateY(-2px)" : "translateY(0)",
                 }}
               >
-                <h3 style={optionTitleStyle}>{option.name}</h3>
+                <h3 style={{ ...optionTitleStyle, color: cardTextColor }}>{option.name}</h3>
 
                 {option.name === "Better Comfort" && (
-                  <div style={popularBadgeStyle}>⭐ Most Popular</div>
+                  <div style={popularBadgeStyle}>Most Popular</div>
                 )}
 
                 {option.name === recommendedName && (
                   <div style={recommendedBadgeStyle}>Recommended</div>
                 )}
 
-                <div style={priceStyle}>{formatMoney(option.priceValue)}</div>
+                <div style={{ ...priceStyle, color: cardTextColor }}>{formatMoney(option.priceValue)}</div>
 
-                <p style={monthlyStyle}>
+                <p style={{ ...monthlyStyle, color: cardAccentColor }}>
                   ${monthlyPrice.toLocaleString()}/mo with financing
                 </p>
 
-                <p style={finePrintStyle}>
+                <p style={{ ...finePrintStyle, color: cardSubtleColor }}>
                   Estimated based on 60 months financing. Subject to credit approval.
                 </p>
 
                 {option.name !== "Basic Comfort" && (
-                  <p style={upgradeStyle}>
+                  <p style={{ ...upgradeStyle, color: cardAccentColor }}>
                     Only +${upgradeMonthly.toLocaleString()}/mo to upgrade
                   </p>
                 )}
 
-                <p style={investmentLabelStyle}>Estimated System Investment</p>
+                <p style={{ ...investmentLabelStyle, color: cardMutedColor }}>
+                  Estimated System Investment
+                </p>
 
-                <div style={investmentBoxStyle}>
+                <div style={cardPanelStyle}>
                   This investment reflects a properly sized system designed for long-term
                   performance, efficiency, and reliability.
                 </div>
 
-                <div style={featuresStyle}>
+                <div style={{ ...featuresStyle, color: cardTextColor }}>
                   {option.features.map((feature) => (
-                    <div key={feature}>✔ {feature}</div>
+                    <div key={feature}>- {feature}</div>
                   ))}
                 </div>
 
                 {isSelected && (
-                  <p style={selectedTextStyle}>✔ Selected Package</p>
+                  <p style={selectedTextStyle}>Selected Package</p>
                 )}
 
                 <div
@@ -250,19 +322,19 @@ export default function CustomerProposal({
 
         {selectedOption && (
           <div style={selectedBoxStyle}>
-            <p style={{ margin: 0, fontSize: "14px", opacity: 0.75 }}>
+            <p style={selectedSummaryLabelStyle}>
               Selected Package
             </p>
 
-            <h2 style={{ margin: 0, fontSize: "30px" }}>
+            <h2 style={selectedSummaryTitleStyle}>
               {selectedOption.name}
             </h2>
 
-            <p style={{ margin: 0, fontSize: "16px", opacity: 0.8 }}>
+            <p style={selectedSummaryMetaStyle}>
               System Size: {tons} Ton
             </p>
 
-            <h1 style={{ margin: 0, fontSize: "38px" }}>
+            <h1 style={selectedSummaryPriceStyle}>
               {formatMoney(selectedOption.priceValue)}
             </h1>
 
@@ -280,8 +352,8 @@ export default function CustomerProposal({
             </button>
 
             {proposalConfirmed && (
-              <div style={{ marginTop: "10px", fontWeight: 800 }}>
-                <p>✅ Proposal confirmed — ready for PDF</p>
+              <div style={confirmedDetailsStyle}>
+                <p>Proposal confirmed - ready for PDF</p>
                 <p>Customer: {customerName}</p>
                 <p>Address: {jobAddress}</p>
                 <p>Phone: {phone}</p>
@@ -346,26 +418,67 @@ const printStyles = `
   display: none;
 }
 
+.customer-proposal-box,
+.customer-proposal-box *,
+.customer-proposal-option-card {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.customer-proposal-box {
+  overflow-x: hidden;
+}
+
+.customer-proposal-box input::placeholder,
+.customer-proposal-box textarea::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+
+.customer-proposal-option-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+  .customer-proposal-cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
 @media (max-width: 760px) {
   .customer-proposal-box {
-    padding: 20px !important;
-    border-radius: 24px !important;
+    padding: 18px !important;
+    border-radius: 22px !important;
+    gap: 18px !important;
   }
 
   .customer-proposal-info-grid,
   .customer-proposal-cards-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
   }
 
   .customer-proposal-box input,
   .customer-proposal-box button,
   .customer-proposal-box textarea,
   .customer-proposal-option-card {
-    min-height: 44px;
+    min-height: 48px;
     pointer-events: auto !important;
     position: relative !important;
     z-index: 1 !important;
     touch-action: manipulation;
+  }
+
+  .customer-proposal-option-card {
+    padding: 18px !important;
+    transform: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .customer-proposal-box {
+    padding: 14px !important;
   }
 }
 
@@ -386,12 +499,15 @@ const printStyles = `
 
 const proposalBoxStyle: React.CSSProperties = {
   padding: "32px",
-  borderRadius: "32px",
-  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-  border: "1px solid #e2e8f0",
+  borderRadius: "28px",
+  background: "linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%)",
+  border: "1px solid #cbd5e1",
   boxShadow: "0 25px 60px rgba(15, 23, 42, 0.10)",
   display: "grid",
-  gap: "22px",
+  gap: "20px",
+  width: "100%",
+  maxWidth: "100%",
+  overflow: "hidden",
 };
 
 const smallLabelStyle: React.CSSProperties = {
@@ -407,45 +523,67 @@ const titleStyle: React.CSSProperties = {
   margin: "6px 0",
   fontSize: "34px",
   fontWeight: 900,
+  color: "#0f172a",
+  letterSpacing: 0,
+  lineHeight: 1.08,
+};
+
+const recommendedSystemStyle: React.CSSProperties = {
+  margin: 0,
+  padding: "14px 16px",
+  borderRadius: "16px",
+  border: "1px solid rgba(212, 175, 55, 0.34)",
+  background: "linear-gradient(135deg, rgba(212,175,55,0.16), rgba(255,255,255,0.88))",
+  color: "#0f172a",
+  fontSize: "17px",
+  fontWeight: 900,
+  lineHeight: 1.4,
 };
 
 const subTextStyle: React.CSSProperties = {
-  color: "#64748b",
-  fontSize: "15px",
+  margin: 0,
+  color: "#334155",
+  fontSize: "16px",
+  fontWeight: 650,
+  lineHeight: 1.65,
 };
 
 const infoGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, 1fr)",
-  gap: "12px",
-  marginTop: "18px",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "14px",
+  marginTop: "8px",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
+  minHeight: "52px",
   padding: "16px 18px",
   borderRadius: "16px",
-  border: "1px solid #dbe1e8",
+  border: "1px solid #94a3b8",
   background: "#ffffff",
-  fontSize: "15px",
-  fontWeight: 500,
+  color: "#0f172a",
+  fontSize: "16px",
+  fontWeight: 750,
   outline: "none",
   transition: "all 0.2s ease",
   boxSizing: "border-box",
+  boxShadow: "inset 0 1px 0 rgba(15, 23, 42, 0.04)",
 };
 
 const cardsGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: "18px",
-  marginTop: "20px",
+  marginTop: "10px",
   alignItems: "stretch",
+  width: "100%",
 };
 
 const optionCardStyle: React.CSSProperties = {
-  padding: "18px",
-  minHeight: "auto",
-  borderRadius: "24px",
+  padding: "20px",
+  minHeight: "100%",
+  borderRadius: "22px",
   cursor: "pointer",
   transition: "all 0.25s ease",
   background: "#ffffff",
@@ -457,18 +595,21 @@ const optionCardStyle: React.CSSProperties = {
   font: "inherit",
   touchAction: "manipulation",
   WebkitTapHighlightColor: "transparent",
+  width: "100%",
+  overflow: "hidden",
 };
 
 const optionTitleStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: "20px",
+  fontSize: "21px",
   fontWeight: 900,
+  lineHeight: 1.2,
 };
 
 const popularBadgeStyle: React.CSSProperties = {
   marginTop: "8px",
   display: "inline-block",
-  padding: "5px 12px",
+  padding: "7px 12px",
   borderRadius: "999px",
   background: "linear-gradient(90deg, #facc15, #eab308)",
   color: "#111",
@@ -479,7 +620,7 @@ const popularBadgeStyle: React.CSSProperties = {
 const recommendedBadgeStyle: React.CSSProperties = {
   marginTop: "8px",
   display: "inline-block",
-  padding: "5px 12px",
+  padding: "7px 12px",
   borderRadius: "999px",
   background: "#111827",
   color: "#facc15",
@@ -489,54 +630,61 @@ const recommendedBadgeStyle: React.CSSProperties = {
 
 const priceStyle: React.CSSProperties = {
   marginTop: "14px",
-  fontSize: "36px",
+  fontSize: "34px",
   fontWeight: 950,
-  letterSpacing: "-1px",
+  letterSpacing: 0,
+  lineHeight: 1.1,
+  overflowWrap: "anywhere",
 };
 
 const monthlyStyle: React.CSSProperties = {
-  fontSize: "14px",
+  fontSize: "15px",
   color: "#00c853",
-  fontWeight: 800,
+  fontWeight: 900,
   margin: "6px 0",
+  lineHeight: 1.45,
 };
 
 const finePrintStyle: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#94a3b8",
-  lineHeight: 1.4,
+  fontSize: "13px",
+  color: "#64748b",
+  lineHeight: 1.55,
+  margin: "4px 0 0",
 };
 
 const upgradeStyle: React.CSSProperties = {
-  fontSize: "13px",
+  fontSize: "14px",
   color: "#ffd54f",
-  fontWeight: 800,
+  fontWeight: 900,
+  lineHeight: 1.45,
 };
 
 const investmentLabelStyle: React.CSSProperties = {
-  color: "#94a3b8",
+  color: "#475569",
   fontSize: "14px",
-  marginTop: "14px",
+  margin: "14px 0 0",
+  fontWeight: 850,
 };
 
 const investmentBoxStyle: React.CSSProperties = {
   marginTop: "10px",
   padding: "16px",
-  borderRadius: "18px",
+  borderRadius: "16px",
   background: "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(255,255,255,0.9))",
   border: "1px solid rgba(250,204,21,0.22)",
-  fontSize: "13px",
-  color: "#334155",
+  fontSize: "14px",
+  color: "#1f2937",
   lineHeight: 1.6,
 };
 
 const featuresStyle: React.CSSProperties = {
   marginTop: "14px",
   display: "grid",
-  gap: "8px",
-  fontSize: "13px",
-  color: "#334155",
-  fontWeight: 500,
+  gap: "10px",
+  fontSize: "14px",
+  color: "#1f2937",
+  fontWeight: 700,
+  lineHeight: 1.45,
 };
 
 const selectedTextStyle: React.CSSProperties = {
@@ -549,58 +697,125 @@ const selectedTextStyle: React.CSSProperties = {
 const selectButtonStyle: React.CSSProperties = {
   width: "100%",
   marginTop: "16px",
-  padding: "12px",
+  minHeight: "48px",
+  padding: "14px 16px",
   borderRadius: "999px",
   border: "none",
   background: "linear-gradient(90deg, #111827, #000000)",
   color: "white",
   fontWeight: 900,
   cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  lineHeight: 1.25,
 };
 
 const selectedBoxStyle: React.CSSProperties = {
   marginTop: "22px",
   padding: "24px",
-  borderRadius: "24px",
+  borderRadius: "22px",
   background: "linear-gradient(135deg, #111827, #000000)",
   color: "white",
   display: "grid",
-  gap: "8px",
+  gap: "10px",
+  boxShadow: "0 18px 38px rgba(15, 23, 42, 0.24)",
+};
+
+const selectedSummaryLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#d1d5db",
+  fontSize: "14px",
+  fontWeight: 850,
+  lineHeight: 1.35,
+};
+
+const selectedSummaryTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#ffffff",
+  fontSize: "30px",
+  fontWeight: 950,
+  lineHeight: 1.18,
+  overflowWrap: "anywhere",
+};
+
+const selectedSummaryMetaStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#e5e7eb",
+  fontSize: "16px",
+  fontWeight: 750,
+  lineHeight: 1.45,
+};
+
+const selectedSummaryPriceStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#ffffff",
+  fontSize: "38px",
+  fontWeight: 950,
+  letterSpacing: 0,
+  lineHeight: 1.05,
+  overflowWrap: "anywhere",
 };
 
 const confirmButtonStyle: React.CSSProperties = {
   marginTop: "12px",
-  padding: "14px 18px",
+  minHeight: "52px",
+  padding: "15px 20px",
   borderRadius: "999px",
   border: "none",
   background: "linear-gradient(90deg, #facc15, #d4af37)",
   color: "#111",
   fontWeight: 950,
+  fontSize: "16px",
   cursor: "pointer",
   touchAction: "manipulation",
   WebkitTapHighlightColor: "transparent",
+  lineHeight: 1.25,
+};
+
+const confirmedDetailsStyle: React.CSSProperties = {
+  marginTop: "10px",
+  padding: "14px 16px",
+  borderRadius: "16px",
+  background: "rgba(255, 255, 255, 0.08)",
+  border: "1px solid rgba(250, 204, 21, 0.18)",
+  color: "#f8fafc",
+  fontSize: "14px",
+  fontWeight: 800,
+  lineHeight: 1.5,
+  overflowWrap: "anywhere",
 };
 
 const notesStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "100px",
+  minHeight: "116px",
   marginTop: "18px",
-  padding: "16px",
-  borderRadius: "18px",
-  border: "1px solid #d1d5db",
-  fontSize: "14px",
+  padding: "16px 18px",
+  borderRadius: "16px",
+  border: "1px solid #94a3b8",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontSize: "16px",
+  fontWeight: 650,
+  lineHeight: 1.55,
+  boxSizing: "border-box",
+  outline: "none",
+  resize: "vertical",
 };
 
 const mainButtonStyle: React.CSSProperties = {
   width: "100%",
   marginTop: "16px",
-  padding: "16px",
+  minHeight: "54px",
+  padding: "16px 20px",
   borderRadius: "999px",
   border: "none",
   background: "linear-gradient(90deg, #111827, #000000)",
   color: "white",
   fontWeight: 950,
-  fontSize: "15px",
+  fontSize: "16px",
+  lineHeight: 1.25,
   touchAction: "manipulation",
   WebkitTapHighlightColor: "transparent",
 };

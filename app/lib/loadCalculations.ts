@@ -151,7 +151,7 @@ export function calculateConfidenceScore(inputs: LoadCalculationInputs): { score
   const { squareFeet, ceilingHeight, insulationQuality, windowCount, windowEfficiency, climateZone, numberOfRooms, homeAge, ductLocation, occupancy } = inputs;
 
   let confidenceBase = 70;
-  let missingInputs: string[] = [];
+  const missingInputs: string[] = [];
 
   // Check for missing or default inputs
   if (!squareFeet || squareFeet < 500) missingInputs.push("square footage");
