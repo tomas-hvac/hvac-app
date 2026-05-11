@@ -95,6 +95,19 @@ type ManualDRecommendation = {
   message: string;
 };
 
+function printManualDMode() {
+  document.body.dataset.printMode = "manualD";
+
+  const clearPrintMode = () => {
+    delete document.body.dataset.printMode;
+    window.removeEventListener("afterprint", clearPrintMode);
+  };
+
+  window.addEventListener("afterprint", clearPrintMode, { once: true });
+  window.print();
+  window.setTimeout(clearPrintMode, 1000);
+}
+
 const RETURN_GRILLE_TARGET_CFM = 300;
 const RETURN_GRILLE_RESTRICTIVE_CFM = 450;
 const DEFAULT_RETURN_DUCT_DIAMETER_INCHES = 16;
@@ -197,17 +210,22 @@ function calculateRoomLoadFactor(room: ManualDRoom): number {
   const windowsCount = Math.max(0, Number(room.windowsCountInput) || 0);
   const exteriorWallsCount = Math.max(0, Number(room.exteriorWallsCountInput) || 0);
   const ceilingHeight = Math.max(0, Number(room.ceilingHeightInput) || 8);
-  const ceilingHeightFactor = Math.max(0, ceilingHeight - 8) * 0.06;
 
-  const factor =
+  // Conservative preliminary room load multiplier:
+  // square footage remains the baseline, then field inputs nudge the room share.
+  const windowMultiplier = Math.min(0.18, windowsCount * 0.03);
+  const exteriorWallMultiplier = Math.min(0.22, exteriorWallsCount * 0.07);
+  const ceilingHeightMultiplier = Math.min(0.18, Math.max(0, ceilingHeight - 8) * 0.05);
+
+  const roomLoadMultiplier =
     1 +
-    windowsCount * 0.04 +
-    exteriorWallsCount * 0.08 +
-    ceilingHeightFactor +
+    windowMultiplier +
+    exteriorWallMultiplier +
+    ceilingHeightMultiplier +
     INSULATION_LOAD_FACTORS[room.insulationLevel] +
     SUN_EXPOSURE_LOAD_FACTORS[room.sunExposure];
 
-  return Math.min(1.8, Math.max(0.65, factor));
+  return Math.min(1.5, Math.max(0.75, roomLoadMultiplier));
 }
 
 function getRegisterAirflowStatus(airflowPerRegister: number): RegisterAirflowStatus {
@@ -744,7 +762,7 @@ export default function ManualDPanel({
   ]);
 
   const handlePrintManualDReport = () => {
-    window.print();
+    printManualDMode();
   };
 
   const showManualDSection = activeSection === "manual-d";
@@ -1195,6 +1213,9 @@ export default function ManualDPanel({
             <p style={verificationNotesSubtitleStyle}>
               Uses {Math.round(totalSystemCfm).toLocaleString()} CFM from {systemTonsValue.toLocaleString()} tons.
             </p>
+            <p style={verificationNotesSubtitleStyle}>
+              Preliminary field estimates only; not a certified Manual J room load calculation.
+            </p>
           </div>
           <button type="button" style={roomActionButtonStyle} onClick={addRoom}>
             Add Room
@@ -1202,7 +1223,7 @@ export default function ManualDPanel({
         </div>
 
         <div style={roomCardGridStyle}>
-          {roomDuctRecommendations.map(({ room, roomCfm, estimatedRoomBtu, airflowPerRegister, registerAirflowStatus, registerSizeGuidance, ductRecommendation }, index) => (
+          {roomDuctRecommendations.map(({ room, roomCfm, estimatedRoomBtu, roomLoadFactor, airflowPerRegister, registerAirflowStatus, registerSizeGuidance, ductRecommendation }, index) => (
             <div key={room.id} style={roomCardStyle}>
               <div style={roomCardHeaderStyle}>
                 <p style={roomCardTitleStyle}>{room.name || `Room ${index + 1}`}</p>
@@ -1326,6 +1347,10 @@ export default function ManualDPanel({
                   <div style={roomOutputItemStyle}>
                     <p style={manualDOutputLabelStyle}>Room CFM</p>
                     <p style={manualDOutputValueStyle}>{Math.round(roomCfm).toLocaleString()} CFM</p>
+                  </div>
+                  <div style={roomOutputItemStyle}>
+                    <p style={manualDOutputLabelStyle}>Load Multiplier</p>
+                    <p style={manualDOutputValueStyle}>{roomLoadFactor.toFixed(2)}x</p>
                   </div>
                   <div style={roomOutputItemStyle}>
                     <p style={manualDOutputLabelStyle}>CFM / Register</p>
@@ -1981,10 +2006,14 @@ const manualDPrintStyles = `
       display: none !important;
     }
 
-    .panda-app-main,
-    .load-calculator-page,
-    .load-calculator-grid,
-    .load-calculator-left {
+    body[data-print-mode="manualD"] .panda-app-main,
+    body[data-print-mode="manualD"] .load-calculator-page,
+    body[data-print-mode="manualD"] .load-calculator-grid,
+    body[data-print-mode="manualD"] .load-calculator-left,
+    body[data-print-mode="combined"] .panda-app-main,
+    body[data-print-mode="combined"] .load-calculator-page,
+    body[data-print-mode="combined"] .load-calculator-grid,
+    body[data-print-mode="combined"] .load-calculator-left {
       display: block !important;
       width: 100% !important;
       max-width: none !important;
@@ -1995,14 +2024,19 @@ const manualDPrintStyles = `
       background: #ffffff !important;
     }
 
-    .load-calculator-header,
-    .load-calculator-right,
-    .load-calculator-left > :not(.manual-d-panel-root),
-    .manual-d-screen-panel {
+    body[data-print-mode="manualD"] .load-calculator-header,
+    body[data-print-mode="manualD"] .load-calculator-right,
+    body[data-print-mode="manualD"] .load-calculator-left > :not(.manual-d-panel-root),
+    body[data-print-mode="manualD"] .manual-d-screen-panel,
+    body[data-print-mode="combined"] .load-calculator-header,
+    body[data-print-mode="combined"] .load-calculator-right,
+    body[data-print-mode="combined"] .load-calculator-left > :not(.manual-d-panel-root),
+    body[data-print-mode="combined"] .manual-d-screen-panel {
       display: none !important;
     }
 
-    .manual-d-panel-root {
+    body[data-print-mode="manualD"] .manual-d-panel-root,
+    body[data-print-mode="combined"] .manual-d-panel-root {
       display: block !important;
       width: 100% !important;
       max-width: none !important;
@@ -2012,7 +2046,8 @@ const manualDPrintStyles = `
       background: #ffffff !important;
     }
 
-    .manual-d-print-report-only {
+    body[data-print-mode="manualD"] .manual-d-print-report-only,
+    body[data-print-mode="combined"] .manual-d-print-report-only {
       display: block !important;
       width: 100% !important;
       min-height: auto !important;

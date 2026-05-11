@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium } from "lucide-react";
-import { calculateManualJLoad, ManualJInputs } from "../lib/manualJCalculations";
-import ManualDPanel, { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
+import { calculateManualJLoad } from "../lib/manualJCalculations";
+import type { ManualJInputs } from "../lib/manualJCalculations";
+import ManualDPanel from "./ManualDPanel";
+import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
 
 type LoadCalculatorView = "customer" | "technician";
 type TechnicianSection = ManualDPanelSection | "manual-room-takeoff";

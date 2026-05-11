@@ -41,6 +41,8 @@ type Room = {
   squareFeet: number;
 };
 
+type AppPrintMode = "manualD";
+
 const sidebarItems: { label: string; icon: string; screen: ActiveScreen }[] = [
   { label: "Dashboard", icon: "Dashboard", screen: "dashboard" },
   { label: "Proposals", icon: "Proposals", screen: "proposal" },
@@ -61,6 +63,19 @@ const quickActions: { title: string; description: string; icon: string; screen: 
 ];
 
 const pandaLogoSrc = "/logos/panda-load-studio-logo.png";
+
+function printAppMode(mode: AppPrintMode) {
+  document.body.dataset.printMode = mode;
+
+  const clearPrintMode = () => {
+    delete document.body.dataset.printMode;
+    window.removeEventListener("afterprint", clearPrintMode);
+  };
+
+  window.addEventListener("afterprint", clearPrintMode, { once: true });
+  window.print();
+  window.setTimeout(clearPrintMode, 1000);
+}
 
 const getOregonZipMultiplier = (zip: string) => {
   const prefix = zip.trim().slice(0, 3);
@@ -251,7 +266,7 @@ const roomDuctRecommendations = rooms.map((room) => {
 });
 
 const handlePrintManualDReport = () => {
-  window.print();
+  printAppMode("manualD");
 };
 
   return (
@@ -524,18 +539,19 @@ const handlePrintManualDReport = () => {
             }
 
             .panda-sidebar,
-            .panda-app-main,
             .panda-main-header,
             .panda-metric-grid,
             .panda-bottom-banner,
             .panda-proposal-header,
             .panda-room-duct-grid,
             .manual-d-print-report,
-            .manual-d-report-actions {
+            .manual-d-report-actions,
+            body[data-print-mode="manualD"] .panda-app-main {
               display: none !important;
             }
 
-            .manual-d-print-only-report {
+            body[data-print-mode="manualD"] .manual-d-print-only-report,
+            body[data-print-mode="combined"] .manual-d-print-only-report {
               display: block !important;
               color: #111827 !important;
               background: #ffffff !important;

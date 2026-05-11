@@ -12,6 +12,8 @@ type Props = {
   formatMoney: (value: number) => string;
 };
 
+type ProposalPrintMode = "proposal" | "combined";
+
 type ProposalOption = {
   name: "Basic Comfort" | "Better Comfort" | "Elite Comfort";
   priceValue: number;
@@ -28,6 +30,19 @@ type SavedProposalSnapshot = {
 };
 
 const CURRENT_PROPOSAL_STORAGE_KEY = "panda-hvac-current-proposal";
+
+function printProposalMode(mode: ProposalPrintMode) {
+  document.body.dataset.printMode = mode;
+
+  const clearPrintMode = () => {
+    delete document.body.dataset.printMode;
+    window.removeEventListener("afterprint", clearPrintMode);
+  };
+
+  window.addEventListener("afterprint", clearPrintMode, { once: true });
+  window.print();
+  window.setTimeout(clearPrintMode, 1000);
+}
 
 export default function CustomerProposal({
   tons,
@@ -159,13 +174,24 @@ export default function CustomerProposal({
 
   const handleGeneratePdf = () => {
     if (!proposalConfirmed) return;
-    window.print();
+    printProposalMode("proposal");
+  };
+
+  const handleGenerateCombinedReport = () => {
+    if (!proposalConfirmed || homeType !== "new") return;
+    printProposalMode("combined");
   };
 
   const handlePointerGeneratePdf = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === "mouse") return;
     event.preventDefault();
     handleGeneratePdf();
+  };
+
+  const handlePointerGenerateCombinedReport = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "mouse") return;
+    event.preventDefault();
+    handleGenerateCombinedReport();
   };
 
   return (
@@ -219,6 +245,54 @@ export default function CustomerProposal({
         <div className="customer-proposal-cards-grid" style={cardsGridStyle}>
           {options.map((option) => {
             const isSelected = selectedOption?.name === option.name;
+            const tierLabel =
+              option.name === "Basic Comfort"
+                ? "Silver"
+                : option.name === "Better Comfort"
+                ? "Gold"
+                : "Elite";
+            const packageVisual =
+              option.name === "Basic Comfort"
+                ? {
+                    background: "linear-gradient(180deg, #ffffff 0%, #eef2f7 100%)",
+                    border: "#b8c2cf",
+                    text: "#0f172a",
+                    muted: "#475569",
+                    subtle: "#64748b",
+                    accent: "#64748b",
+                    shield: "linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%)",
+                    shieldText: "#334155",
+                    panel: "linear-gradient(135deg, rgba(203,213,225,0.22), rgba(255,255,255,0.92))",
+                    button: "linear-gradient(90deg, #475569, #1e293b)",
+                    buttonColor: "#ffffff",
+                  }
+                : option.name === "Better Comfort"
+                ? {
+                    background: "linear-gradient(180deg, #ffffff 0%, #fff7d6 100%)",
+                    border: "#d4af37",
+                    text: "#0f172a",
+                    muted: "#5f4b12",
+                    subtle: "#745a12",
+                    accent: "#a16207",
+                    shield: "linear-gradient(180deg, #fff7c2 0%, #d4af37 100%)",
+                    shieldText: "#111827",
+                    panel: "linear-gradient(135deg, rgba(212,175,55,0.20), rgba(255,255,255,0.92))",
+                    button: "linear-gradient(90deg, #d4af37, #a16207)",
+                    buttonColor: "#111827",
+                  }
+                : {
+                    background: "linear-gradient(180deg, #0b1220 0%, #111827 100%)",
+                    border: "#d4af37",
+                    text: "#f8fafc",
+                    muted: "#cbd5e1",
+                    subtle: "#d1d5db",
+                    accent: "#fde68a",
+                    shield: "linear-gradient(180deg, #f8e7a1 0%, #d4af37 48%, #111827 100%)",
+                    shieldText: "#ffffff",
+                    panel: "rgba(255, 255, 255, 0.08)",
+                    button: "linear-gradient(90deg, #facc15, #d4af37)",
+                    buttonColor: "#111827",
+                  };
             const monthlyPrice = Math.round(option.priceValue / 60);
             const upgradeMonthly =
               option.name === "Better Comfort"
@@ -226,19 +300,17 @@ export default function CustomerProposal({
                 : option.name === "Elite Comfort"
                 ? Math.round((elitePrice - premiumPrice) / 60)
                 : 0;
-            const cardTextColor = isSelected ? "#f8fafc" : "#0f172a";
-            const cardMutedColor = isSelected ? "#cbd5e1" : "#475569";
-            const cardSubtleColor = isSelected ? "#d1d5db" : "#64748b";
-            const cardAccentColor = isSelected ? "#fde68a" : "#047857";
+            const cardTextColor = packageVisual.text;
+            const cardMutedColor = packageVisual.muted;
+            const cardSubtleColor = packageVisual.subtle;
+            const cardAccentColor = packageVisual.accent;
             const cardPanelStyle: React.CSSProperties = {
               ...investmentBoxStyle,
-              background: isSelected
-                ? "rgba(255, 255, 255, 0.08)"
-                : investmentBoxStyle.background,
+              background: packageVisual.panel,
               border: isSelected
-                ? "1px solid rgba(250,204,21,0.28)"
-                : investmentBoxStyle.border,
-              color: isSelected ? "#f8fafc" : investmentBoxStyle.color,
+                ? `1px solid ${packageVisual.border}`
+                : "1px solid rgba(15, 23, 42, 0.08)",
+              color: cardTextColor,
             };
 
             return (
@@ -254,17 +326,27 @@ export default function CustomerProposal({
                 onPointerUp={handlePointerSelect(option)}
                 style={{
                   ...optionCardStyle,
-                  border: isSelected ? "2px solid #d4af37" : "1px solid #e5e7eb",
-                  background: isSelected
-                    ? "linear-gradient(180deg, #0f0f0f 0%, #1c1c1c 100%)"
-                    : "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-                  color: isSelected ? "white" : "#111827",
+                  border: isSelected ? `2px solid ${packageVisual.border}` : `1px solid ${packageVisual.border}`,
+                  background: packageVisual.background,
+                  color: cardTextColor,
                   boxShadow: isSelected
-                    ? "0 0 24px rgba(250, 204, 21, 0.35)"
-                    : "0 14px 30px rgba(15, 23, 42, 0.08)",
+                    ? "0 24px 52px rgba(15, 23, 42, 0.24), 0 0 0 4px rgba(212,175,55,0.12)"
+                    : "0 16px 36px rgba(15, 23, 42, 0.10)",
                   transform: isSelected ? "translateY(-2px)" : "translateY(0)",
                 }}
               >
+                <div
+                  style={{
+                    ...packageShieldStyle,
+                    background: packageVisual.shield,
+                    borderColor: packageVisual.border,
+                  }}
+                >
+                  <span style={{ ...packageShieldTextStyle, color: packageVisual.shieldText }}>
+                    {tierLabel}
+                  </span>
+                </div>
+
                 <h3 style={{ ...optionTitleStyle, color: cardTextColor }}>{option.name}</h3>
 
                 {option.name === "Better Comfort" && (
@@ -306,12 +388,35 @@ export default function CustomerProposal({
                   ))}
                 </div>
 
+                <div
+                  style={{
+                    ...homeownerConfidenceStyle,
+                    borderColor: isSelected ? "rgba(212,175,55,0.35)" : "rgba(15,23,42,0.10)",
+                    background: isSelected ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.62)",
+                  }}
+                >
+                  <p style={{ ...homeownerConfidenceTitleStyle, color: cardMutedColor }}>
+                    Homeowner Confidence
+                  </p>
+                  <div style={{ ...homeownerConfidenceGridStyle, color: cardTextColor }}>
+                    <span>Properly sized system</span>
+                    <span>Airflow-balanced design</span>
+                    <span>Comfort-focused installation</span>
+                    <span>Long-term efficiency focus</span>
+                  </div>
+                </div>
+
                 {isSelected && (
                   <p style={selectedTextStyle}>Selected Package</p>
                 )}
 
                 <div
-                  style={selectButtonStyle}
+                  style={{
+                    ...selectButtonStyle,
+                    background: packageVisual.button,
+                    color: packageVisual.buttonColor,
+                    border: `1px solid ${packageVisual.border}`,
+                  }}
                 >
                   Select {option.name}
                 </div>
@@ -381,33 +486,130 @@ export default function CustomerProposal({
         >
           Generate Proposal PDF
         </button>
+
+        {homeType === "new" && (
+          <button
+            type="button"
+            style={{
+              ...mainButtonStyle,
+              opacity: proposalConfirmed ? 1 : 0.5,
+              cursor: proposalConfirmed ? "pointer" : "not-allowed",
+              background: "linear-gradient(90deg, #0f172a, #d4af37)",
+            }}
+            onClick={handleGenerateCombinedReport}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleGenerateCombinedReport();
+            }}
+            onPointerUp={handlePointerGenerateCombinedReport}
+          >
+            Combined Report
+          </button>
+        )}
       </div>
 
-      <div className="print-only" style={printProposalStyle}>
-        <h1 style={printTitleStyle}>Panda Heating & Cooling</h1>
-        <h2>HVAC System Proposal</h2>
+      <div className="print-only panda-proposal-print-only" style={printProposalStyle}>
+        <header style={printHeaderStyle}>
+          <div>
+            <p style={printBrandLabelStyle}>Panda Heating & Cooling</p>
+            <h1 style={printTitleStyle}>HVAC System Proposal</h1>
+            <p style={printSubtitleStyle}>Premium comfort options prepared for your home.</p>
+          </div>
+          <div style={printSystemBadgeStyle}>
+            <p style={printBadgeLabelStyle}>Recommended System</p>
+            <p style={printBadgeValueStyle}>{tons} Ton</p>
+          </div>
+        </header>
 
-        <hr />
+        <section style={printSectionStyle}>
+          <p style={printSectionTitleStyle}>Customer & Project</p>
+          <div style={printInfoGridStyle}>
+            <div style={printInfoItemStyle}>
+              <p style={printInfoLabelStyle}>Customer</p>
+              <p style={printInfoValueStyle}>{customerName || "Not provided"}</p>
+            </div>
+            <div style={printInfoItemStyle}>
+              <p style={printInfoLabelStyle}>Phone</p>
+              <p style={printInfoValueStyle}>{phone || "Not provided"}</p>
+            </div>
+            <div style={printInfoItemStyle}>
+              <p style={printInfoLabelStyle}>Address</p>
+              <p style={printInfoValueStyle}>{jobAddress || "Not provided"}</p>
+            </div>
+            <div style={printInfoItemStyle}>
+              <p style={printInfoLabelStyle}>System Type</p>
+              <p style={printInfoValueStyle}>{systemType || "Not provided"}</p>
+            </div>
+          </div>
+        </section>
 
-        <p><strong>Customer:</strong> {customerName}</p>
-        <p><strong>Address:</strong> {jobAddress}</p>
-        <p><strong>Phone:</strong> {phone}</p>
-        <p><strong>System:</strong> {systemType}</p>
+        <section style={printSelectedSectionStyle}>
+          <div>
+            <p style={printSectionTitleStyle}>Selected Package</p>
+            <h2 style={printSelectedTitleStyle}>{selectedOption?.name || "Package not selected"}</h2>
+            <p style={printSelectedMetaStyle}>System Size: {tons} Ton</p>
+          </div>
+          <div style={printSelectedPriceStyle}>
+            {selectedOption ? formatMoney(selectedOption.priceValue) : ""}
+          </div>
+        </section>
 
-        <hr />
+        <section style={printSectionStyle}>
+          <p style={printSectionTitleStyle}>Good / Better / Elite Options</p>
+          <table className="panda-print-options-table" style={printOptionsTableStyle}>
+            <thead>
+              <tr>
+                <th style={printTableHeaderStyle}>Tier</th>
+                <th style={printTableHeaderStyle}>Package</th>
+                <th style={printTableHeaderStyle}>Investment</th>
+                <th style={printTableHeaderStyle}>Included Highlights</th>
+              </tr>
+            </thead>
+            <tbody>
+              {options.map((option) => {
+                const tierLabel =
+                  option.name === "Basic Comfort"
+                    ? "Good"
+                    : option.name === "Better Comfort"
+                    ? "Better"
+                    : "Elite";
+                const isSelected = selectedOption?.name === option.name;
 
-        <p><strong>Selected Package:</strong> {selectedOption?.name}</p>
-        <p><strong>System Size:</strong> {tons} Ton</p>
-        <p><strong>Price:</strong> {selectedOption ? formatMoney(selectedOption.priceValue) : ""}</p>
+                return (
+                  <tr key={`print-${option.name}`} style={isSelected ? printSelectedRowStyle : undefined}>
+                    <td style={printTableCellStyle}>{tierLabel}</td>
+                    <td style={printTableCellStyle}>
+                      {option.name}
+                      {isSelected ? " - Selected" : ""}
+                    </td>
+                    <td style={printTableCellStyle}>{formatMoney(option.priceValue)}</td>
+                    <td style={printTableCellStyle}>{option.features.join(", ")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
 
-        <hr />
+        <section style={printSectionStyle}>
+          <p style={printSectionTitleStyle}>Recommendation Notes</p>
+          <p style={printBodyTextStyle}>{getRecommendationReason()}</p>
+        </section>
 
-        <p>{getRecommendationReason()}</p>
-
-        <div style={{ marginTop: "50px" }}>
-          <p>Customer Signature: ______________________________</p>
-          <p>Date: ____________________</p>
-        </div>
+        <section style={printSignatureGridStyle}>
+          <div style={printSignatureLineStyle}>
+            <p style={printSignatureLabelStyle}>Customer Signature</p>
+          </div>
+          <div style={printSignatureLineStyle}>
+            <p style={printSignatureLabelStyle}>Date</p>
+          </div>
+          <div style={printSignatureLineStyle}>
+            <p style={printSignatureLabelStyle}>Panda Heating & Cooling Representative</p>
+          </div>
+          <div style={printSignatureLineStyle}>
+            <p style={printSignatureLabelStyle}>Date</p>
+          </div>
+        </section>
       </div>
     </>
   );
@@ -483,8 +685,31 @@ const printStyles = `
 }
 
 @media print {
+  @page {
+    margin: 0.45in;
+  }
+
   body {
     background: white !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .panda-app-shell,
+  .panda-app-main,
+  .panda-proposal-shell {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
   }
 
   .no-print {
@@ -494,17 +719,50 @@ const printStyles = `
   .print-only {
     display: block !important;
   }
+
+  body[data-print-mode="proposal"] .panda-proposal-print-only,
+  body[data-print-mode="proposal"] .panda-proposal-print-only *,
+  body[data-print-mode="combined"] .panda-proposal-print-only,
+  body[data-print-mode="combined"] .panda-proposal-print-only *,
+  body[data-print-mode="combined"] .manual-d-print-only-report,
+  body[data-print-mode="combined"] .manual-d-print-only-report *,
+  body[data-print-mode="combined"] .manual-d-print-report-only,
+  body[data-print-mode="combined"] .manual-d-print-report-only * {
+    visibility: visible !important;
+  }
+
+  .panda-proposal-print-only {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+  }
+
+  body[data-print-mode="proposal"] .manual-d-panel-root,
+  body[data-print-mode="proposal"] .manual-d-print-report-only,
+  body[data-print-mode="proposal"] .manual-d-print-only-report,
+  .manual-d-screen-panel,
+  .load-calculator-page,
+  .panda-proposal-header,
+  .panda-sidebar,
+  .panda-main-header {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .panda-print-options-table {
+    page-break-inside: avoid;
+  }
 }
 `;
 
 const proposalBoxStyle: React.CSSProperties = {
-  padding: "32px",
-  borderRadius: "28px",
-  background: "linear-gradient(180deg, #ffffff 0%, #f6f7fb 100%)",
-  border: "1px solid #cbd5e1",
-  boxShadow: "0 25px 60px rgba(15, 23, 42, 0.10)",
+  padding: "34px",
+  borderRadius: "30px",
+  background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 58%, #f1f5f9 100%)",
+  border: "1px solid #d7dee8",
+  boxShadow: "0 28px 70px rgba(15, 23, 42, 0.12)",
   display: "grid",
-  gap: "20px",
+  gap: "22px",
   width: "100%",
   maxWidth: "100%",
   overflow: "hidden",
@@ -512,16 +770,16 @@ const proposalBoxStyle: React.CSSProperties = {
 
 const smallLabelStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: "13px",
+  fontSize: "12px",
   fontWeight: 900,
-  letterSpacing: "0.14em",
+  letterSpacing: "0.16em",
   textTransform: "uppercase",
   color: "#d4af37",
 };
 
 const titleStyle: React.CSSProperties = {
-  margin: "6px 0",
-  fontSize: "34px",
+  margin: "4px 0",
+  fontSize: "36px",
   fontWeight: 900,
   color: "#0f172a",
   letterSpacing: 0,
@@ -530,10 +788,10 @@ const titleStyle: React.CSSProperties = {
 
 const recommendedSystemStyle: React.CSSProperties = {
   margin: 0,
-  padding: "14px 16px",
-  borderRadius: "16px",
-  border: "1px solid rgba(212, 175, 55, 0.34)",
-  background: "linear-gradient(135deg, rgba(212,175,55,0.16), rgba(255,255,255,0.88))",
+  padding: "15px 18px",
+  borderRadius: "18px",
+  border: "1px solid rgba(180, 131, 14, 0.34)",
+  background: "linear-gradient(135deg, rgba(212,175,55,0.18), rgba(255,255,255,0.94))",
   color: "#0f172a",
   fontSize: "17px",
   fontWeight: 900,
@@ -544,23 +802,23 @@ const subTextStyle: React.CSSProperties = {
   margin: 0,
   color: "#334155",
   fontSize: "16px",
-  fontWeight: 650,
-  lineHeight: 1.65,
+  fontWeight: 700,
+  lineHeight: 1.6,
 };
 
 const infoGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: "14px",
-  marginTop: "8px",
+  gap: "15px",
+  marginTop: "4px",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "52px",
+  minHeight: "54px",
   padding: "16px 18px",
   borderRadius: "16px",
-  border: "1px solid #94a3b8",
+  border: "1px solid #7c8da3",
   background: "#ffffff",
   color: "#0f172a",
   fontSize: "16px",
@@ -568,22 +826,22 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
   transition: "all 0.2s ease",
   boxSizing: "border-box",
-  boxShadow: "inset 0 1px 0 rgba(15, 23, 42, 0.04)",
+  boxShadow: "inset 0 1px 0 rgba(15, 23, 42, 0.04), 0 8px 18px rgba(15, 23, 42, 0.04)",
 };
 
 const cardsGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: "18px",
-  marginTop: "10px",
+  gap: "20px",
+  marginTop: "8px",
   alignItems: "stretch",
   width: "100%",
 };
 
 const optionCardStyle: React.CSSProperties = {
-  padding: "20px",
+  padding: "22px",
   minHeight: "100%",
-  borderRadius: "22px",
+  borderRadius: "24px",
   cursor: "pointer",
   transition: "all 0.25s ease",
   background: "#ffffff",
@@ -599,9 +857,27 @@ const optionCardStyle: React.CSSProperties = {
   overflow: "hidden",
 };
 
+const packageShieldStyle: React.CSSProperties = {
+  width: "58px",
+  height: "66px",
+  display: "grid",
+  placeItems: "center",
+  marginBottom: "14px",
+  border: "1px solid",
+  clipPath: "polygon(50% 0%, 92% 16%, 86% 72%, 50% 100%, 14% 72%, 8% 16%)",
+  boxShadow: "0 12px 22px rgba(15, 23, 42, 0.14)",
+};
+
+const packageShieldTextStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
 const optionTitleStyle: React.CSSProperties = {
   margin: 0,
-  fontSize: "21px",
+  fontSize: "22px",
   fontWeight: 900,
   lineHeight: 1.2,
 };
@@ -629,8 +905,8 @@ const recommendedBadgeStyle: React.CSSProperties = {
 };
 
 const priceStyle: React.CSSProperties = {
-  marginTop: "14px",
-  fontSize: "34px",
+  marginTop: "16px",
+  fontSize: "35px",
   fontWeight: 950,
   letterSpacing: 0,
   lineHeight: 1.1,
@@ -639,7 +915,7 @@ const priceStyle: React.CSSProperties = {
 
 const monthlyStyle: React.CSSProperties = {
   fontSize: "15px",
-  color: "#00c853",
+  color: "#047857",
   fontWeight: 900,
   margin: "6px 0",
   lineHeight: 1.45,
@@ -668,23 +944,48 @@ const investmentLabelStyle: React.CSSProperties = {
 
 const investmentBoxStyle: React.CSSProperties = {
   marginTop: "10px",
-  padding: "16px",
+  padding: "15px 16px",
   borderRadius: "16px",
   background: "linear-gradient(135deg, rgba(250,204,21,0.10), rgba(255,255,255,0.9))",
-  border: "1px solid rgba(250,204,21,0.22)",
+  border: "1px solid rgba(180,131,14,0.22)",
   fontSize: "14px",
   color: "#1f2937",
   lineHeight: 1.6,
 };
 
 const featuresStyle: React.CSSProperties = {
-  marginTop: "14px",
+  marginTop: "16px",
   display: "grid",
-  gap: "10px",
+  gap: "9px",
   fontSize: "14px",
   color: "#1f2937",
   fontWeight: 700,
   lineHeight: 1.45,
+};
+
+const homeownerConfidenceStyle: React.CSSProperties = {
+  marginTop: "14px",
+  padding: "12px",
+  borderRadius: "16px",
+  border: "1px solid rgba(15,23,42,0.10)",
+  display: "grid",
+  gap: "9px",
+};
+
+const homeownerConfidenceTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+};
+
+const homeownerConfidenceGridStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "7px",
+  fontSize: "12px",
+  fontWeight: 800,
+  lineHeight: 1.35,
 };
 
 const selectedTextStyle: React.CSSProperties = {
@@ -696,12 +997,12 @@ const selectedTextStyle: React.CSSProperties = {
 
 const selectButtonStyle: React.CSSProperties = {
   width: "100%",
-  marginTop: "16px",
-  minHeight: "48px",
+  marginTop: "18px",
+  minHeight: "50px",
   padding: "14px 16px",
   borderRadius: "999px",
   border: "none",
-  background: "linear-gradient(90deg, #111827, #000000)",
+  background: "linear-gradient(90deg, #111827, #020617)",
   color: "white",
   fontWeight: 900,
   cursor: "pointer",
@@ -713,14 +1014,14 @@ const selectButtonStyle: React.CSSProperties = {
 };
 
 const selectedBoxStyle: React.CSSProperties = {
-  marginTop: "22px",
-  padding: "24px",
-  borderRadius: "22px",
-  background: "linear-gradient(135deg, #111827, #000000)",
+  marginTop: "20px",
+  padding: "26px",
+  borderRadius: "24px",
+  background: "linear-gradient(135deg, #0b1220, #111827)",
   color: "white",
   display: "grid",
-  gap: "10px",
-  boxShadow: "0 18px 38px rgba(15, 23, 42, 0.24)",
+  gap: "12px",
+  boxShadow: "0 22px 48px rgba(15, 23, 42, 0.28)",
 };
 
 const selectedSummaryLabelStyle: React.CSSProperties = {
@@ -789,11 +1090,11 @@ const confirmedDetailsStyle: React.CSSProperties = {
 
 const notesStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "116px",
-  marginTop: "18px",
+  minHeight: "118px",
+  marginTop: "14px",
   padding: "16px 18px",
   borderRadius: "16px",
-  border: "1px solid #94a3b8",
+  border: "1px solid #7c8da3",
   background: "#ffffff",
   color: "#0f172a",
   fontSize: "16px",
@@ -806,12 +1107,12 @@ const notesStyle: React.CSSProperties = {
 
 const mainButtonStyle: React.CSSProperties = {
   width: "100%",
-  marginTop: "16px",
-  minHeight: "54px",
+  marginTop: "14px",
+  minHeight: "56px",
   padding: "16px 20px",
   borderRadius: "999px",
   border: "none",
-  background: "linear-gradient(90deg, #111827, #000000)",
+  background: "linear-gradient(90deg, #111827, #020617)",
   color: "white",
   fontWeight: 950,
   fontSize: "16px",
@@ -821,12 +1122,197 @@ const mainButtonStyle: React.CSSProperties = {
 };
 
 const printProposalStyle: React.CSSProperties = {
-  padding: "40px",
+  padding: "0",
   fontFamily: "Arial, sans-serif",
-  color: "#111",
+  color: "#111827",
+  background: "#ffffff",
 };
 
 const printTitleStyle: React.CSSProperties = {
-  fontSize: "32px",
+  margin: "7px 0 0",
+  fontSize: "29px",
   fontWeight: 900,
+  color: "#111827",
+  lineHeight: 1.12,
+};
+
+const printHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "22px",
+  alignItems: "flex-start",
+  paddingBottom: "18px",
+  borderBottom: "3px solid #d4af37",
+};
+
+const printBrandLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#b68a16",
+  fontSize: "12px",
+  fontWeight: 900,
+  letterSpacing: "0.16em",
+  textTransform: "uppercase",
+};
+
+const printSubtitleStyle: React.CSSProperties = {
+  margin: "7px 0 0",
+  color: "#475569",
+  fontSize: "12.5px",
+  lineHeight: 1.5,
+};
+
+const printSystemBadgeStyle: React.CSSProperties = {
+  minWidth: "160px",
+  padding: "13px 14px",
+  borderRadius: "12px",
+  border: "1px solid #d4af37",
+  background: "#fffbeb",
+  textAlign: "center",
+};
+
+const printBadgeLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#92400e",
+  fontSize: "10px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const printBadgeValueStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#111827",
+  fontSize: "22px",
+  fontWeight: 900,
+};
+
+const printSectionStyle: React.CSSProperties = {
+  marginTop: "16px",
+  padding: "15px",
+  borderRadius: "12px",
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+};
+
+const printSelectedSectionStyle: React.CSSProperties = {
+  ...printSectionStyle,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "18px",
+  alignItems: "center",
+  border: "1px solid #d4af37",
+  background: "#fffbeb",
+};
+
+const printSectionTitleStyle: React.CSSProperties = {
+  margin: "0 0 9px",
+  color: "#92400e",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+};
+
+const printInfoGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "9px",
+};
+
+const printInfoItemStyle: React.CSSProperties = {
+  padding: "9px 11px",
+  borderRadius: "10px",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+};
+
+const printInfoLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#64748b",
+  fontSize: "10px",
+  fontWeight: 900,
+  textTransform: "uppercase",
+};
+
+const printInfoValueStyle: React.CSSProperties = {
+  margin: "5px 0 0",
+  color: "#111827",
+  fontSize: "12.5px",
+  fontWeight: 800,
+  lineHeight: 1.4,
+};
+
+const printSelectedTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#111827",
+  fontSize: "23px",
+  fontWeight: 900,
+  lineHeight: 1.18,
+};
+
+const printSelectedMetaStyle: React.CSSProperties = {
+  margin: "6px 0 0",
+  color: "#475569",
+  fontSize: "13px",
+  fontWeight: 800,
+};
+
+const printSelectedPriceStyle: React.CSSProperties = {
+  color: "#111827",
+  fontSize: "27px",
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+};
+
+const printOptionsTableStyle: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: "10.75px",
+};
+
+const printTableHeaderStyle: React.CSSProperties = {
+  padding: "8px 9px",
+  borderBottom: "1px solid #cbd5e1",
+  background: "#111827",
+  color: "#ffffff",
+  textAlign: "left",
+  fontWeight: 900,
+};
+
+const printTableCellStyle: React.CSSProperties = {
+  padding: "8px 9px",
+  borderBottom: "1px solid #e5e7eb",
+  verticalAlign: "top",
+  lineHeight: 1.4,
+};
+
+const printSelectedRowStyle: React.CSSProperties = {
+  background: "#fffbeb",
+  fontWeight: 800,
+};
+
+const printBodyTextStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#334155",
+  fontSize: "12.75px",
+  lineHeight: 1.6,
+};
+
+const printSignatureGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 0.55fr",
+  gap: "32px 22px",
+  marginTop: "44px",
+};
+
+const printSignatureLineStyle: React.CSSProperties = {
+  borderTop: "1px solid #111827",
+  paddingTop: "8px",
+};
+
+const printSignatureLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#475569",
+  fontSize: "11px",
+  fontWeight: 800,
 };
