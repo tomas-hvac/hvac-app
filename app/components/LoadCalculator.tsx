@@ -42,6 +42,7 @@ type SavedLoadCalculatorState = {
   blueprintWidth: string;
   blueprintCeilingHeight: string;
   blueprintFloorLevel: string;
+  blueprintFileName: string;
   blueprintRoomsForManualD: ManualDBlueprintRoom[];
 };
 
@@ -57,6 +58,25 @@ type SavedProject = {
 
 const SAVED_PROJECTS_STORAGE_KEY = "panda-hvac-saved-projects";
 const CURRENT_PROPOSAL_STORAGE_KEY = "panda-hvac-current-proposal";
+
+const getSavedProjectDedupeKey = (project: SavedProject) =>
+  `${project.name.trim().toLowerCase()}-${new Date(project.savedAt).toLocaleDateString()}`;
+
+const dedupeSavedProjects = (projects: SavedProject[]) => {
+  const newestProjectsByKey = new Map<string, SavedProject>();
+
+  projects
+    .slice()
+    .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+    .forEach((project) => {
+      const projectKey = getSavedProjectDedupeKey(project);
+      if (!newestProjectsByKey.has(projectKey)) {
+        newestProjectsByKey.set(projectKey, project);
+      }
+    });
+
+  return Array.from(newestProjectsByKey.values());
+};
 
 type InputFieldProps = {
   icon: React.ReactNode;
@@ -105,10 +125,15 @@ export default function LoadCalculator() {
   const [blueprintWidth, setBlueprintWidth] = useState("12");
   const [blueprintCeilingHeight, setBlueprintCeilingHeight] = useState("8");
   const [blueprintFloorLevel, setBlueprintFloorLevel] = useState("1");
+  const [blueprintFileName, setBlueprintFileName] = useState("");
+  const [blueprintFile, setBlueprintFile] = useState<File | null>(null);
+  const [blueprintPreviewUrl, setBlueprintPreviewUrl] = useState("");
+  const [blueprintZoom, setBlueprintZoom] = useState(1);
   const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<ManualDBlueprintRoom[]>([]);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
+  const [projectActionMessage, setProjectActionMessage] = useState("");
 
   const options = {
     insulation: [
@@ -196,17 +221,28 @@ export default function LoadCalculator() {
     try {
       const parsedProjects = JSON.parse(savedProjectJson) as SavedProject[];
       if (Array.isArray(parsedProjects)) {
-        setSavedProjects(parsedProjects);
+        const dedupedProjects = dedupeSavedProjects(parsedProjects);
+        setSavedProjects(dedupedProjects);
+        window.localStorage.setItem(SAVED_PROJECTS_STORAGE_KEY, JSON.stringify(dedupedProjects));
       }
     } catch {
       setSavedProjects([]);
     }
   }, []);
 
-  const persistSavedProjects = (projects: SavedProject[]) => {
-    setSavedProjects(projects);
-    window.localStorage.setItem(SAVED_PROJECTS_STORAGE_KEY, JSON.stringify(projects));
-  };
+  useEffect(() => {
+    if (!blueprintFile || !blueprintFile.type.startsWith("image/")) {
+      setBlueprintPreviewUrl("");
+      return;
+    }
+
+    const previewUrl = window.URL.createObjectURL(blueprintFile);
+    setBlueprintPreviewUrl(previewUrl);
+
+    return () => {
+      window.URL.revokeObjectURL(previewUrl);
+    };
+  }, [blueprintFile]);
 
   const getCurrentProposalSnapshot = (): SavedProposalSnapshot | null => {
     const proposalJson = window.localStorage.getItem(CURRENT_PROPOSAL_STORAGE_KEY);
@@ -239,67 +275,105 @@ export default function LoadCalculator() {
     occupancy,
     blueprintRoomName,
     blueprintLength,
-    blueprintWidth,
-    blueprintCeilingHeight,
-    blueprintFloorLevel,
-    blueprintRoomsForManualD,
-  });
+      blueprintWidth,
+      blueprintCeilingHeight,
+      blueprintFloorLevel,
+      blueprintFileName,
+      blueprintRoomsForManualD,
+    });
 
   const handleSaveProject = () => {
-    const proposalSnapshot = getCurrentProposalSnapshot();
-    const projectName =
-      proposalSnapshot?.customerName ||
-      proposalSnapshot?.jobAddress ||
-      `Project ${new Date().toLocaleDateString()}`;
-    const nextProject: SavedProject = {
-      id: `project-${Date.now()}`,
-      name: projectName,
-      savedAt: new Date().toISOString(),
-      customerInfo: proposalSnapshot,
-      proposalSelection: proposalSnapshot,
-      loadCalculator: getLoadCalculatorSnapshot(),
-      manualD: manualDProjectState,
-    };
-    const nextProjects = [nextProject, ...savedProjects];
-    persistSavedProjects(nextProjects);
+    try {
+      const proposalSnapshot = getCurrentProposalSnapshot();
+      const projectName =
+        proposalSnapshot?.customerName ||
+        proposalSnapshot?.jobAddress ||
+        `Project ${new Date().toLocaleDateString()}`;
+      const nextProject: SavedProject = {
+        id: `project-${Date.now()}`,
+        name: projectName,
+        savedAt: new Date().toISOString(),
+        customerInfo: proposalSnapshot,
+        proposalSelection: proposalSnapshot,
+        loadCalculator: getLoadCalculatorSnapshot(),
+        manualD: manualDProjectState,
+      };
+
+      setSavedProjects((currentProjects) => {
+        const nextProjects = dedupeSavedProjects([nextProject, ...currentProjects]);
+        window.localStorage.setItem(SAVED_PROJECTS_STORAGE_KEY, JSON.stringify(nextProjects));
+        console.log("Project saved", nextProject);
+        return nextProjects;
+      });
+      setProjectActionMessage("Project saved");
+    } catch (error) {
+      console.error("Project save failed", error);
+      setProjectActionMessage("Project save failed");
+    }
   };
 
   const handleLoadProject = (project: SavedProject) => {
-    setSquareFeet(project.loadCalculator.squareFeet);
-    setCeilingHeight(project.loadCalculator.ceilingHeight);
-    setInsulationQuality(project.loadCalculator.insulationQuality);
-    setWindowCount(project.loadCalculator.windowCount);
-    setWindowArea(project.loadCalculator.windowArea);
-    setWindowEfficiency(project.loadCalculator.windowEfficiency);
-    setWindowOrientation(project.loadCalculator.windowOrientation);
-    setClimateZone(project.loadCalculator.climateZone);
-    setOregonRegion(project.loadCalculator.oregonRegion);
-    setNumberOfRooms(project.loadCalculator.numberOfRooms);
-    setHomeAge(project.loadCalculator.homeAge);
-    setDuctLocation(project.loadCalculator.ductLocation);
-    setDuctCondition(project.loadCalculator.ductCondition);
-    setInfiltrationTightness(project.loadCalculator.infiltrationTightness);
-    setExistingSystemSize(project.loadCalculator.existingSystemSize);
-    setComfortPriority(project.loadCalculator.comfortPriority);
-    setOccupancy(project.loadCalculator.occupancy);
-    setBlueprintRoomName(project.loadCalculator.blueprintRoomName);
-    setBlueprintLength(project.loadCalculator.blueprintLength);
-    setBlueprintWidth(project.loadCalculator.blueprintWidth);
-    setBlueprintCeilingHeight(project.loadCalculator.blueprintCeilingHeight);
-    setBlueprintFloorLevel(project.loadCalculator.blueprintFloorLevel);
-    setBlueprintRoomsForManualD(project.loadCalculator.blueprintRoomsForManualD.map((room) => ({ ...room })));
-    setLoadedManualDProjectState(
-      project.manualD
+    try {
+      setSquareFeet(project.loadCalculator.squareFeet);
+      setCeilingHeight(project.loadCalculator.ceilingHeight);
+      setInsulationQuality(project.loadCalculator.insulationQuality);
+      setWindowCount(project.loadCalculator.windowCount);
+      setWindowArea(project.loadCalculator.windowArea);
+      setWindowEfficiency(project.loadCalculator.windowEfficiency);
+      setWindowOrientation(project.loadCalculator.windowOrientation);
+      setClimateZone(project.loadCalculator.climateZone);
+      setOregonRegion(project.loadCalculator.oregonRegion);
+      setNumberOfRooms(project.loadCalculator.numberOfRooms);
+      setHomeAge(project.loadCalculator.homeAge);
+      setDuctLocation(project.loadCalculator.ductLocation);
+      setDuctCondition(project.loadCalculator.ductCondition);
+      setInfiltrationTightness(project.loadCalculator.infiltrationTightness);
+      setExistingSystemSize(project.loadCalculator.existingSystemSize);
+      setComfortPriority(project.loadCalculator.comfortPriority);
+      setOccupancy(project.loadCalculator.occupancy);
+      setBlueprintRoomName(project.loadCalculator.blueprintRoomName);
+      setBlueprintLength(project.loadCalculator.blueprintLength);
+      setBlueprintWidth(project.loadCalculator.blueprintWidth);
+      setBlueprintCeilingHeight(project.loadCalculator.blueprintCeilingHeight);
+      setBlueprintFloorLevel(project.loadCalculator.blueprintFloorLevel);
+      setBlueprintFileName(project.loadCalculator.blueprintFileName ?? "");
+      setBlueprintFile(null);
+      setBlueprintZoom(1);
+      setBlueprintRoomsForManualD(
+        project.loadCalculator.blueprintRoomsForManualD.map((room) => ({ ...room }))
+      );
+
+      const restoredManualDProjectState = project.manualD
         ? {
             settings: { ...project.manualD.settings },
             rooms: project.manualD.rooms.map((room) => ({ ...room })),
           }
-        : null
-    );
+        : null;
 
-    if (project.proposalSelection) {
-      window.localStorage.setItem(CURRENT_PROPOSAL_STORAGE_KEY, JSON.stringify(project.proposalSelection));
+      setLoadedManualDProjectState(restoredManualDProjectState);
+      setManualDProjectState(restoredManualDProjectState);
+
+      if (project.proposalSelection) {
+        window.localStorage.setItem(CURRENT_PROPOSAL_STORAGE_KEY, JSON.stringify(project.proposalSelection));
+      } else {
+        window.localStorage.removeItem(CURRENT_PROPOSAL_STORAGE_KEY);
+      }
+
+      console.log("Project loaded", project);
+      setProjectActionMessage("Project loaded");
+    } catch (error) {
+      console.error("Project load failed", error);
+      setProjectActionMessage("Project load failed");
     }
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    setSavedProjects((currentProjects) => {
+      const nextProjects = currentProjects.filter((project) => project.id !== projectId);
+      window.localStorage.setItem(SAVED_PROJECTS_STORAGE_KEY, JSON.stringify(nextProjects));
+      return nextProjects;
+    });
+    setProjectActionMessage("Project deleted");
   };
 
   const addBlueprintRoomToManualD = () => {
@@ -316,6 +390,21 @@ export default function LoadCalculator() {
         floorLevel: blueprintFloorLevel,
       },
     ]);
+  };
+
+  const handleBlueprintFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    setBlueprintFile(selectedFile ?? null);
+    setBlueprintFileName(selectedFile?.name ?? "");
+    setBlueprintZoom(1);
+  };
+
+  const zoomBlueprintIn = () => {
+    setBlueprintZoom((currentZoom) => Math.min(2.5, Number((currentZoom + 0.25).toFixed(2))));
+  };
+
+  const zoomBlueprintOut = () => {
+    setBlueprintZoom((currentZoom) => Math.max(0.5, Number((currentZoom - 0.25).toFixed(2))));
   };
 
   const result = useMemo(() => {
@@ -487,6 +576,23 @@ const averageTonnage = (minTon + maxTon) / 2;
       description: "Validation warnings, field notes, and print-ready Manual D report.",
     },
   ];
+  const activeWorkflowStep =
+    activeTechnicianSection === "manual-room-takeoff"
+      ? 1
+      : activeTechnicianSection === "room-airflow"
+      ? 2
+      : activeTechnicianSection === "manual-d" || activeTechnicianSection === "return-air"
+      ? 4
+      : activeTechnicianSection === "reports"
+      ? 5
+      : 3;
+  const technicianWorkflowSteps = [
+    "1. Upload Blueprint",
+    "2. Review Rooms",
+    "3. Run Manual J Estimate",
+    "4. Review Manual D Airflow",
+    "5. Generate Proposal / Reports",
+  ];
 
   return (
     <div className="load-calculator-page" style={calcPageStyle}>
@@ -585,6 +691,43 @@ const averageTonnage = (minTon + maxTon) / 2;
             pointer-events: none;
           }
 
+          .blueprint-takeoff-panel {
+            align-self: start !important;
+            align-items: stretch !important;
+            height: fit-content !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-sizing: border-box !important;
+          }
+
+          .blueprint-takeoff-grid {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: flex-end !important;
+            gap: 10px !important;
+            width: 100% !important;
+            min-height: 0 !important;
+          }
+
+          .blueprint-takeoff-control {
+            box-sizing: border-box !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            max-height: 38px !important;
+            padding: 8px 10px !important;
+            line-height: 20px !important;
+          }
+
+          .blueprint-takeoff-result,
+          .blueprint-takeoff-button {
+            box-sizing: border-box !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            max-height: 38px !important;
+            padding: 7px 10px !important;
+          }
+
           @keyframes shimmer {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
@@ -593,10 +736,15 @@ const averageTonnage = (minTon + maxTon) / 2;
           @media (max-width: 1024px) {
             .load-calculator-grid {
               grid-template-columns: 1fr !important;
+              align-items: start !important;
             }
 
             .load-calculator-header {
               align-items: flex-start !important;
+            }
+
+            .blueprint-takeoff-grid {
+              align-items: flex-end !important;
             }
           }
 
@@ -721,6 +869,37 @@ const averageTonnage = (minTon + maxTon) / 2;
             .load-select:focus {
               box-shadow: 0 0 0 3px rgba(212,175,55,0.14) !important;
             }
+
+            .blueprint-takeoff-panel {
+              padding: 16px !important;
+              gap: 12px !important;
+            }
+
+            .blueprint-takeoff-grid {
+              display: grid !important;
+              grid-template-columns: 1fr 1fr !important;
+              gap: 10px !important;
+            }
+
+            .blueprint-takeoff-grid > :first-child,
+            .blueprint-takeoff-grid > :last-child {
+              grid-column: 1 / -1 !important;
+            }
+
+            .blueprint-takeoff-control,
+            .blueprint-takeoff-button {
+              min-height: 44px !important;
+              height: 44px !important;
+              max-height: 44px !important;
+              padding: 10px 12px !important;
+            }
+
+            .blueprint-takeoff-result {
+              min-height: 44px !important;
+              height: auto !important;
+              max-height: none !important;
+              padding: 10px 12px !important;
+            }
           }
         `
       }} />
@@ -786,6 +965,22 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
           ) : (
             <>
+          <div style={technicianWorkflowStyle}>
+            {technicianWorkflowSteps.map((step, index) => {
+              const stepNumber = index + 1;
+              const isActiveStep = activeWorkflowStep === stepNumber;
+
+              return (
+                <div
+                  key={step}
+                  style={isActiveStep ? technicianWorkflowStepActiveStyle : technicianWorkflowStepStyle}
+                >
+                  {step}
+                </div>
+              );
+            })}
+          </div>
+
           <div style={technicianAccordionStyle}>
             {technicianSections.map((section) => {
               const isActive = activeTechnicianSection === section.id;
@@ -810,8 +1005,21 @@ const averageTonnage = (minTon + maxTon) / 2;
               <div>
                 <p style={sectionPanelTitleStyle}>Saved Projects</p>
                 <p style={sectionPanelDescriptionStyle}>Save and reload local project snapshots.</p>
+                {projectActionMessage ? (
+                  <p style={projectActionMessageStyle}>{projectActionMessage}</p>
+                ) : null}
               </div>
-              <button type="button" style={calcActionButtonStyle} onClick={handleSaveProject}>
+              <button
+                type="button"
+                className="calc-action-button"
+                style={calcActionButtonStyle}
+                onClick={handleSaveProject}
+                onPointerUp={(event) => {
+                  if (event.pointerType === "mouse") return;
+                  event.preventDefault();
+                  handleSaveProject();
+                }}
+              >
                 Save Project
               </button>
             </div>
@@ -826,13 +1034,33 @@ const averageTonnage = (minTon + maxTon) / 2;
                         Saved {new Date(project.savedAt).toLocaleString()}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      style={projectLoadButtonStyle}
-                      onClick={() => handleLoadProject(project)}
-                    >
-                      Load Project
-                    </button>
+                    <div style={projectListActionsStyle}>
+                      <button
+                        type="button"
+                        className="calc-action-button"
+                        style={projectLoadButtonStyle}
+                        onClick={() => handleLoadProject(project)}
+                        onPointerUp={(event) => {
+                          if (event.pointerType === "mouse") return;
+                          event.preventDefault();
+                          handleLoadProject(project);
+                        }}
+                      >
+                        Load Project
+                      </button>
+                      <button
+                        type="button"
+                        style={projectDeleteButtonStyle}
+                        onClick={() => handleDeleteProject(project.id)}
+                        onPointerUp={(event) => {
+                          if (event.pointerType === "mouse") return;
+                          event.preventDefault();
+                          handleDeleteProject(project.id);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1099,10 +1327,10 @@ const averageTonnage = (minTon + maxTon) / 2;
           </div>
 
           <div
-            className="load-section-panel"
+            className="blueprint-takeoff-panel"
             style={{
-              ...sectionPanelStyle,
-              display: activeTechnicianSection === "manual-room-takeoff" ? "grid" : "none",
+              ...blueprintTakeoffPanelStyle,
+              display: activeTechnicianSection === "manual-room-takeoff" ? "flex" : "none",
             }}
           >
             <div style={sectionPanelHeaderStyle}>
@@ -1116,76 +1344,150 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
 
             <p style={blueprintTakeoffNoteStyle}>
-              Future upgrade: upload blueprint PDF or image and auto-detect rooms.
+              AI room detection coming soon. Use manual room takeoff as the fallback workflow.
             </p>
 
-            <div style={blueprintTakeoffGridStyle}>
-              <label style={blueprintTakeoffInputGroupStyle}>
+            <div style={blueprintWorkflowStyle}>
+              {[
+                "1. Upload Blueprint",
+                "2. Review Preview",
+                "3. Detect Rooms",
+                "4. Confirm Rooms",
+                "5. Send to Manual J / Manual D",
+              ].map((step, index) => (
+                <div
+                  key={step}
+                  style={index === 2 ? blueprintWorkflowStepDisabledStyle : blueprintWorkflowStepStyle}
+                >
+                  {step}
+                </div>
+              ))}
+            </div>
+
+            <div style={blueprintUploadRowStyle}>
+              <label className="blueprint-upload-button" style={blueprintUploadButtonStyle}>
+                Upload Blueprint
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                  onChange={handleBlueprintFileChange}
+                  style={blueprintUploadInputStyle}
+                />
+              </label>
+              <p style={blueprintUploadFileNameStyle}>
+                {blueprintFileName || "No blueprint selected"}
+              </p>
+              <button type="button" disabled style={blueprintDetectButtonStyle}>
+                Detect Rooms
+              </button>
+            </div>
+
+            {blueprintFile ? (
+              <div style={blueprintWorkspaceStyle}>
+                <div style={blueprintWorkspaceToolbarStyle}>
+                  <div>
+                    <p style={blueprintWorkspaceLabelStyle}>Review Preview</p>
+                    <p style={blueprintWorkspaceMetaStyle}>{Math.round(blueprintZoom * 100)}% zoom</p>
+                  </div>
+                  <div style={blueprintZoomControlsStyle}>
+                    <button type="button" style={blueprintZoomButtonStyle} onClick={zoomBlueprintOut}>
+                      -
+                    </button>
+                    <button type="button" style={blueprintZoomButtonStyle} onClick={zoomBlueprintIn}>
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div style={blueprintViewportStyle}>
+                  <div
+                    style={{
+                      ...blueprintCanvasStyle,
+                      transform: `scale(${blueprintZoom})`,
+                    }}
+                  >
+                    {blueprintPreviewUrl ? (
+                      <img
+                        src={blueprintPreviewUrl}
+                        alt={`${blueprintFileName} preview`}
+                        style={blueprintImagePreviewStyle}
+                      />
+                    ) : (
+                      <div style={blueprintPdfPreviewStyle}>
+                        <p style={blueprintPdfPreviewTitleStyle}>PDF Blueprint</p>
+                        <p style={blueprintPdfPreviewTextStyle}>{blueprintFileName}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <p style={blueprintManualFallbackLabelStyle}>Manual room takeoff fallback</p>
+            <div className="blueprint-takeoff-grid" style={blueprintTakeoffGridStyle}>
+              <label style={blueprintTakeoffRoomNameGroupStyle}>
                 <span style={blueprintTakeoffInputLabelStyle}>Room Name</span>
                 <input
-                  className="load-input"
+                  className="load-input blueprint-takeoff-control"
                   type="text"
                   aria-label="Blueprint takeoff room name"
                   value={blueprintRoomName}
                   onChange={(event) => setBlueprintRoomName(event.target.value)}
-                  style={inputControlStyle}
-                />
-              </label>
-              <label style={blueprintTakeoffInputGroupStyle}>
-                <span style={blueprintTakeoffInputLabelStyle}>Length</span>
-                <input
-                  className="load-input"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  aria-label="Blueprint takeoff room length"
-                  value={blueprintLength}
-                  onChange={(event) => setBlueprintLength(event.target.value)}
-                  style={inputControlStyle}
+                  style={blueprintTakeoffInputStyle}
                 />
               </label>
               <label style={blueprintTakeoffInputGroupStyle}>
                 <span style={blueprintTakeoffInputLabelStyle}>Width</span>
                 <input
-                  className="load-input"
+                  className="load-input blueprint-takeoff-control"
                   type="number"
                   min="0"
                   step="0.1"
                   aria-label="Blueprint takeoff room width"
                   value={blueprintWidth}
                   onChange={(event) => setBlueprintWidth(event.target.value)}
-                  style={inputControlStyle}
+                  style={blueprintTakeoffInputStyle}
+                />
+              </label>
+              <label style={blueprintTakeoffInputGroupStyle}>
+                <span style={blueprintTakeoffInputLabelStyle}>Length</span>
+                <input
+                  className="load-input blueprint-takeoff-control"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  aria-label="Blueprint takeoff room length"
+                  value={blueprintLength}
+                  onChange={(event) => setBlueprintLength(event.target.value)}
+                  style={blueprintTakeoffInputStyle}
                 />
               </label>
               <label style={blueprintTakeoffInputGroupStyle}>
                 <span style={blueprintTakeoffInputLabelStyle}>Ceiling Height</span>
                 <input
-                  className="load-input"
+                  className="load-input blueprint-takeoff-control"
                   type="number"
                   min="0"
                   step="0.5"
                   aria-label="Blueprint takeoff ceiling height"
                   value={blueprintCeilingHeight}
                   onChange={(event) => setBlueprintCeilingHeight(event.target.value)}
-                  style={inputControlStyle}
+                  style={blueprintTakeoffInputStyle}
                 />
               </label>
               <label style={blueprintTakeoffInputGroupStyle}>
                 <span style={blueprintTakeoffInputLabelStyle}>Floor / Level</span>
                 <input
-                  className="load-input"
+                  className="load-input blueprint-takeoff-control"
                   type="number"
                   min="1"
                   aria-label="Blueprint takeoff floor or level"
                   value={blueprintFloorLevel}
                   onChange={(event) => setBlueprintFloorLevel(event.target.value)}
-                  style={inputControlStyle}
+                  style={blueprintTakeoffInputStyle}
                 />
               </label>
-            </div>
-
-            <div style={blueprintTakeoffFooterStyle}>
-              <div style={blueprintTakeoffResultStyle}>
+              <div className="blueprint-takeoff-result" style={blueprintTakeoffResultStyle}>
                 <p style={blueprintTakeoffLabelStyle}>Calculated Sq. Ft.</p>
                 <p style={blueprintTakeoffValueStyle}>
                   {Math.round(blueprintSquareFeet).toLocaleString()} sq ft
@@ -1193,7 +1495,8 @@ const averageTonnage = (minTon + maxTon) / 2;
               </div>
               <button
                 type="button"
-                style={calcActionButtonStyle}
+                className="blueprint-takeoff-button"
+                style={blueprintTakeoffButtonStyle}
                 onClick={addBlueprintRoomToManualD}
               >
                 Add to Manual D
@@ -1539,6 +1842,39 @@ const loadViewTabActiveStyle: React.CSSProperties = {
   boxShadow: "0 12px 28px rgba(212,175,55,0.12)",
 };
 
+const technicianWorkflowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: "8px",
+  padding: "10px",
+  borderRadius: "22px",
+  background: "rgba(15, 23, 42, 0.94)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  boxShadow: "0 18px 45px rgba(0,0,0,0.16)",
+};
+
+const technicianWorkflowStepStyle: React.CSSProperties = {
+  minHeight: "40px",
+  padding: "8px 10px",
+  borderRadius: "14px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.035)",
+  color: "#94a3b8",
+  fontSize: "11px",
+  fontWeight: 900,
+  lineHeight: 1.25,
+  display: "flex",
+  alignItems: "center",
+};
+
+const technicianWorkflowStepActiveStyle: React.CSSProperties = {
+  ...technicianWorkflowStepStyle,
+  border: "1px solid rgba(212,175,55,0.34)",
+  background: "rgba(212,175,55,0.16)",
+  color: "#f8fafc",
+  boxShadow: "0 10px 22px rgba(212,175,55,0.10)",
+};
+
 const technicianAccordionStyle: React.CSSProperties = {
   display: "grid",
   gap: "10px",
@@ -1626,6 +1962,21 @@ const projectListMetaStyle: React.CSSProperties = {
   lineHeight: 1.4,
 };
 
+const projectActionMessageStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#d4af37",
+  fontSize: "12px",
+  fontWeight: 900,
+};
+
+const projectListActionsStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
 const projectLoadButtonStyle: React.CSSProperties = {
   ...calcActionButtonStyle,
   minHeight: "42px",
@@ -1634,19 +1985,35 @@ const projectLoadButtonStyle: React.CSSProperties = {
   fontSize: "12px",
 };
 
+const projectDeleteButtonStyle: React.CSSProperties = {
+  minHeight: "42px",
+  padding: "11px 14px",
+  borderRadius: "14px",
+  border: "1px solid rgba(248,113,113,0.25)",
+  background: "rgba(127,29,29,0.24)",
+  color: "#fecaca",
+  fontSize: "12px",
+  fontWeight: 900,
+  cursor: "pointer",
+  touchAction: "manipulation",
+};
+
 const calcGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1.35fr 0.85fr",
+  alignItems: "start",
   gap: "24px",
 };
 
 const leftColumnStyle: React.CSSProperties = {
   display: "grid",
+  alignContent: "start",
   gap: "20px",
 };
 
 const rightColumnStyle: React.CSSProperties = {
   display: "grid",
+  alignContent: "start",
   gap: "20px",
 };
 
@@ -1742,9 +2109,26 @@ const inputControlStyle: React.CSSProperties = {
   fontSize: "14px",
 };
 
+const blueprintTakeoffPanelStyle: React.CSSProperties = {
+  alignSelf: "start",
+  alignItems: "stretch",
+  flexDirection: "column",
+  gap: "10px",
+  padding: "16px",
+  height: "fit-content",
+  minHeight: "auto",
+  width: "100%",
+  background: "rgba(15, 23, 42, 0.94)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "24px",
+  boxShadow: "0 22px 54px rgba(0,0,0,0.20)",
+  overflow: "visible",
+};
+
 const blueprintTakeoffGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(160px, 1.4fr) repeat(4, minmax(90px, 0.75fr))",
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-end",
   gap: "10px",
 };
 
@@ -1752,50 +2136,269 @@ const blueprintTakeoffNoteStyle: React.CSSProperties = {
   margin: 0,
   color: "#cbd5e1",
   fontSize: "12px",
-  lineHeight: 1.5,
+  lineHeight: 1.35,
+};
+
+const blueprintWorkflowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gap: "8px",
+};
+
+const blueprintWorkflowStepStyle: React.CSSProperties = {
+  minHeight: "38px",
+  padding: "8px 10px",
+  borderRadius: "12px",
+  border: "1px solid rgba(212,175,55,0.20)",
+  background: "rgba(255,255,255,0.035)",
+  color: "#f8fafc",
+  fontSize: "11px",
+  fontWeight: 900,
+  lineHeight: 1.25,
+  display: "flex",
+  alignItems: "center",
+};
+
+const blueprintWorkflowStepDisabledStyle: React.CSSProperties = {
+  ...blueprintWorkflowStepStyle,
+  border: "1px solid rgba(148,163,184,0.16)",
+  background: "rgba(15,23,42,0.42)",
+  color: "#64748b",
+};
+
+const blueprintUploadRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+};
+
+const blueprintUploadButtonStyle: React.CSSProperties = {
+  minHeight: "36px",
+  padding: "8px 12px",
+  borderRadius: "12px",
+  border: "1px solid rgba(212,175,55,0.28)",
+  background: "rgba(212,175,55,0.14)",
+  color: "#f8fafc",
+  fontSize: "12px",
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const blueprintUploadInputStyle: React.CSSProperties = {
+  display: "none",
+};
+
+const blueprintUploadFileNameStyle: React.CSSProperties = {
+  margin: 0,
+  minWidth: 0,
+  color: "#cbd5e1",
+  fontSize: "12px",
+  fontWeight: 800,
+  overflowWrap: "anywhere",
+};
+
+const blueprintDetectButtonStyle: React.CSSProperties = {
+  minHeight: "36px",
+  padding: "8px 12px",
+  borderRadius: "12px",
+  border: "1px solid rgba(148,163,184,0.16)",
+  background: "rgba(15,23,42,0.48)",
+  color: "#64748b",
+  fontSize: "12px",
+  fontWeight: 900,
+  cursor: "not-allowed",
+};
+
+const blueprintWorkspaceStyle: React.CSSProperties = {
+  width: "100%",
+  display: "grid",
+  gap: "10px",
+  padding: "12px",
+  borderRadius: "18px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.03)",
+};
+
+const blueprintWorkspaceToolbarStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const blueprintWorkspaceLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#f8fafc",
+  fontSize: "12px",
+  fontWeight: 900,
+};
+
+const blueprintWorkspaceMetaStyle: React.CSSProperties = {
+  margin: "3px 0 0",
+  color: "#94a3b8",
+  fontSize: "11px",
+  fontWeight: 800,
+};
+
+const blueprintZoomControlsStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
+
+const blueprintZoomButtonStyle: React.CSSProperties = {
+  width: "34px",
+  height: "34px",
+  borderRadius: "12px",
+  border: "1px solid rgba(212,175,55,0.28)",
+  background: "rgba(212,175,55,0.14)",
+  color: "#f8fafc",
+  fontSize: "18px",
+  fontWeight: 900,
+  cursor: "pointer",
+  lineHeight: 1,
+};
+
+const blueprintViewportStyle: React.CSSProperties = {
+  height: "260px",
+  overflow: "auto",
+  borderRadius: "14px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(3, 7, 18, 0.62)",
+  cursor: "grab",
+};
+
+const blueprintCanvasStyle: React.CSSProperties = {
+  minWidth: "100%",
+  minHeight: "100%",
+  width: "max-content",
+  transformOrigin: "top left",
+  transition: "transform 0.18s ease",
+};
+
+const blueprintImagePreviewStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "none",
+  height: "auto",
+  minWidth: "620px",
+  display: "block",
+};
+
+const blueprintPdfPreviewStyle: React.CSSProperties = {
+  width: "620px",
+  minHeight: "240px",
+  padding: "28px",
+  display: "grid",
+  alignContent: "center",
+  gap: "6px",
+  background: "linear-gradient(135deg, rgba(212,175,55,0.14), rgba(15,23,42,0.68))",
+};
+
+const blueprintManualFallbackLabelStyle: React.CSSProperties = {
+  margin: "2px 0 -2px",
+  color: "#d4af37",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+};
+
+const blueprintPdfPreviewTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#f8fafc",
+  fontSize: "13px",
+  fontWeight: 900,
+};
+
+const blueprintPdfPreviewTextStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#cbd5e1",
+  fontSize: "12px",
+  fontWeight: 800,
+  overflowWrap: "anywhere",
 };
 
 const blueprintTakeoffInputGroupStyle: React.CSSProperties = {
   display: "grid",
-  gap: "7px",
+  gap: "6px",
+  flex: "0 0 86px",
+  minWidth: "78px",
+};
+
+const blueprintTakeoffRoomNameGroupStyle: React.CSSProperties = {
+  ...blueprintTakeoffInputGroupStyle,
+  flex: "1 1 180px",
+  minWidth: "160px",
 };
 
 const blueprintTakeoffInputLabelStyle: React.CSSProperties = {
   color: "#cbd5e1",
-  fontSize: "11px",
+  fontSize: "10px",
   fontWeight: 900,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
 };
 
-const blueprintTakeoffFooterStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) auto",
-  alignItems: "center",
-  gap: "12px",
+const blueprintTakeoffInputStyle: React.CSSProperties = {
+  ...inputControlStyle,
+  height: "38px",
+  minHeight: "38px",
+  maxHeight: "38px",
+  padding: "8px 10px",
+  borderRadius: "12px",
+  fontSize: "13px",
+  lineHeight: "20px",
+  boxSizing: "border-box",
 };
 
 const blueprintTakeoffResultStyle: React.CSSProperties = {
-  padding: "14px",
-  borderRadius: "16px",
+  flex: "0 0 124px",
+  alignSelf: "flex-end",
+  display: "grid",
+  alignContent: "center",
+  height: "38px",
+  minHeight: "38px",
+  maxHeight: "38px",
+  padding: "5px 10px",
+  borderRadius: "12px",
   background: "rgba(255,255,255,0.03)",
   border: "1px solid rgba(255,255,255,0.08)",
+  boxSizing: "border-box",
 };
 
 const blueprintTakeoffLabelStyle: React.CSSProperties = {
   margin: 0,
   color: "#94a3b8",
-  fontSize: "11px",
+  fontSize: "9px",
   fontWeight: 800,
   letterSpacing: "0.1em",
   textTransform: "uppercase",
+  lineHeight: 1,
 };
 
 const blueprintTakeoffValueStyle: React.CSSProperties = {
-  margin: "8px 0 0",
+  margin: "2px 0 0",
   color: "#f8fafc",
-  fontSize: "15px",
+  fontSize: "13px",
   fontWeight: 900,
+  lineHeight: 1,
+};
+
+const blueprintTakeoffButtonStyle: React.CSSProperties = {
+  ...calcActionButtonStyle,
+  flex: "0 0 auto",
+  alignSelf: "flex-end",
+  height: "38px",
+  minHeight: "38px",
+  maxHeight: "38px",
+  padding: "8px 12px",
+  borderRadius: "12px",
+  fontSize: "13px",
+  whiteSpace: "nowrap",
 };
 
 const selectControlStyle: React.CSSProperties = {

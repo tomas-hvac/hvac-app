@@ -761,6 +761,95 @@ export default function ManualDPanel({
     roomDuctRecommendations,
   ]);
 
+  const comfortInsights = useMemo(() => {
+    const insights: ManualDRecommendation[] = [];
+    const highestAirflowRoom = roomDuctRecommendations.reduce<
+      (typeof roomDuctRecommendations)[number] | null
+    >((highestRoom, currentRoom) => {
+      if (!highestRoom || currentRoom.roomCfm > highestRoom.roomCfm) return currentRoom;
+      return highestRoom;
+    }, null);
+    const highVelocityRoom = roomDuctRecommendations.find(
+      ({ ductRecommendation }) =>
+        ductRecommendation.velocityFpm > manualDResult.branchVelocityTargetFpm
+    );
+    const lowAirflowRoom = roomDuctRecommendations.find(
+      ({ roomCfm, registerAirflowStatus }) =>
+        roomCfm < 50 || registerAirflowStatus === "low"
+    );
+    const highSunExposureRoom = roomDuctRecommendations.find(
+      ({ room, roomLoadFactor }) => room.sunExposure === "high" && roomLoadFactor > 1
+    );
+    const allBranchVelocitiesAcceptable = roomDuctRecommendations.every(
+      ({ ductRecommendation }) =>
+        ductRecommendation.velocityFpm <= manualDResult.branchVelocityTargetFpm
+    );
+    const allRegisterAirflowsAcceptable = roomDuctRecommendations.every(
+      ({ registerAirflowStatus }) => registerAirflowStatus === "acceptable"
+    );
+
+    if (
+      highestAirflowRoom &&
+      highestAirflowRoom.roomCfm > manualDResult.averageBranchCfm * 1.2
+    ) {
+      insights.push({
+        title: "High airflow room",
+        message: `${highestAirflowRoom.room.name || "Room"} carries ${Math.round(highestAirflowRoom.roomCfm).toLocaleString()} CFM. Verify branch path and register throw.`,
+      });
+    }
+
+    if (highVelocityRoom) {
+      insights.push({
+        title: "Branch velocity check",
+        message: `${highVelocityRoom.room.name || "Room"} is above the ${manualDResult.branchVelocityTargetFpm.toLocaleString()} FPM branch target.`,
+      });
+    }
+
+    if (lowAirflowRoom) {
+      insights.push({
+        title: "Low airflow concern",
+        message: `${lowAirflowRoom.room.name || "Room"} may need balancing attention if comfort complaints show up.`,
+      });
+    }
+
+    if (allBranchVelocitiesAcceptable && allRegisterAirflowsAcceptable) {
+      insights.push({
+        title: "Strong airflow balance",
+        message: "Room branch velocities and register airflow are inside the current comfort targets.",
+      });
+    }
+
+    if (
+      manualDResult.returnAirflowStatus === "high" ||
+      manualDResult.returnCfmPerGrille > RETURN_GRILLE_TARGET_CFM
+    ) {
+      insights.push({
+        title: "Return air recommendation",
+        message: "Increase return grille area or return count to keep return noise down.",
+      });
+    } else {
+      insights.push({
+        title: "Return air check",
+        message: "Return airflow is tracking below supply velocity for this layout.",
+      });
+    }
+
+    if (highSunExposureRoom) {
+      insights.push({
+        title: "Sun exposure impact",
+        message: `${highSunExposureRoom.room.name || "Room"} has high sun exposure; confirm shade and glass load in the field.`,
+      });
+    }
+
+    return insights.slice(0, 6);
+  }, [
+    manualDResult.averageBranchCfm,
+    manualDResult.branchVelocityTargetFpm,
+    manualDResult.returnAirflowStatus,
+    manualDResult.returnCfmPerGrille,
+    roomDuctRecommendations,
+  ]);
+
   const handlePrintManualDReport = () => {
     printManualDMode();
   };
@@ -1186,6 +1275,20 @@ export default function ManualDPanel({
                 >
                   <p style={manualDRecommendationTitleStyle}>{recommendation.title}</p>
                   <p style={manualDWarningMessageStyle}>{recommendation.message}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={manualDRecommendationsSectionStyle}>
+            <p style={resultCardLabelStyle}>Comfort Insights</p>
+            <div style={manualDWarningsListStyle}>
+              {comfortInsights.map((insight, index) => (
+                <div
+                  key={`manual-d-comfort-insight-${insight.title}-${index}`}
+                  style={manualDRecommendationItemStyle}
+                >
+                  <p style={manualDRecommendationTitleStyle}>{insight.title}</p>
+                  <p style={manualDWarningMessageStyle}>{insight.message}</p>
                 </div>
               ))}
             </div>
