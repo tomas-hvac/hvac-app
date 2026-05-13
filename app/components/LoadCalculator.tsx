@@ -15,6 +15,12 @@ type DetectedBlueprintRoom = {
   name: string;
   squareFeet: number;
   confirmed: boolean;
+  overlay: {
+    leftPercent: number;
+    topPercent: number;
+    widthPercent: number;
+    heightPercent: number;
+  };
 };
 
 type BlueprintDetectionPipeline = {
@@ -95,10 +101,34 @@ const dedupeSavedProjects = (projects: SavedProject[]) => {
 function detectRoomsFromBlueprint(file?: File | null): DetectedBlueprintRoom[] {
   // Placeholder parser foundation only. Real AI/PDF/image parsing will plug in here later.
   return [
-    { id: "mock-detected-living-room", name: "Living Room", squareFeet: 320, confirmed: false },
-    { id: "mock-detected-kitchen", name: "Kitchen", squareFeet: 180, confirmed: false },
-    { id: "mock-detected-bedroom", name: "Bedroom", squareFeet: 160, confirmed: false },
-    { id: "mock-detected-bathroom", name: "Bathroom", squareFeet: 70, confirmed: false },
+    {
+      id: "mock-detected-living-room",
+      name: "Living Room",
+      squareFeet: 320,
+      confirmed: false,
+      overlay: { leftPercent: 12, topPercent: 16, widthPercent: 30, heightPercent: 28 },
+    },
+    {
+      id: "mock-detected-kitchen",
+      name: "Kitchen",
+      squareFeet: 180,
+      confirmed: false,
+      overlay: { leftPercent: 48, topPercent: 18, widthPercent: 22, heightPercent: 22 },
+    },
+    {
+      id: "mock-detected-bedroom",
+      name: "Bedroom",
+      squareFeet: 160,
+      confirmed: false,
+      overlay: { leftPercent: 18, topPercent: 55, widthPercent: 24, heightPercent: 24 },
+    },
+    {
+      id: "mock-detected-bathroom",
+      name: "Bathroom",
+      squareFeet: 70,
+      confirmed: false,
+      overlay: { leftPercent: 54, topPercent: 56, widthPercent: 16, heightPercent: 18 },
+    },
   ].map((room) => ({
     ...room,
     id: file ? `${room.id}-${file.name}` : room.id,
@@ -167,6 +197,7 @@ export default function LoadCalculator() {
       sourceFileName: "",
       rooms: detectRoomsFromBlueprint(),
     });
+  const [selectedDetectedRoomId, setSelectedDetectedRoomId] = useState<string | null>(null);
   const [detectedRoomActionMessage, setDetectedRoomActionMessage] = useState("");
   const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<ManualDBlueprintRoom[]>([]);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
@@ -437,6 +468,7 @@ export default function LoadCalculator() {
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
     setBlueprintZoom(1);
+    setSelectedDetectedRoomId(null);
     setBlueprintDetectionPipeline({
       mode: "preview",
       status: "mock",
@@ -447,6 +479,7 @@ export default function LoadCalculator() {
   };
 
   const renameDetectedRoom = (roomId: string, name: string) => {
+    setSelectedDetectedRoomId(roomId);
     setBlueprintDetectionPipeline((currentPipeline) => ({
       ...currentPipeline,
       rooms: currentPipeline.rooms.map((room) =>
@@ -456,6 +489,7 @@ export default function LoadCalculator() {
   };
 
   const confirmDetectedRoom = (roomId: string) => {
+    setSelectedDetectedRoomId(roomId);
     setBlueprintDetectionPipeline((currentPipeline) => ({
       ...currentPipeline,
       rooms: currentPipeline.rooms.map((room) =>
@@ -466,6 +500,7 @@ export default function LoadCalculator() {
   };
 
   const removeDetectedRoom = (roomId: string) => {
+    setSelectedDetectedRoomId((currentRoomId) => (currentRoomId === roomId ? null : currentRoomId));
     setBlueprintDetectionPipeline((currentPipeline) => ({
       ...currentPipeline,
       rooms: currentPipeline.rooms.filter((room) => room.id !== roomId),
@@ -486,6 +521,19 @@ export default function LoadCalculator() {
     ]);
     confirmDetectedRoom(room.id);
     setDetectedRoomActionMessage("Added to Manual D");
+  };
+
+  const focusDetectedRoomName = (roomId: string) => {
+    setSelectedDetectedRoomId(roomId);
+    const roomNameInput = document.getElementById(`detected-room-name-${roomId}`);
+    roomNameInput?.focus();
+  };
+
+  const selectDetectedRoomFromOverlay = (roomId: string) => {
+    setSelectedDetectedRoomId(roomId);
+    document
+      .getElementById(`detected-room-card-${roomId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
   const scrollToTakeoffElement = (element: HTMLElement | null) => {
@@ -1541,6 +1589,32 @@ const averageTonnage = (minTon + maxTon) / 2;
                         <p style={blueprintPdfPreviewTextStyle}>{blueprintFileName}</p>
                       </div>
                     )}
+                    {detectedBlueprintRooms.length > 0 ? (
+                      <div style={blueprintOverlayLayerStyle} aria-label="Detected room preview overlay">
+                        {detectedBlueprintRooms.map((room) => {
+                          const isSelectedRoom = selectedDetectedRoomId === room.id;
+
+                          return (
+                            <button
+                              type="button"
+                              key={`blueprint-overlay-${room.id}`}
+                              aria-label={`Highlight ${room.name || "detected room"}`}
+                              style={{
+                                ...blueprintOverlayMarkerStyle,
+                                ...(isSelectedRoom ? blueprintOverlayMarkerActiveStyle : null),
+                                left: `${room.overlay.leftPercent}%`,
+                                top: `${room.overlay.topPercent}%`,
+                                width: `${room.overlay.widthPercent}%`,
+                                height: `${room.overlay.heightPercent}%`,
+                              }}
+                              onClick={() => selectDetectedRoomFromOverlay(room.id)}
+                            >
+                              <span style={blueprintOverlayLabelStyle}>{room.name || "Room"}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1558,59 +1632,84 @@ const averageTonnage = (minTon + maxTon) / 2;
                 ) : null}
               </div>
               <div style={detectedRoomsGridStyle}>
-                {detectedBlueprintRooms.map((room) => (
-                  <div key={room.id} style={detectedRoomCardStyle}>
-                    <input
-                      className="load-input blueprint-takeoff-control"
-                      aria-label={`${room.name} detected room name`}
-                      value={room.name}
-                      onChange={(event) => renameDetectedRoom(room.id, event.target.value)}
-                      style={detectedRoomInputStyle}
-                    />
-                    <p style={detectedRoomMetaStyle}>{room.squareFeet.toLocaleString()} sq ft estimate</p>
-                    <p style={room.confirmed ? detectedRoomConfirmedStyle : detectedRoomPendingStyle}>
-                      {room.confirmed ? "Confirmed" : "Needs review"}
-                    </p>
-                    <div style={detectedRoomActionsStyle}>
-                      <button
-                        type="button"
-                        style={detectedRoomButtonStyle}
-                        onClick={() => confirmDetectedRoom(room.id)}
-                        onPointerUp={(event) => {
-                          if (event.pointerType === "mouse") return;
-                          event.preventDefault();
-                          confirmDetectedRoom(room.id);
-                        }}
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        type="button"
-                        style={detectedRoomButtonStyle}
-                        onClick={() => sendDetectedRoomToManualD(room)}
-                        onPointerUp={(event) => {
-                          if (event.pointerType === "mouse") return;
-                          event.preventDefault();
-                          sendDetectedRoomToManualD(room);
-                        }}
-                      >
-                        Send to Manual D
-                      </button>
-                      <button
-                        type="button"
-                        style={detectedRoomRemoveButtonStyle}
-                        onClick={() => removeDetectedRoom(room.id)}
-                        onPointerUp={(event) => {
-                          if (event.pointerType === "mouse") return;
-                          event.preventDefault();
-                          removeDetectedRoom(room.id);
-                        }}
-                      >
-                        Remove
-                      </button>
+                {detectedBlueprintRooms.map((room) => {
+                  const isSelectedRoom = selectedDetectedRoomId === room.id;
+
+                  return (
+                    <div
+                      id={`detected-room-card-${room.id}`}
+                      key={room.id}
+                      style={isSelectedRoom ? { ...detectedRoomCardStyle, ...detectedRoomCardActiveStyle } : detectedRoomCardStyle}
+                    >
+                      <div style={detectedRoomHeaderStyle}>
+                        <input
+                          id={`detected-room-name-${room.id}`}
+                          className="load-input blueprint-takeoff-control"
+                          aria-label={`${room.name} detected room name`}
+                          value={room.name}
+                          onChange={(event) => renameDetectedRoom(room.id, event.target.value)}
+                          style={detectedRoomInputStyle}
+                        />
+                        {room.confirmed ? (
+                          <span style={detectedRoomBadgeStyle}>Confirmed</span>
+                        ) : null}
+                      </div>
+                      <div style={detectedRoomFactsStyle}>
+                        <span>{room.name || "Unnamed room"}</span>
+                        <span>{room.squareFeet.toLocaleString()} sq ft</span>
+                        <span>Level {blueprintFloorLevel || "1"}</span>
+                        <span style={room.confirmed ? detectedRoomConfirmedStyle : detectedRoomPendingStyle}>
+                          {room.confirmed ? "Ready" : "Needs review"}
+                        </span>
+                      </div>
+                      <div style={detectedRoomActionsStyle}>
+                        <button
+                          type="button"
+                          style={detectedRoomButtonStyle}
+                          onClick={() => focusDetectedRoomName(room.id)}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          style={detectedRoomButtonStyle}
+                          onClick={() => confirmDetectedRoom(room.id)}
+                          onPointerUp={(event) => {
+                            if (event.pointerType === "mouse") return;
+                            event.preventDefault();
+                            confirmDetectedRoom(room.id);
+                          }}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          style={detectedRoomButtonStyle}
+                          onClick={() => sendDetectedRoomToManualD(room)}
+                          onPointerUp={(event) => {
+                            if (event.pointerType === "mouse") return;
+                            event.preventDefault();
+                            sendDetectedRoomToManualD(room);
+                          }}
+                        >
+                          Send to Manual D
+                        </button>
+                        <button
+                          type="button"
+                          style={detectedRoomRemoveButtonStyle}
+                          onClick={() => removeDetectedRoom(room.id)}
+                          onPointerUp={(event) => {
+                            if (event.pointerType === "mouse") return;
+                            event.preventDefault();
+                            removeDetectedRoom(room.id);
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -2468,6 +2567,7 @@ const blueprintViewportStyle: React.CSSProperties = {
 };
 
 const blueprintCanvasStyle: React.CSSProperties = {
+  position: "relative",
   minWidth: "100%",
   minHeight: "100%",
   width: "max-content",
@@ -2517,6 +2617,47 @@ const blueprintPdfPreviewTextStyle: React.CSSProperties = {
   overflowWrap: "anywhere",
 };
 
+const blueprintOverlayLayerStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  minWidth: "620px",
+  pointerEvents: "none",
+};
+
+const blueprintOverlayMarkerStyle: React.CSSProperties = {
+  position: "absolute",
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "flex-start",
+  padding: "4px",
+  borderRadius: "10px",
+  border: "1px solid rgba(212,175,55,0.72)",
+  background: "rgba(212,175,55,0.12)",
+  boxShadow: "0 10px 24px rgba(0,0,0,0.22)",
+  color: "#f8fafc",
+  cursor: "pointer",
+  pointerEvents: "auto",
+};
+
+const blueprintOverlayMarkerActiveStyle: React.CSSProperties = {
+  border: "2px solid rgba(250,204,21,0.96)",
+  background: "rgba(212,175,55,0.24)",
+  boxShadow: "0 0 0 3px rgba(212,175,55,0.14), 0 14px 30px rgba(0,0,0,0.24)",
+};
+
+const blueprintOverlayLabelStyle: React.CSSProperties = {
+  maxWidth: "100%",
+  padding: "4px 6px",
+  borderRadius: "999px",
+  background: "rgba(15,23,42,0.86)",
+  color: "#f8fafc",
+  fontSize: "10px",
+  fontWeight: 950,
+  lineHeight: 1.1,
+  overflowWrap: "anywhere",
+  textAlign: "left",
+};
+
 const detectedRoomsSectionStyle: React.CSSProperties = {
   display: "grid",
   gap: "10px",
@@ -2548,28 +2689,56 @@ const detectedRoomsGridStyle: React.CSSProperties = {
 
 const detectedRoomCardStyle: React.CSSProperties = {
   display: "grid",
-  gap: "7px",
+  gap: "8px",
   padding: "10px",
   borderRadius: "14px",
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(15,23,42,0.58)",
 };
 
+const detectedRoomCardActiveStyle: React.CSSProperties = {
+  border: "1px solid rgba(212,175,55,0.44)",
+  background: "rgba(212,175,55,0.1)",
+  boxShadow: "0 0 0 3px rgba(212,175,55,0.08)",
+};
+
+const detectedRoomHeaderStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: "8px",
+};
+
 const detectedRoomInputStyle: React.CSSProperties = {
   ...inputControlStyle,
-  height: "36px",
-  minHeight: "36px",
-  maxHeight: "36px",
-  padding: "8px 10px",
+  height: "34px",
+  minHeight: "34px",
+  maxHeight: "34px",
+  padding: "7px 10px",
   borderRadius: "12px",
   fontSize: "13px",
   boxSizing: "border-box",
 };
 
-const detectedRoomMetaStyle: React.CSSProperties = {
+const detectedRoomBadgeStyle: React.CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: "999px",
+  border: "1px solid rgba(134,239,172,0.22)",
+  background: "rgba(22,101,52,0.24)",
+  color: "#86efac",
+  fontSize: "10px",
+  fontWeight: 950,
+  textTransform: "uppercase",
+};
+
+const detectedRoomFactsStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  flexWrap: "wrap",
   margin: 0,
   color: "#cbd5e1",
-  fontSize: "12px",
+  fontSize: "11px",
   fontWeight: 800,
 };
 
@@ -2588,12 +2757,12 @@ const detectedRoomConfirmedStyle: React.CSSProperties = {
 const detectedRoomActionsStyle: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
-  gap: "7px",
+  gap: "6px",
 };
 
 const detectedRoomButtonStyle: React.CSSProperties = {
-  minHeight: "34px",
-  padding: "8px 10px",
+  minHeight: "32px",
+  padding: "7px 9px",
   borderRadius: "11px",
   border: "1px solid rgba(212,175,55,0.24)",
   background: "rgba(212,175,55,0.12)",
