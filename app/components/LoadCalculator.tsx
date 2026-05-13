@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
+import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
 
@@ -599,6 +600,32 @@ export default function LoadCalculator() {
   }, [squareFeet, ceilingHeight, insulationQuality, windowCount, windowArea, windowEfficiency, windowOrientation, climateZone, oregonRegion, numberOfRooms, homeAge, ductLocation, ductCondition, infiltrationTightness, existingSystemSize, comfortPriority, occupancy]);
 
   const [displayedResult, setDisplayedResult] = useState(result);
+
+  const selectedDetectedRoom = useMemo(
+    () => detectedBlueprintRooms.find((room) => room.id === selectedDetectedRoomId) ?? null,
+    [detectedBlueprintRooms, selectedDetectedRoomId]
+  );
+
+  const selectedDetectedRoomAirflow = useMemo(() => {
+    if (!selectedDetectedRoom) return null;
+
+    const tonValues = result.recommendedTonnage
+      .match(/\d+(\.\d+)?/g)
+      ?.map((value) => parseFloat(value)) ?? [];
+    const averageTonnage =
+      tonValues.length >= 2
+        ? (tonValues[0] + tonValues[1]) / 2
+        : tonValues[0] ?? 0;
+    const totalSystemCfm = calculateResidentialAirflow(averageTonnage);
+    const totalSquareFeet = Math.max(1, parseInt(squareFeet, 10) || 1);
+    const estimatedCfm = (selectedDetectedRoom.squareFeet / totalSquareFeet) * totalSystemCfm;
+    const ductRecommendation = recommendRoundDuctSize(estimatedCfm, "branch");
+
+    return {
+      estimatedCfm,
+      ductRecommendation,
+    };
+  }, [result.recommendedTonnage, selectedDetectedRoom, squareFeet]);
 
   const snapshotSummary = useMemo(() => {
     const sqft = Math.max(0, parseInt(squareFeet, 10) || 0);
@@ -1617,6 +1644,36 @@ const averageTonnage = (minTon + maxTon) / 2;
                     ) : null}
                   </div>
                 </div>
+
+                {selectedDetectedRoom && selectedDetectedRoomAirflow ? (
+                  <div style={blueprintAirflowPreviewStyle}>
+                    <div>
+                      <p style={blueprintAirflowPreviewLabelStyle}>Selected Room Airflow</p>
+                      <p style={blueprintAirflowPreviewTitleStyle}>{selectedDetectedRoom.name || "Detected Room"}</p>
+                    </div>
+                    <div style={blueprintAirflowPreviewGridStyle}>
+                      <div style={blueprintAirflowPreviewMetricStyle}>
+                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Estimated Sq. Ft.</span>
+                        <strong>{selectedDetectedRoom.squareFeet.toLocaleString()}</strong>
+                      </div>
+                      <div style={blueprintAirflowPreviewMetricStyle}>
+                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Estimated CFM</span>
+                        <strong>{Math.round(selectedDetectedRoomAirflow.estimatedCfm).toLocaleString()}</strong>
+                      </div>
+                      <div style={blueprintAirflowPreviewMetricStyle}>
+                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Duct Size</span>
+                        <strong>{selectedDetectedRoomAirflow.ductRecommendation.diameterInches}" round</strong>
+                      </div>
+                      <div style={blueprintAirflowPreviewMetricStyle}>
+                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Velocity / Status</span>
+                        <strong>
+                          {Math.round(selectedDetectedRoomAirflow.ductRecommendation.velocityFpm).toLocaleString()} FPM ·{" "}
+                          {selectedDetectedRoomAirflow.ductRecommendation.status}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -1640,6 +1697,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       id={`detected-room-card-${room.id}`}
                       key={room.id}
                       style={isSelectedRoom ? { ...detectedRoomCardStyle, ...detectedRoomCardActiveStyle } : detectedRoomCardStyle}
+                      onClick={() => setSelectedDetectedRoomId(room.id)}
                     >
                       <div style={detectedRoomHeaderStyle}>
                         <input
@@ -2656,6 +2714,58 @@ const blueprintOverlayLabelStyle: React.CSSProperties = {
   lineHeight: 1.1,
   overflowWrap: "anywhere",
   textAlign: "left",
+};
+
+const blueprintAirflowPreviewStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "10px",
+  padding: "12px",
+  borderRadius: "14px",
+  border: "1px solid rgba(212,175,55,0.22)",
+  background: "linear-gradient(135deg, rgba(212,175,55,0.12), rgba(15,23,42,0.78))",
+};
+
+const blueprintAirflowPreviewLabelStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#d4af37",
+  fontSize: "10px",
+  fontWeight: 950,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+};
+
+const blueprintAirflowPreviewTitleStyle: React.CSSProperties = {
+  margin: "3px 0 0",
+  color: "#f8fafc",
+  fontSize: "15px",
+  fontWeight: 950,
+};
+
+const blueprintAirflowPreviewGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))",
+  gap: "8px",
+};
+
+const blueprintAirflowPreviewMetricStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+  minWidth: 0,
+  padding: "9px",
+  borderRadius: "12px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(3,7,18,0.34)",
+  color: "#f8fafc",
+  fontSize: "12px",
+  fontWeight: 900,
+};
+
+const blueprintAirflowPreviewMetricLabelStyle: React.CSSProperties = {
+  color: "#94a3b8",
+  fontSize: "9px",
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
 };
 
 const detectedRoomsSectionStyle: React.CSSProperties = {
