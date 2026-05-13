@@ -10,12 +10,24 @@ import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } f
 
 type LoadCalculatorView = "customer" | "technician";
 type TechnicianSection = ManualDPanelSection | "manual-room-takeoff";
+type DetectedRoomWorkflowStatus = "needs-review" | "confirmed" | "sent-to-manual-d";
+type DetectedRoomEditableField =
+  | "name"
+  | "squareFeet"
+  | "floorLevel"
+  | "windowsCount"
+  | "exteriorWallsCount";
 
 type DetectedBlueprintRoom = {
   id: string;
   name: string;
   squareFeet: number;
+  floorLevel: string;
+  windowsCount: string;
+  exteriorWallsCount: string;
   confirmed: boolean;
+  confidencePercent: number;
+  workflowStatus: DetectedRoomWorkflowStatus;
   overlay: {
     leftPercent: number;
     topPercent: number;
@@ -101,39 +113,79 @@ const dedupeSavedProjects = (projects: SavedProject[]) => {
 
 function detectRoomsFromBlueprint(file?: File | null): DetectedBlueprintRoom[] {
   // Placeholder parser foundation only. Real AI/PDF/image parsing will plug in here later.
-  return [
+  const mockRooms: DetectedBlueprintRoom[] = [
     {
       id: "mock-detected-living-room",
       name: "Living Room",
       squareFeet: 320,
+      floorLevel: "1",
+      windowsCount: "4",
+      exteriorWallsCount: "2",
       confirmed: false,
+      confidencePercent: 91,
+      workflowStatus: "needs-review",
       overlay: { leftPercent: 12, topPercent: 16, widthPercent: 30, heightPercent: 28 },
     },
     {
       id: "mock-detected-kitchen",
       name: "Kitchen",
       squareFeet: 180,
+      floorLevel: "1",
+      windowsCount: "2",
+      exteriorWallsCount: "2",
       confirmed: false,
+      confidencePercent: 86,
+      workflowStatus: "needs-review",
       overlay: { leftPercent: 48, topPercent: 18, widthPercent: 22, heightPercent: 22 },
     },
     {
       id: "mock-detected-bedroom",
       name: "Bedroom",
       squareFeet: 160,
+      floorLevel: "2",
+      windowsCount: "2",
+      exteriorWallsCount: "2",
       confirmed: false,
+      confidencePercent: 82,
+      workflowStatus: "needs-review",
       overlay: { leftPercent: 18, topPercent: 55, widthPercent: 24, heightPercent: 24 },
     },
     {
       id: "mock-detected-bathroom",
       name: "Bathroom",
       squareFeet: 70,
+      floorLevel: "2",
+      windowsCount: "1",
+      exteriorWallsCount: "1",
       confirmed: false,
+      confidencePercent: 74,
+      workflowStatus: "needs-review",
       overlay: { leftPercent: 54, topPercent: 56, widthPercent: 16, heightPercent: 18 },
     },
-  ].map((room) => ({
+  ];
+
+  return mockRooms.map((room) => ({
     ...room,
     id: file ? `${room.id}-${file.name}` : room.id,
   }));
+}
+
+function getDetectedRoomStatusLabel(status: DetectedRoomWorkflowStatus) {
+  if (status === "sent-to-manual-d") return "Sent to Manual D";
+  if (status === "confirmed") return "Confirmed";
+  return "Needs Review";
+}
+
+function getDetectedRoomStatusStyle(status: DetectedRoomWorkflowStatus): React.CSSProperties {
+  if (status === "sent-to-manual-d") {
+    return { ...detectedRoomWorkflowBadgeStyle, ...detectedRoomSentBadgeStyle };
+  }
+
+  if (status === "confirmed") {
+    return { ...detectedRoomWorkflowBadgeStyle, ...detectedRoomConfirmedBadgeStyle };
+  }
+
+  return { ...detectedRoomWorkflowBadgeStyle, ...detectedRoomReviewBadgeStyle };
 }
 
 type InputFieldProps = {
@@ -489,12 +541,37 @@ export default function LoadCalculator() {
     }));
   };
 
+  const updateDetectedRoom = (
+    roomId: string,
+    field: DetectedRoomEditableField,
+    value: string
+  ) => {
+    setSelectedDetectedRoomId(roomId);
+    setBlueprintDetectionPipeline((currentPipeline) => ({
+      ...currentPipeline,
+      rooms: currentPipeline.rooms.map((room) => {
+        if (room.id !== roomId) return room;
+
+        if (field === "squareFeet") {
+          return {
+            ...room,
+            squareFeet: Math.max(0, Math.round(Number(value) || 0)),
+          };
+        }
+
+        return { ...room, [field]: value };
+      }),
+    }));
+  };
+
   const confirmDetectedRoom = (roomId: string) => {
     setSelectedDetectedRoomId(roomId);
     setBlueprintDetectionPipeline((currentPipeline) => ({
       ...currentPipeline,
       rooms: currentPipeline.rooms.map((room) =>
-        room.id === roomId ? { ...room, confirmed: true } : room
+        room.id === roomId
+          ? { ...room, confirmed: true, workflowStatus: "confirmed" }
+          : room
       ),
     }));
     setDetectedRoomActionMessage("Room confirmed");
@@ -517,11 +594,21 @@ export default function LoadCalculator() {
         name: room.name.trim() || "Detected Room",
         squareFeet: room.squareFeet,
         ceilingHeight: blueprintCeilingHeight,
-        floorLevel: blueprintFloorLevel,
+        floorLevel: room.floorLevel || blueprintFloorLevel,
+        windowsCount: room.windowsCount,
+        exteriorWallsCount: room.exteriorWallsCount,
         sourceBlueprintRoomId: room.id,
       },
     ]);
-    confirmDetectedRoom(room.id);
+    setSelectedDetectedRoomId(room.id);
+    setBlueprintDetectionPipeline((currentPipeline) => ({
+      ...currentPipeline,
+      rooms: currentPipeline.rooms.map((currentRoom) =>
+        currentRoom.id === room.id
+          ? { ...currentRoom, confirmed: true, workflowStatus: "sent-to-manual-d" }
+          : currentRoom
+      ),
+    }));
     setDetectedRoomActionMessage("Added to Manual D");
   };
 
@@ -1706,20 +1793,67 @@ const averageTonnage = (minTon + maxTon) / 2;
                           className="load-input blueprint-takeoff-control"
                           aria-label={`${room.name} detected room name`}
                           value={room.name}
-                          onChange={(event) => renameDetectedRoom(room.id, event.target.value)}
+                          onChange={(event) => updateDetectedRoom(room.id, "name", event.target.value)}
                           style={detectedRoomInputStyle}
                         />
-                        {room.confirmed ? (
-                          <span style={detectedRoomBadgeStyle}>Confirmed</span>
-                        ) : null}
+                        <div style={detectedRoomBadgeGroupStyle}>
+                          <span style={detectedRoomConfidenceBadgeStyle}>
+                            {room.confidencePercent}% confidence
+                          </span>
+                          <span style={getDetectedRoomStatusStyle(room.workflowStatus)}>
+                            {getDetectedRoomStatusLabel(room.workflowStatus)}
+                          </span>
+                        </div>
                       </div>
                       <div style={detectedRoomFactsStyle}>
                         <span>{room.name || "Unnamed room"}</span>
                         <span>{room.squareFeet.toLocaleString()} sq ft</span>
-                        <span>Level {blueprintFloorLevel || "1"}</span>
-                        <span style={room.confirmed ? detectedRoomConfirmedStyle : detectedRoomPendingStyle}>
-                          {room.confirmed ? "Ready" : "Needs review"}
-                        </span>
+                        <span>Level {room.floorLevel || "1"}</span>
+                        <span>{room.confidencePercent}% mock AI match</span>
+                      </div>
+                      <div style={detectedRoomEditGridStyle}>
+                        <label style={detectedRoomEditFieldStyle}>
+                          <span style={detectedRoomEditLabelStyle}>Sq. Ft.</span>
+                          <input
+                            className="load-input blueprint-takeoff-control"
+                            type="number"
+                            min="0"
+                            value={room.squareFeet}
+                            onChange={(event) => updateDetectedRoom(room.id, "squareFeet", event.target.value)}
+                            style={detectedRoomCompactInputStyle}
+                          />
+                        </label>
+                        <label style={detectedRoomEditFieldStyle}>
+                          <span style={detectedRoomEditLabelStyle}>Floor</span>
+                          <input
+                            className="load-input blueprint-takeoff-control"
+                            value={room.floorLevel}
+                            onChange={(event) => updateDetectedRoom(room.id, "floorLevel", event.target.value)}
+                            style={detectedRoomCompactInputStyle}
+                          />
+                        </label>
+                        <label style={detectedRoomEditFieldStyle}>
+                          <span style={detectedRoomEditLabelStyle}>Windows</span>
+                          <input
+                            className="load-input blueprint-takeoff-control"
+                            type="number"
+                            min="0"
+                            value={room.windowsCount}
+                            onChange={(event) => updateDetectedRoom(room.id, "windowsCount", event.target.value)}
+                            style={detectedRoomCompactInputStyle}
+                          />
+                        </label>
+                        <label style={detectedRoomEditFieldStyle}>
+                          <span style={detectedRoomEditLabelStyle}>Ext. Walls</span>
+                          <input
+                            className="load-input blueprint-takeoff-control"
+                            type="number"
+                            min="0"
+                            value={room.exteriorWallsCount}
+                            onChange={(event) => updateDetectedRoom(room.id, "exteriorWallsCount", event.target.value)}
+                            style={detectedRoomCompactInputStyle}
+                          />
+                        </label>
                       </div>
                       <div style={detectedRoomActionsStyle}>
                         <button
@@ -2833,15 +2967,51 @@ const detectedRoomInputStyle: React.CSSProperties = {
   boxSizing: "border-box",
 };
 
-const detectedRoomBadgeStyle: React.CSSProperties = {
+const detectedRoomBadgeGroupStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: "6px",
+  flexWrap: "wrap",
+};
+
+const detectedRoomConfidenceBadgeStyle: React.CSSProperties = {
   padding: "6px 8px",
   borderRadius: "999px",
-  border: "1px solid rgba(134,239,172,0.22)",
-  background: "rgba(22,101,52,0.24)",
-  color: "#86efac",
+  border: "1px solid rgba(212,175,55,0.22)",
+  background: "rgba(212,175,55,0.12)",
+  color: "#fde68a",
   fontSize: "10px",
   fontWeight: 950,
   textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
+
+const detectedRoomWorkflowBadgeStyle: React.CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: "999px",
+  fontSize: "10px",
+  fontWeight: 950,
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
+
+const detectedRoomReviewBadgeStyle: React.CSSProperties = {
+  border: "1px solid rgba(251,191,36,0.22)",
+  background: "rgba(120,53,15,0.24)",
+  color: "#fde68a",
+};
+
+const detectedRoomConfirmedBadgeStyle: React.CSSProperties = {
+  border: "1px solid rgba(134,239,172,0.22)",
+  background: "rgba(22,101,52,0.24)",
+  color: "#86efac",
+};
+
+const detectedRoomSentBadgeStyle: React.CSSProperties = {
+  border: "1px solid rgba(125,211,252,0.24)",
+  background: "rgba(12,74,110,0.24)",
+  color: "#bae6fd",
 };
 
 const detectedRoomFactsStyle: React.CSSProperties = {
@@ -2855,16 +3025,34 @@ const detectedRoomFactsStyle: React.CSSProperties = {
   fontWeight: 800,
 };
 
-const detectedRoomPendingStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#fde68a",
-  fontSize: "11px",
-  fontWeight: 900,
+const detectedRoomEditGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))",
+  gap: "8px",
 };
 
-const detectedRoomConfirmedStyle: React.CSSProperties = {
-  ...detectedRoomPendingStyle,
-  color: "#86efac",
+const detectedRoomEditFieldStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "5px",
+  minWidth: 0,
+};
+
+const detectedRoomEditLabelStyle: React.CSSProperties = {
+  color: "#94a3b8",
+  fontSize: "9px",
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const detectedRoomCompactInputStyle: React.CSSProperties = {
+  ...detectedRoomInputStyle,
+  width: "100%",
+  height: "32px",
+  minHeight: "32px",
+  maxHeight: "32px",
+  padding: "6px 8px",
+  fontSize: "12px",
 };
 
 const detectedRoomActionsStyle: React.CSSProperties = {

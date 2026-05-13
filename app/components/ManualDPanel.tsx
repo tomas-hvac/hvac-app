@@ -18,6 +18,8 @@ export type ManualDBlueprintRoom = {
   ceilingHeight: string;
   floorLevel: string;
   sourceBlueprintRoomId?: string;
+  windowsCount?: string;
+  exteriorWallsCount?: string;
 };
 
 export type ManualDPanelSection = "manual-d" | "room-airflow" | "return-air" | "reports" | "hidden";
@@ -388,6 +390,8 @@ export default function ManualDPanel({
         ),
         ceilingHeightInput: room.ceilingHeight,
         floorLevelInput: room.floorLevel,
+        windowsCountInput: room.windowsCount ?? "",
+        exteriorWallsCountInput: room.exteriorWallsCount ?? "",
         blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
       })),
     ]);
