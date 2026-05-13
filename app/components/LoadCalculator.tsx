@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
@@ -9,6 +9,20 @@ import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } f
 
 type LoadCalculatorView = "customer" | "technician";
 type TechnicianSection = ManualDPanelSection | "manual-room-takeoff";
+
+type DetectedBlueprintRoom = {
+  id: string;
+  name: string;
+  squareFeet: number;
+  confirmed: boolean;
+};
+
+type BlueprintDetectionPipeline = {
+  mode: "preview";
+  status: "mock";
+  sourceFileName: string;
+  rooms: DetectedBlueprintRoom[];
+};
 
 type SavedProposalSnapshot = {
   customerName: string;
@@ -78,6 +92,19 @@ const dedupeSavedProjects = (projects: SavedProject[]) => {
   return Array.from(newestProjectsByKey.values());
 };
 
+function detectRoomsFromBlueprint(file?: File | null): DetectedBlueprintRoom[] {
+  // Placeholder parser foundation only. Real AI/PDF/image parsing will plug in here later.
+  return [
+    { id: "mock-detected-living-room", name: "Living Room", squareFeet: 320, confirmed: false },
+    { id: "mock-detected-kitchen", name: "Kitchen", squareFeet: 180, confirmed: false },
+    { id: "mock-detected-bedroom", name: "Bedroom", squareFeet: 160, confirmed: false },
+    { id: "mock-detected-bathroom", name: "Bathroom", squareFeet: 70, confirmed: false },
+  ].map((room) => ({
+    ...room,
+    id: file ? `${room.id}-${file.name}` : room.id,
+  }));
+}
+
 type InputFieldProps = {
   icon: React.ReactNode;
   title: string;
@@ -99,6 +126,10 @@ const InputField = ({ icon, title, description, children }: InputFieldProps) => 
 );
 
 export default function LoadCalculator() {
+  const blueprintFileInputRef = useRef<HTMLInputElement | null>(null);
+  const blueprintPreviewRef = useRef<HTMLDivElement | null>(null);
+  const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
+  const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
   const [activeTechnicianSection, setActiveTechnicianSection] = useState<TechnicianSection>("manual-d");
   const [squareFeet, setSquareFeet] = useState("2200");
@@ -129,6 +160,14 @@ export default function LoadCalculator() {
   const [blueprintFile, setBlueprintFile] = useState<File | null>(null);
   const [blueprintPreviewUrl, setBlueprintPreviewUrl] = useState("");
   const [blueprintZoom, setBlueprintZoom] = useState(1);
+  const [blueprintDetectionPipeline, setBlueprintDetectionPipeline] =
+    useState<BlueprintDetectionPipeline>({
+      mode: "preview",
+      status: "mock",
+      sourceFileName: "",
+      rooms: detectRoomsFromBlueprint(),
+    });
+  const [detectedRoomActionMessage, setDetectedRoomActionMessage] = useState("");
   const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<ManualDBlueprintRoom[]>([]);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
@@ -213,6 +252,7 @@ export default function LoadCalculator() {
 
   const blueprintSquareFeet =
     Math.max(0, Number(blueprintLength) || 0) * Math.max(0, Number(blueprintWidth) || 0);
+  const detectedBlueprintRooms = blueprintDetectionPipeline.rooms;
 
   useEffect(() => {
     const savedProjectJson = window.localStorage.getItem(SAVED_PROJECTS_STORAGE_KEY);
@@ -397,6 +437,85 @@ export default function LoadCalculator() {
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
     setBlueprintZoom(1);
+    setBlueprintDetectionPipeline({
+      mode: "preview",
+      status: "mock",
+      sourceFileName: selectedFile?.name ?? "",
+      rooms: detectRoomsFromBlueprint(selectedFile),
+    });
+    setDetectedRoomActionMessage("Preview mode mock rooms loaded");
+  };
+
+  const renameDetectedRoom = (roomId: string, name: string) => {
+    setBlueprintDetectionPipeline((currentPipeline) => ({
+      ...currentPipeline,
+      rooms: currentPipeline.rooms.map((room) =>
+        room.id === roomId ? { ...room, name } : room
+      ),
+    }));
+  };
+
+  const confirmDetectedRoom = (roomId: string) => {
+    setBlueprintDetectionPipeline((currentPipeline) => ({
+      ...currentPipeline,
+      rooms: currentPipeline.rooms.map((room) =>
+        room.id === roomId ? { ...room, confirmed: true } : room
+      ),
+    }));
+    setDetectedRoomActionMessage("Room confirmed");
+  };
+
+  const removeDetectedRoom = (roomId: string) => {
+    setBlueprintDetectionPipeline((currentPipeline) => ({
+      ...currentPipeline,
+      rooms: currentPipeline.rooms.filter((room) => room.id !== roomId),
+    }));
+    setDetectedRoomActionMessage("Room removed");
+  };
+
+  const sendDetectedRoomToManualD = (room: DetectedBlueprintRoom) => {
+    setBlueprintRoomsForManualD((currentRooms) => [
+      ...currentRooms,
+      {
+        id: `detected-${room.id}-${Date.now()}`,
+        name: room.name.trim() || "Detected Room",
+        squareFeet: room.squareFeet,
+        ceilingHeight: blueprintCeilingHeight,
+        floorLevel: blueprintFloorLevel,
+      },
+    ]);
+    confirmDetectedRoom(room.id);
+    setDetectedRoomActionMessage("Added to Manual D");
+  };
+
+  const scrollToTakeoffElement = (element: HTMLElement | null) => {
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    element?.focus?.();
+  };
+
+  const handleBlueprintWorkflowStep = (stepIndex: number) => {
+    if (stepIndex === 0) {
+      blueprintFileInputRef.current?.click();
+      return;
+    }
+
+    if (stepIndex === 1) {
+      if (blueprintFile) {
+        scrollToTakeoffElement(blueprintPreviewRef.current);
+      } else {
+        blueprintFileInputRef.current?.click();
+      }
+      return;
+    }
+
+    if (stepIndex === 3) {
+      scrollToTakeoffElement(detectedRoomsRef.current);
+      return;
+    }
+
+    if (stepIndex === 4) {
+      scrollToTakeoffElement(manualTakeoffRef.current);
+    }
   };
 
   const zoomBlueprintIn = () => {
@@ -1344,23 +1463,26 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
 
             <p style={blueprintTakeoffNoteStyle}>
-              AI room detection coming soon. Use manual room takeoff as the fallback workflow.
+              AI detection coming soon — verify all rooms before using calculations.
             </p>
 
             <div style={blueprintWorkflowStyle}>
               {[
                 "1. Upload Blueprint",
                 "2. Review Preview",
-                "3. Detect Rooms",
+                "3. Detect Rooms - Preview Mode",
                 "4. Confirm Rooms",
                 "5. Send to Manual J / Manual D",
               ].map((step, index) => (
-                <div
+                <button
+                  type="button"
                   key={step}
                   style={index === 2 ? blueprintWorkflowStepDisabledStyle : blueprintWorkflowStepStyle}
+                  disabled={index === 2}
+                  onClick={() => handleBlueprintWorkflowStep(index)}
                 >
                   {step}
-                </div>
+                </button>
               ))}
             </div>
 
@@ -1368,6 +1490,7 @@ const averageTonnage = (minTon + maxTon) / 2;
               <label className="blueprint-upload-button" style={blueprintUploadButtonStyle}>
                 Upload Blueprint
                 <input
+                  ref={blueprintFileInputRef}
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
                   onChange={handleBlueprintFileChange}
@@ -1378,12 +1501,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                 {blueprintFileName || "No blueprint selected"}
               </p>
               <button type="button" disabled style={blueprintDetectButtonStyle}>
-                Detect Rooms
+                Detect Rooms - Preview Mode
               </button>
             </div>
 
             {blueprintFile ? (
-              <div style={blueprintWorkspaceStyle}>
+              <div ref={blueprintPreviewRef} tabIndex={-1} style={blueprintWorkspaceStyle}>
                 <div style={blueprintWorkspaceToolbarStyle}>
                   <div>
                     <p style={blueprintWorkspaceLabelStyle}>Review Preview</p>
@@ -1423,8 +1546,76 @@ const averageTonnage = (minTon + maxTon) / 2;
               </div>
             ) : null}
 
+            <div ref={detectedRoomsRef} tabIndex={-1} style={detectedRoomsSectionStyle}>
+              <div>
+                <p style={blueprintManualFallbackLabelStyle}>Detected Rooms</p>
+                <p style={detectedRoomsNoteStyle}>
+                  AI detection coming soon — verify all rooms before using calculations.
+                  Preview mode uses mock rooms only.
+                </p>
+                {detectedRoomActionMessage ? (
+                  <p style={detectedRoomActionMessageStyle}>{detectedRoomActionMessage}</p>
+                ) : null}
+              </div>
+              <div style={detectedRoomsGridStyle}>
+                {detectedBlueprintRooms.map((room) => (
+                  <div key={room.id} style={detectedRoomCardStyle}>
+                    <input
+                      className="load-input blueprint-takeoff-control"
+                      aria-label={`${room.name} detected room name`}
+                      value={room.name}
+                      onChange={(event) => renameDetectedRoom(room.id, event.target.value)}
+                      style={detectedRoomInputStyle}
+                    />
+                    <p style={detectedRoomMetaStyle}>{room.squareFeet.toLocaleString()} sq ft estimate</p>
+                    <p style={room.confirmed ? detectedRoomConfirmedStyle : detectedRoomPendingStyle}>
+                      {room.confirmed ? "Confirmed" : "Needs review"}
+                    </p>
+                    <div style={detectedRoomActionsStyle}>
+                      <button
+                        type="button"
+                        style={detectedRoomButtonStyle}
+                        onClick={() => confirmDetectedRoom(room.id)}
+                        onPointerUp={(event) => {
+                          if (event.pointerType === "mouse") return;
+                          event.preventDefault();
+                          confirmDetectedRoom(room.id);
+                        }}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        style={detectedRoomButtonStyle}
+                        onClick={() => sendDetectedRoomToManualD(room)}
+                        onPointerUp={(event) => {
+                          if (event.pointerType === "mouse") return;
+                          event.preventDefault();
+                          sendDetectedRoomToManualD(room);
+                        }}
+                      >
+                        Send to Manual D
+                      </button>
+                      <button
+                        type="button"
+                        style={detectedRoomRemoveButtonStyle}
+                        onClick={() => removeDetectedRoom(room.id)}
+                        onPointerUp={(event) => {
+                          if (event.pointerType === "mouse") return;
+                          event.preventDefault();
+                          removeDetectedRoom(room.id);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <p style={blueprintManualFallbackLabelStyle}>Manual room takeoff fallback</p>
-            <div className="blueprint-takeoff-grid" style={blueprintTakeoffGridStyle}>
+            <div ref={manualTakeoffRef} tabIndex={-1} className="blueprint-takeoff-grid" style={blueprintTakeoffGridStyle}>
               <label style={blueprintTakeoffRoomNameGroupStyle}>
                 <span style={blueprintTakeoffInputLabelStyle}>Room Name</span>
                 <input
@@ -2146,6 +2337,7 @@ const blueprintWorkflowStyle: React.CSSProperties = {
 };
 
 const blueprintWorkflowStepStyle: React.CSSProperties = {
+  width: "100%",
   minHeight: "38px",
   padding: "8px 10px",
   borderRadius: "12px",
@@ -2157,6 +2349,8 @@ const blueprintWorkflowStepStyle: React.CSSProperties = {
   lineHeight: 1.25,
   display: "flex",
   alignItems: "center",
+  textAlign: "left",
+  cursor: "pointer",
 };
 
 const blueprintWorkflowStepDisabledStyle: React.CSSProperties = {
@@ -2164,6 +2358,7 @@ const blueprintWorkflowStepDisabledStyle: React.CSSProperties = {
   border: "1px solid rgba(148,163,184,0.16)",
   background: "rgba(15,23,42,0.42)",
   color: "#64748b",
+  cursor: "not-allowed",
 };
 
 const blueprintUploadRowStyle: React.CSSProperties = {
@@ -2320,6 +2515,99 @@ const blueprintPdfPreviewTextStyle: React.CSSProperties = {
   fontSize: "12px",
   fontWeight: 800,
   overflowWrap: "anywhere",
+};
+
+const detectedRoomsSectionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "10px",
+  padding: "12px",
+  borderRadius: "16px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.025)",
+};
+
+const detectedRoomsNoteStyle: React.CSSProperties = {
+  margin: "5px 0 0",
+  color: "#94a3b8",
+  fontSize: "12px",
+  lineHeight: 1.35,
+};
+
+const detectedRoomActionMessageStyle: React.CSSProperties = {
+  margin: "7px 0 0",
+  color: "#d4af37",
+  fontSize: "12px",
+  fontWeight: 900,
+};
+
+const detectedRoomsGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "10px",
+};
+
+const detectedRoomCardStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "7px",
+  padding: "10px",
+  borderRadius: "14px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(15,23,42,0.58)",
+};
+
+const detectedRoomInputStyle: React.CSSProperties = {
+  ...inputControlStyle,
+  height: "36px",
+  minHeight: "36px",
+  maxHeight: "36px",
+  padding: "8px 10px",
+  borderRadius: "12px",
+  fontSize: "13px",
+  boxSizing: "border-box",
+};
+
+const detectedRoomMetaStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#cbd5e1",
+  fontSize: "12px",
+  fontWeight: 800,
+};
+
+const detectedRoomPendingStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#fde68a",
+  fontSize: "11px",
+  fontWeight: 900,
+};
+
+const detectedRoomConfirmedStyle: React.CSSProperties = {
+  ...detectedRoomPendingStyle,
+  color: "#86efac",
+};
+
+const detectedRoomActionsStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "7px",
+};
+
+const detectedRoomButtonStyle: React.CSSProperties = {
+  minHeight: "34px",
+  padding: "8px 10px",
+  borderRadius: "11px",
+  border: "1px solid rgba(212,175,55,0.24)",
+  background: "rgba(212,175,55,0.12)",
+  color: "#f8fafc",
+  fontSize: "11px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const detectedRoomRemoveButtonStyle: React.CSSProperties = {
+  ...detectedRoomButtonStyle,
+  border: "1px solid rgba(248,113,113,0.22)",
+  background: "rgba(127,29,29,0.22)",
+  color: "#fecaca",
 };
 
 const blueprintTakeoffInputGroupStyle: React.CSSProperties = {
