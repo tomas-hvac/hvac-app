@@ -518,6 +518,7 @@ export default function LoadCalculator() {
         squareFeet: room.squareFeet,
         ceilingHeight: blueprintCeilingHeight,
         floorLevel: blueprintFloorLevel,
+        sourceBlueprintRoomId: room.id,
       },
     ]);
     confirmDetectedRoom(room.id);
@@ -1855,6 +1856,8 @@ const averageTonnage = (minTon + maxTon) / 2;
           <ManualDPanel
             squareFeet={squareFeet}
             blueprintRooms={blueprintRoomsForManualD}
+            selectedBlueprintRoomId={selectedDetectedRoomId}
+            onBlueprintRoomSelect={setSelectedDetectedRoomId}
             savedProjectState={loadedManualDProjectState}
             onProjectStateChange={setManualDProjectState}
             activeSection={

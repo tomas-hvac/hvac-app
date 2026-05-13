@@ -17,6 +17,7 @@ export type ManualDBlueprintRoom = {
   squareFeet: number;
   ceilingHeight: string;
   floorLevel: string;
+  sourceBlueprintRoomId?: string;
 };
 
 export type ManualDPanelSection = "manual-d" | "room-airflow" | "return-air" | "reports" | "hidden";
@@ -45,6 +46,8 @@ type ManualDPanelProps = {
   squareFeet: string;
   blueprintRooms?: ManualDBlueprintRoom[];
   activeSection?: ManualDPanelSection;
+  selectedBlueprintRoomId?: string | null;
+  onBlueprintRoomSelect?: (roomId: string) => void;
   savedProjectState?: ManualDProjectState | null;
   onProjectStateChange?: (projectState: ManualDProjectState) => void;
 };
@@ -61,6 +64,7 @@ export type ManualDRoom = {
   floorLevelInput: string;
   insulationLevel: RoomInsulationLevel;
   sunExposure: RoomSunExposure;
+  blueprintSourceRoomId?: string;
 };
 
 type RoomInsulationLevel = "poor" | "average" | "good";
@@ -272,6 +276,8 @@ export default function ManualDPanel({
   squareFeet,
   blueprintRooms = [],
   activeSection = "manual-d",
+  selectedBlueprintRoomId = null,
+  onBlueprintRoomSelect,
   savedProjectState = null,
   onProjectStateChange,
 }: ManualDPanelProps) {
@@ -382,6 +388,7 @@ export default function ManualDPanel({
         ),
         ceilingHeightInput: room.ceilingHeight,
         floorLevelInput: room.floorLevel,
+        blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
       })),
     ]);
 
@@ -389,6 +396,24 @@ export default function ManualDPanel({
       processedBlueprintRoomIds.current.add(room.id);
     });
   }, [blueprintRooms]);
+
+  useEffect(() => {
+    if (!selectedBlueprintRoomId) return;
+
+    const matchingRoom = rooms.find(
+      (room) => room.blueprintSourceRoomId === selectedBlueprintRoomId
+    );
+    if (!matchingRoom) return;
+
+    document
+      .getElementById(`manual-d-room-card-${matchingRoom.id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [rooms, selectedBlueprintRoomId]);
+
+  const selectManualDRoom = (room: ManualDRoom) => {
+    if (!room.blueprintSourceRoomId) return;
+    onBlueprintRoomSelect?.(room.blueprintSourceRoomId);
+  };
 
   const roomDuctRecommendations = useMemo(
     () => {
@@ -1326,18 +1351,28 @@ export default function ManualDPanel({
         </div>
 
         <div style={roomCardGridStyle}>
-          {roomDuctRecommendations.map(({ room, roomCfm, estimatedRoomBtu, roomLoadFactor, airflowPerRegister, registerAirflowStatus, registerSizeGuidance, ductRecommendation }, index) => (
-            <div key={room.id} style={roomCardStyle}>
-              <div style={roomCardHeaderStyle}>
-                <p style={roomCardTitleStyle}>{room.name || `Room ${index + 1}`}</p>
-                <button
-                  type="button"
-                  style={roomRemoveButtonStyle}
-                  onClick={() => removeRoom(room.id)}
-                >
-                  Remove
-                </button>
-              </div>
+          {roomDuctRecommendations.map(({ room, roomCfm, estimatedRoomBtu, roomLoadFactor, airflowPerRegister, registerAirflowStatus, registerSizeGuidance, ductRecommendation }, index) => {
+            const isLinkedBlueprintRoom =
+              Boolean(selectedBlueprintRoomId) &&
+              room.blueprintSourceRoomId === selectedBlueprintRoomId;
+
+            return (
+              <div
+                id={`manual-d-room-card-${room.id}`}
+                key={room.id}
+                style={isLinkedBlueprintRoom ? { ...roomCardStyle, ...roomCardLinkedHighlightStyle } : roomCardStyle}
+                onClick={() => selectManualDRoom(room)}
+              >
+                <div style={roomCardHeaderStyle}>
+                  <p style={roomCardTitleStyle}>{room.name || `Room ${index + 1}`}</p>
+                  <button
+                    type="button"
+                    style={roomRemoveButtonStyle}
+                    onClick={() => removeRoom(room.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
 
               <div style={roomCardSectionStyle}>
                 <p style={roomCardSectionTitleStyle}>Room Info</p>
@@ -1499,8 +1534,9 @@ export default function ManualDPanel({
               >
                 {ductRecommendation.status.toUpperCase()}: {ductRecommendation.message}
               </p>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
       <section className="manual-d-print-report-only" style={manualDPrintReportStyle}>
@@ -2000,6 +2036,12 @@ const roomCardStyle: React.CSSProperties = {
   borderRadius: "16px",
   background: "rgba(255,255,255,0.03)",
   border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const roomCardLinkedHighlightStyle: React.CSSProperties = {
+  border: "1px solid rgba(212,175,55,0.44)",
+  background: "rgba(212,175,55,0.08)",
+  boxShadow: "0 0 0 3px rgba(212,175,55,0.08)",
 };
 
 const roomCardHeaderStyle: React.CSSProperties = {
