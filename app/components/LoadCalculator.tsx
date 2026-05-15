@@ -4,8 +4,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
+import {
+  calculateBlueprintMeasuredFeet,
+  createDefaultBlueprintCalibrationState,
+  selectBlueprintCalibrationPoint,
+  updateBlueprintCalibrationKnownLength,
+} from "@/lib/hvac/blueprintCalibration";
 import { detectRoomsFromBlueprint } from "@/lib/hvac/blueprintDetection";
 import type { DetectedBlueprintRoom, DetectedRoomWorkflowStatus } from "@/lib/hvac/blueprintDetection";
+import {
+  addBlueprintRoomTracePoint,
+  createDefaultBlueprintRoomTraceState,
+  finishBlueprintRoomTrace,
+  startBlueprintRoomTrace,
+} from "@/lib/hvac/blueprintRoomTracing";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -167,6 +179,8 @@ export default function LoadCalculator() {
   const [blueprintFile, setBlueprintFile] = useState<File | null>(null);
   const [blueprintPreviewUrl, setBlueprintPreviewUrl] = useState("");
   const [blueprintZoom, setBlueprintZoom] = useState(1);
+  const [blueprintCalibration, setBlueprintCalibration] = useState(createDefaultBlueprintCalibrationState);
+  const [blueprintRoomTrace, setBlueprintRoomTrace] = useState(createDefaultBlueprintRoomTraceState);
   const [blueprintDetectionPipeline, setBlueprintDetectionPipeline] =
     useState<BlueprintDetectionPipeline>({
       mode: "preview",
@@ -181,6 +195,8 @@ export default function LoadCalculator() {
   const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [projectActionMessage, setProjectActionMessage] = useState("");
+  const isBlueprintWorkspaceActive =
+    activeLoadView === "technician" && activeTechnicianSection === "manual-room-takeoff";
 
   const options = {
     insulation: [
@@ -445,6 +461,8 @@ export default function LoadCalculator() {
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
     setBlueprintZoom(1);
+    setBlueprintCalibration(createDefaultBlueprintCalibrationState());
+    setBlueprintRoomTrace(createDefaultBlueprintRoomTraceState());
     setSelectedDetectedRoomId(null);
     setBlueprintDetectionPipeline({
       mode: "preview",
@@ -549,6 +567,60 @@ export default function LoadCalculator() {
       ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
+  const selectBlueprintCalibrationPointFromPreview = (event: React.MouseEvent<HTMLDivElement>) => {
+    const overlayBounds = event.currentTarget.getBoundingClientRect();
+    const xPercent = Math.min(
+      100,
+      Math.max(0, ((event.clientX - overlayBounds.left) / overlayBounds.width) * 100)
+    );
+    const yPercent = Math.min(
+      100,
+      Math.max(0, ((event.clientY - overlayBounds.top) / overlayBounds.height) * 100)
+    );
+
+    if (blueprintRoomTrace.isTracing) {
+      setBlueprintRoomTrace((currentTrace) =>
+        addBlueprintRoomTracePoint(currentTrace, { xPercent, yPercent })
+      );
+      return;
+    }
+
+    setBlueprintCalibration((currentCalibration) =>
+      selectBlueprintCalibrationPoint(currentCalibration, { xPercent, yPercent }, {
+        widthPx: overlayBounds.width / blueprintZoom,
+        heightPx: overlayBounds.height / blueprintZoom,
+      })
+    );
+  };
+
+  const startBlueprintRoomOutlineTrace = () => {
+    setBlueprintRoomTrace((currentTrace) => startBlueprintRoomTrace(currentTrace));
+  };
+
+  const finishBlueprintRoomOutlineTrace = () => {
+    setBlueprintRoomTrace((currentTrace) => finishBlueprintRoomTrace(currentTrace));
+  };
+
+  const updateBlueprintCalibrationKnownLengthInput = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const overlayElement = document.getElementById("blueprint-calibration-overlay");
+    const overlayBounds = overlayElement?.getBoundingClientRect();
+
+    setBlueprintCalibration((currentCalibration) =>
+      updateBlueprintCalibrationKnownLength(
+        currentCalibration,
+        event.target.value,
+        overlayBounds
+          ? {
+              widthPx: overlayBounds.width / blueprintZoom,
+              heightPx: overlayBounds.height / blueprintZoom,
+            }
+          : undefined
+      )
+    );
+  };
+
   const scrollToTakeoffElement = (element: HTMLElement | null) => {
     element?.scrollIntoView({ behavior: "smooth", block: "center" });
     element?.focus?.();
@@ -638,6 +710,20 @@ export default function LoadCalculator() {
       ductRecommendation,
     };
   }, [result.recommendedTonnage, selectedDetectedRoom, squareFeet]);
+
+  const blueprintCalibrationStatusText =
+    blueprintCalibration.status === "calibrated" ? "Calibrated" : "Calibration Needed";
+  const blueprintCalibrationScaleText =
+    blueprintCalibration.pixelsPerFoot === null
+      ? "Select two points and enter a known length"
+      : `${blueprintCalibration.pixelsPerFoot.toFixed(2)} px / ft`;
+  const blueprintMeasuredFeet = calculateBlueprintMeasuredFeet(
+    blueprintCalibration.pixelsDistance,
+    blueprintCalibration.pixelsPerFoot
+  );
+  const blueprintRoomTraceStatusText = blueprintRoomTrace.isTracing
+    ? `${blueprintRoomTrace.draftPoints.length} point${blueprintRoomTrace.draftPoints.length === 1 ? "" : "s"} selected`
+    : `${blueprintRoomTrace.roomOutlines.length} outline${blueprintRoomTrace.roomOutlines.length === 1 ? "" : "s"} saved`;
 
   const snapshotSummary = useMemo(() => {
     const sqft = Math.max(0, parseInt(squareFeet, 10) || 0);
@@ -952,6 +1038,15 @@ const averageTonnage = (minTon + maxTon) / 2;
             .blueprint-takeoff-grid {
               align-items: flex-end !important;
             }
+
+            .blueprint-drafting-workspace {
+              grid-template-columns: 1fr !important;
+            }
+
+            .blueprint-workspace-sidebar,
+            .blueprint-workspace-inspector {
+              position: static !important;
+            }
           }
 
           @media (max-width: 640px) {
@@ -1081,6 +1176,10 @@ const averageTonnage = (minTon + maxTon) / 2;
               gap: 12px !important;
             }
 
+            .blueprint-drafting-workspace {
+              gap: 12px !important;
+            }
+
             .blueprint-takeoff-grid {
               display: grid !important;
               grid-template-columns: 1fr 1fr !important;
@@ -1127,7 +1226,10 @@ const averageTonnage = (minTon + maxTon) / 2;
         </button>
       </div>
 
-      <div className="load-calculator-grid" style={calcGridStyle}>
+      <div
+        className="load-calculator-grid"
+        style={isBlueprintWorkspaceActive ? { ...calcGridStyle, gridTemplateColumns: "1fr" } : calcGridStyle}
+      >
         <div className="load-calculator-left" style={leftColumnStyle}>
           {activeLoadView === "customer" ? (
             <div className="load-section-panel" style={sectionPanelStyle}>
@@ -1539,65 +1641,114 @@ const averageTonnage = (minTon + maxTon) / 2;
               display: activeTechnicianSection === "manual-room-takeoff" ? "flex" : "none",
             }}
           >
-            <div style={sectionPanelHeaderStyle}>
-              <div style={sectionPanelIconStyle}>
-                <Layers size={18} strokeWidth={1.8} />
-              </div>
-              <div>
-                <p style={sectionPanelTitleStyle}>Manual Room Takeoff</p>
-                <p style={sectionPanelDescriptionStyle}>Measure rooms and send them into Manual D.</p>
-              </div>
-            </div>
+            <div className="blueprint-drafting-workspace" style={blueprintDraftingWorkspaceStyle}>
+              <aside className="blueprint-workspace-sidebar" style={blueprintWorkspaceSidebarStyle}>
+                <div style={sectionPanelHeaderStyle}>
+                  <div style={sectionPanelIconStyle}>
+                    <Layers size={18} strokeWidth={1.8} />
+                  </div>
+                  <div>
+                    <p style={sectionPanelTitleStyle}>Manual Room Takeoff</p>
+                    <p style={sectionPanelDescriptionStyle}>Draft rooms from a calibrated blueprint.</p>
+                  </div>
+                </div>
 
-            <p style={blueprintTakeoffNoteStyle}>
-              AI detection coming soon — verify all rooms before using calculations.
-            </p>
+                <p style={blueprintTakeoffNoteStyle}>
+                  AI detection coming soon — verify all rooms before using calculations.
+                </p>
 
-            <div style={blueprintWorkflowStyle}>
-              {[
-                "1. Upload Blueprint",
-                "2. Review Preview",
-                "3. Detect Rooms - Preview Mode",
-                "4. Confirm Rooms",
-                "5. Send to Manual J / Manual D",
-              ].map((step, index) => (
-                <button
-                  type="button"
-                  key={step}
-                  style={index === 2 ? blueprintWorkflowStepDisabledStyle : blueprintWorkflowStepStyle}
-                  disabled={index === 2}
-                  onClick={() => handleBlueprintWorkflowStep(index)}
-                >
-                  {step}
-                </button>
-              ))}
-            </div>
+                <div style={blueprintWorkflowStyle}>
+                  {[
+                    "1. Upload Blueprint",
+                    "2. Review Preview",
+                    "3. Detect Rooms - Preview Mode",
+                    "4. Confirm Rooms",
+                    "5. Send to Manual J / Manual D",
+                  ].map((step, index) => (
+                    <button
+                      type="button"
+                      key={step}
+                      style={index === 2 ? blueprintWorkflowStepDisabledStyle : blueprintWorkflowStepStyle}
+                      disabled={index === 2}
+                      onClick={() => handleBlueprintWorkflowStep(index)}
+                    >
+                      {step}
+                    </button>
+                  ))}
+                </div>
 
-            <div style={blueprintUploadRowStyle}>
-              <label className="blueprint-upload-button" style={blueprintUploadButtonStyle}>
-                Upload Blueprint
-                <input
-                  ref={blueprintFileInputRef}
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                  onChange={handleBlueprintFileChange}
-                  style={blueprintUploadInputStyle}
-                />
-              </label>
-              <p style={blueprintUploadFileNameStyle}>
-                {blueprintFileName || "No blueprint selected"}
-              </p>
-              <button type="button" disabled style={blueprintDetectButtonStyle}>
-                Detect Rooms - Preview Mode
-              </button>
-            </div>
+                <div style={blueprintUploadRowStyle}>
+                  <label className="blueprint-upload-button" style={blueprintUploadButtonStyle}>
+                    Upload Blueprint
+                    <input
+                      ref={blueprintFileInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                      onChange={handleBlueprintFileChange}
+                      style={blueprintUploadInputStyle}
+                    />
+                  </label>
+                  <p style={blueprintUploadFileNameStyle}>
+                    {blueprintFileName || "No blueprint selected"}
+                  </p>
+                  <button type="button" disabled style={blueprintDetectButtonStyle}>
+                    Detect Rooms - Preview Mode
+                  </button>
+                </div>
 
-            {blueprintFile ? (
-              <div ref={blueprintPreviewRef} tabIndex={-1} style={blueprintWorkspaceStyle}>
+              </aside>
+
+              <section className="blueprint-workspace-main" style={blueprintWorkspaceMainStyle}>
+                {blueprintFile ? (
+                  <div ref={blueprintPreviewRef} tabIndex={-1} style={blueprintWorkspaceStyle}>
                 <div style={blueprintWorkspaceToolbarStyle}>
                   <div>
                     <p style={blueprintWorkspaceLabelStyle}>Review Preview</p>
                     <p style={blueprintWorkspaceMetaStyle}>{Math.round(blueprintZoom * 100)}% zoom</p>
+                  </div>
+                  <div style={blueprintCalibrationInlineStyle}>
+                    <div>
+                      <p style={blueprintCalibrationStatusStyle}>{blueprintCalibrationStatusText}</p>
+                      <p style={blueprintCalibrationHelperStyle}>{blueprintCalibrationScaleText}</p>
+                    </div>
+                    <label style={blueprintCalibrationInputGroupStyle}>
+                      <span style={blueprintCalibrationInputLabelStyle}>Known Length (ft)</span>
+                      <input
+                        className="load-input blueprint-takeoff-control"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={blueprintCalibration.realWorldDistance}
+                        onChange={updateBlueprintCalibrationKnownLengthInput}
+                        aria-label="Known blueprint calibration length in feet"
+                        style={blueprintCalibrationInputStyle}
+                      />
+                    </label>
+                  </div>
+                  <div style={blueprintTraceInlineStyle}>
+                    <div>
+                      <p style={blueprintCalibrationStatusStyle}>Room Outline</p>
+                      <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
+                    </div>
+                    <button
+                      type="button"
+                      style={blueprintTraceButtonStyle}
+                      onClick={startBlueprintRoomOutlineTrace}
+                    >
+                      Trace
+                    </button>
+                    <button
+                      type="button"
+                      style={
+                        blueprintRoomTrace.draftPoints.length >= 3
+                          ? blueprintTraceButtonStyle
+                          : { ...blueprintTraceButtonStyle, ...blueprintTraceButtonDisabledStyle }
+                      }
+                      disabled={blueprintRoomTrace.draftPoints.length < 3}
+                      onClick={finishBlueprintRoomOutlineTrace}
+                    >
+                      Finish Room Outline
+                    </button>
                   </div>
                   <div style={blueprintZoomControlsStyle}>
                     <button type="button" style={blueprintZoomButtonStyle} onClick={zoomBlueprintOut}>
@@ -1628,6 +1779,109 @@ const averageTonnage = (minTon + maxTon) / 2;
                         <p style={blueprintPdfPreviewTextStyle}>{blueprintFileName}</p>
                       </div>
                     )}
+                    <div
+                      id="blueprint-calibration-overlay"
+                      style={blueprintCalibrationOverlayStyle}
+                      aria-label="Blueprint calibration point selection overlay"
+                      onClick={selectBlueprintCalibrationPointFromPreview}
+                    >
+                      {blueprintRoomTrace.roomOutlines.map((outline) => (
+                        <svg
+                          key={outline.id}
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
+                          style={blueprintRoomOutlineSvgStyle}
+                          aria-hidden="true"
+                        >
+                          <polygon
+                            points={outline.points.map((point) => `${point.xPercent},${point.yPercent}`).join(" ")}
+                            style={blueprintRoomOutlinePolygonStyle}
+                          />
+                        </svg>
+                      ))}
+                      {blueprintRoomTrace.draftPoints.length > 0 ? (
+                        <svg
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
+                          style={blueprintRoomOutlineSvgStyle}
+                          aria-hidden="true"
+                        >
+                          <polyline
+                            points={blueprintRoomTrace.draftPoints.map((point) => `${point.xPercent},${point.yPercent}`).join(" ")}
+                            style={blueprintRoomDraftLineStyle}
+                          />
+                          {blueprintRoomTrace.draftPoints.length >= 3 ? (
+                            <polygon
+                              points={blueprintRoomTrace.draftPoints.map((point) => `${point.xPercent},${point.yPercent}`).join(" ")}
+                              style={blueprintRoomDraftPolygonStyle}
+                            />
+                          ) : null}
+                        </svg>
+                      ) : null}
+                      {blueprintRoomTrace.draftPoints.map((point, index) => (
+                        <span
+                          key={`blueprint-room-draft-point-${index}-${point.xPercent}-${point.yPercent}`}
+                          style={{
+                            ...blueprintRoomTracePointStyle,
+                            left: `${point.xPercent}%`,
+                            top: `${point.yPercent}%`,
+                          }}
+                        >
+                          {index + 1}
+                        </span>
+                      ))}
+                      {blueprintCalibration.startPoint && blueprintCalibration.endPoint ? (
+                        <>
+                          <svg
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                            style={blueprintCalibrationLineSvgStyle}
+                            aria-hidden="true"
+                          >
+                            <line
+                              x1={blueprintCalibration.startPoint.xPercent}
+                              y1={blueprintCalibration.startPoint.yPercent}
+                              x2={blueprintCalibration.endPoint.xPercent}
+                              y2={blueprintCalibration.endPoint.yPercent}
+                              style={blueprintCalibrationLineStyle}
+                            />
+                          </svg>
+                          {blueprintMeasuredFeet !== null ? (
+                            <span
+                              style={{
+                                ...blueprintMeasurementLabelStyle,
+                                left: `${(blueprintCalibration.startPoint.xPercent + blueprintCalibration.endPoint.xPercent) / 2}%`,
+                                top: `${(blueprintCalibration.startPoint.yPercent + blueprintCalibration.endPoint.yPercent) / 2}%`,
+                              }}
+                            >
+                              {blueprintMeasuredFeet.toFixed(2)} ft
+                            </span>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {blueprintCalibration.startPoint ? (
+                        <span
+                          style={{
+                            ...blueprintCalibrationPointStyle,
+                            left: `${blueprintCalibration.startPoint.xPercent}%`,
+                            top: `${blueprintCalibration.startPoint.yPercent}%`,
+                          }}
+                        >
+                          A
+                        </span>
+                      ) : null}
+                      {blueprintCalibration.endPoint ? (
+                        <span
+                          style={{
+                            ...blueprintCalibrationPointStyle,
+                            left: `${blueprintCalibration.endPoint.xPercent}%`,
+                            top: `${blueprintCalibration.endPoint.yPercent}%`,
+                          }}
+                        >
+                          B
+                        </span>
+                      ) : null}
+                    </div>
                     {detectedBlueprintRooms.length > 0 ? (
                       <div style={blueprintOverlayLayerStyle} aria-label="Detected room preview overlay">
                         {detectedBlueprintRooms.map((room) => {
@@ -1654,6 +1908,49 @@ const averageTonnage = (minTon + maxTon) / 2;
                         })}
                       </div>
                     ) : null}
+                  </div>
+                </div>
+
+                  </div>
+                ) : (
+                  <div style={blueprintWorkspaceEmptyStyle}>
+                    <p style={blueprintWorkspaceLabelStyle}>No blueprint selected</p>
+                    <p style={blueprintWorkspaceMetaStyle}>Upload a PDF or image from the workflow rail to begin drafting.</p>
+                  </div>
+                )}
+              </section>
+
+              <aside className="blueprint-workspace-inspector" style={blueprintWorkspaceInspectorStyle}>
+                <div style={blueprintInspectorCardStyle}>
+                  <p style={blueprintCalibrationStatusStyle}>{blueprintCalibrationStatusText}</p>
+                  <p style={blueprintCalibrationHelperStyle}>{blueprintCalibrationScaleText}</p>
+                  <label style={{ ...blueprintCalibrationInputGroupStyle, marginTop: "10px" }}>
+                    <span style={blueprintCalibrationInputLabelStyle}>Known Length (ft)</span>
+                    <input
+                      className="load-input blueprint-takeoff-control"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={blueprintCalibration.realWorldDistance}
+                      onChange={updateBlueprintCalibrationKnownLengthInput}
+                      aria-label="Known blueprint calibration length in feet"
+                      style={blueprintCalibrationInputStyle}
+                    />
+                  </label>
+                </div>
+
+                <div style={blueprintInspectorCardStyle}>
+                  <p style={blueprintCalibrationStatusStyle}>Drafting</p>
+                  <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
+                  <div style={blueprintInspectorMetricGridStyle}>
+                    <div style={blueprintAirflowPreviewMetricStyle}>
+                      <span style={blueprintAirflowPreviewMetricLabelStyle}>Detected Rooms</span>
+                      <strong>{detectedBlueprintRooms.length}</strong>
+                    </div>
+                    <div style={blueprintAirflowPreviewMetricStyle}>
+                      <span style={blueprintAirflowPreviewMetricLabelStyle}>Outlines</span>
+                      <strong>{blueprintRoomTrace.roomOutlines.length}</strong>
+                    </div>
                   </div>
                 </div>
 
@@ -1685,11 +1982,20 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     </div>
                   </div>
-                ) : null}
-              </div>
-            ) : null}
+                ) : (
+                  <div style={blueprintInspectorCardStyle}>
+                    <p style={blueprintCalibrationStatusStyle}>Inspector</p>
+                    <p style={blueprintCalibrationHelperStyle}>Select a detected room to preview airflow and duct guidance.</p>
+                  </div>
+                )}
+              </aside>
+            </div>
 
-            <div ref={detectedRoomsRef} tabIndex={-1} style={detectedRoomsSectionStyle}>
+            <details style={blueprintDrawerStyle}>
+              <summary style={blueprintDrawerSummaryStyle}>
+                Detected Rooms · {detectedBlueprintRooms.length}
+              </summary>
+              <div ref={detectedRoomsRef} tabIndex={-1} style={detectedRoomsSectionStyle}>
               <div>
                 <p style={blueprintManualFallbackLabelStyle}>Detected Rooms</p>
                 <p style={detectedRoomsNoteStyle}>
@@ -1828,7 +2134,8 @@ const averageTonnage = (minTon + maxTon) / 2;
                   );
                 })}
               </div>
-            </div>
+              </div>
+            </details>
 
             <p style={blueprintManualFallbackLabelStyle}>Manual room takeoff fallback</p>
             <div ref={manualTakeoffRef} tabIndex={-1} className="blueprint-takeoff-grid" style={blueprintTakeoffGridStyle}>
@@ -1928,7 +2235,10 @@ const averageTonnage = (minTon + maxTon) / 2;
           )}
         </div>
 
-        <div className="load-calculator-right" style={rightColumnStyle}>
+        <div
+          className="load-calculator-right"
+          style={isBlueprintWorkspaceActive ? { ...rightColumnStyle, display: "none" } : rightColumnStyle}
+        >
           {activeLoadView === "customer" ? (
             <>
               <div className="load-result-header" style={resultHeaderCardStyle}>
@@ -2541,6 +2851,52 @@ const blueprintTakeoffGridStyle: React.CSSProperties = {
   gap: "10px",
 };
 
+const blueprintDraftingWorkspaceStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "260px minmax(520px, 1fr) 280px",
+  alignItems: "start",
+  gap: "14px",
+};
+
+const blueprintWorkspaceSidebarStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  alignContent: "start",
+  position: "sticky",
+  top: "12px",
+};
+
+const blueprintWorkspaceMainStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  minWidth: 0,
+};
+
+const blueprintWorkspaceInspectorStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "12px",
+  alignContent: "start",
+  position: "sticky",
+  top: "12px",
+  minWidth: 0,
+};
+
+const blueprintInspectorCardStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+  padding: "12px",
+  borderRadius: "14px",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(15,23,42,0.58)",
+};
+
+const blueprintInspectorMetricGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "8px",
+  marginTop: "8px",
+};
+
 const blueprintTakeoffNoteStyle: React.CSSProperties = {
   margin: 0,
   color: "#cbd5e1",
@@ -2550,7 +2906,7 @@ const blueprintTakeoffNoteStyle: React.CSSProperties = {
 
 const blueprintWorkflowStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gridTemplateColumns: "1fr",
   gap: "8px",
 };
 
@@ -2636,11 +2992,24 @@ const blueprintWorkspaceStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.03)",
 };
 
+const blueprintWorkspaceEmptyStyle: React.CSSProperties = {
+  minHeight: "clamp(420px, 58vh, 720px)",
+  display: "grid",
+  placeContent: "center",
+  gap: "6px",
+  padding: "24px",
+  borderRadius: "18px",
+  border: "1px dashed rgba(212,175,55,0.22)",
+  background: "rgba(3,7,18,0.42)",
+  textAlign: "center",
+};
+
 const blueprintWorkspaceToolbarStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
   gap: "12px",
+  flexWrap: "wrap",
 };
 
 const blueprintWorkspaceLabelStyle: React.CSSProperties = {
@@ -2663,6 +3032,88 @@ const blueprintZoomControlsStyle: React.CSSProperties = {
   gap: "8px",
 };
 
+const blueprintCalibrationInlineStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  padding: "8px 10px",
+  borderRadius: "12px",
+  border: "1px solid rgba(212,175,55,0.18)",
+  background: "rgba(15,23,42,0.64)",
+};
+
+const blueprintCalibrationStatusStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#d4af37",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+};
+
+const blueprintCalibrationHelperStyle: React.CSSProperties = {
+  margin: "3px 0 0",
+  color: "#94a3b8",
+  fontSize: "11px",
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const blueprintCalibrationInputGroupStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+  minWidth: "112px",
+};
+
+const blueprintCalibrationInputLabelStyle: React.CSSProperties = {
+  color: "#cbd5e1",
+  fontSize: "10px",
+  fontWeight: 900,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+};
+
+const blueprintCalibrationInputStyle: React.CSSProperties = {
+  width: "112px",
+  height: "30px",
+  borderRadius: "10px",
+  border: "1px solid rgba(212,175,55,0.24)",
+  background: "rgba(15,23,42,0.82)",
+  color: "#f8fafc",
+  fontSize: "12px",
+  fontWeight: 800,
+  padding: "0 9px",
+};
+
+const blueprintTraceInlineStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "8px 10px",
+  borderRadius: "12px",
+  border: "1px solid rgba(148,163,184,0.18)",
+  background: "rgba(15,23,42,0.5)",
+};
+
+const blueprintTraceButtonStyle: React.CSSProperties = {
+  minHeight: "30px",
+  border: "1px solid rgba(212,175,55,0.28)",
+  borderRadius: "10px",
+  background: "rgba(212,175,55,0.14)",
+  color: "#f8fafc",
+  fontSize: "11px",
+  fontWeight: 900,
+  padding: "0 10px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const blueprintTraceButtonDisabledStyle: React.CSSProperties = {
+  opacity: 0.45,
+  cursor: "not-allowed",
+};
+
 const blueprintZoomButtonStyle: React.CSSProperties = {
   width: "34px",
   height: "34px",
@@ -2677,7 +3128,7 @@ const blueprintZoomButtonStyle: React.CSSProperties = {
 };
 
 const blueprintViewportStyle: React.CSSProperties = {
-  height: "260px",
+  height: "clamp(420px, 58vh, 720px)",
   overflow: "auto",
   borderRadius: "14px",
   border: "1px solid rgba(255,255,255,0.08)",
@@ -2736,11 +3187,118 @@ const blueprintPdfPreviewTextStyle: React.CSSProperties = {
   overflowWrap: "anywhere",
 };
 
+const blueprintCalibrationOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  minWidth: "620px",
+  cursor: "crosshair",
+  zIndex: 1,
+};
+
+const blueprintCalibrationLineSvgStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  pointerEvents: "none",
+  overflow: "visible",
+};
+
+const blueprintCalibrationLineStyle: React.CSSProperties = {
+  stroke: "rgba(250,204,21,0.95)",
+  strokeWidth: 0.35,
+  strokeDasharray: "1.4 1",
+  vectorEffect: "non-scaling-stroke",
+};
+
+const blueprintCalibrationPointStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "22px",
+  height: "22px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "999px",
+  border: "2px solid rgba(250,204,21,0.95)",
+  background: "rgba(15,23,42,0.88)",
+  boxShadow: "0 10px 22px rgba(0,0,0,0.32)",
+  color: "#f8fafc",
+  fontSize: "11px",
+  fontWeight: 900,
+  transform: "translate(-50%, -50%)",
+  pointerEvents: "none",
+};
+
+const blueprintMeasurementLabelStyle: React.CSSProperties = {
+  position: "absolute",
+  padding: "5px 8px",
+  borderRadius: "999px",
+  border: "1px solid rgba(250,204,21,0.74)",
+  background: "rgba(15,23,42,0.9)",
+  boxShadow: "0 10px 22px rgba(0,0,0,0.32)",
+  color: "#f8fafc",
+  fontSize: "11px",
+  fontWeight: 900,
+  transform: "translate(-50%, -50%)",
+  pointerEvents: "none",
+  whiteSpace: "nowrap",
+};
+
+const blueprintRoomOutlineSvgStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  pointerEvents: "none",
+  overflow: "visible",
+};
+
+const blueprintRoomOutlinePolygonStyle: React.CSSProperties = {
+  fill: "rgba(56,189,248,0.12)",
+  stroke: "rgba(56,189,248,0.82)",
+  strokeWidth: 0.32,
+  vectorEffect: "non-scaling-stroke",
+};
+
+const blueprintRoomDraftPolygonStyle: React.CSSProperties = {
+  fill: "rgba(212,175,55,0.1)",
+  stroke: "rgba(250,204,21,0.76)",
+  strokeWidth: 0.28,
+  vectorEffect: "non-scaling-stroke",
+};
+
+const blueprintRoomDraftLineStyle: React.CSSProperties = {
+  fill: "none",
+  stroke: "rgba(250,204,21,0.92)",
+  strokeWidth: 0.32,
+  strokeDasharray: "1.5 1",
+  vectorEffect: "non-scaling-stroke",
+};
+
+const blueprintRoomTracePointStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "20px",
+  height: "20px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "999px",
+  border: "2px solid rgba(56,189,248,0.88)",
+  background: "rgba(15,23,42,0.88)",
+  boxShadow: "0 10px 22px rgba(0,0,0,0.3)",
+  color: "#f8fafc",
+  fontSize: "10px",
+  fontWeight: 900,
+  transform: "translate(-50%, -50%)",
+  pointerEvents: "none",
+};
+
 const blueprintOverlayLayerStyle: React.CSSProperties = {
   position: "absolute",
   inset: 0,
   minWidth: "620px",
   pointerEvents: "none",
+  zIndex: 2,
 };
 
 const blueprintOverlayMarkerStyle: React.CSSProperties = {
@@ -2832,10 +3390,27 @@ const blueprintAirflowPreviewMetricLabelStyle: React.CSSProperties = {
 const detectedRoomsSectionStyle: React.CSSProperties = {
   display: "grid",
   gap: "10px",
+  padding: "12px 0 0",
+  borderRadius: "16px",
+  border: "0",
+  background: "transparent",
+};
+
+const blueprintDrawerStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "10px",
   padding: "12px",
   borderRadius: "16px",
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.025)",
+};
+
+const blueprintDrawerSummaryStyle: React.CSSProperties = {
+  color: "#f8fafc",
+  fontSize: "12px",
+  fontWeight: 950,
+  cursor: "pointer",
+  listStyle: "revert",
 };
 
 const detectedRoomsNoteStyle: React.CSSProperties = {
