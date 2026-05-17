@@ -85,6 +85,17 @@ export function startBlueprintRoomTrace(
   };
 }
 
+export function startBlueprintRoomTraceFromPoints(
+  currentState: BlueprintRoomTraceState,
+  points: BlueprintCalibrationPoint[]
+): BlueprintRoomTraceState {
+  return {
+    ...currentState,
+    isTracing: true,
+    draftPoints: points.map((point) => ({ ...point })),
+  };
+}
+
 export function addBlueprintRoomTracePoint(
   currentState: BlueprintRoomTraceState,
   point: BlueprintCalibrationPoint,

@@ -31,6 +31,7 @@ import {
   removeBlueprintRoomOutline,
   renameBlueprintRoomOutline,
   startBlueprintRoomTrace,
+  startBlueprintRoomTraceFromPoints,
   undoBlueprintRoomTracePoint,
 } from "@/lib/hvac/blueprintRoomTracing";
 import {
@@ -129,6 +130,7 @@ const dedupeSavedProjects = (projects: SavedProject[]) => {
 
 function getDetectedRoomStatusLabel(status: DetectedRoomWorkflowStatus) {
   if (status === "sent-to-manual-d") return "Sent to Manual D";
+  if (status === "converted-to-trace") return "Converted to Trace";
   if (status === "confirmed") return "Confirmed";
   return "Needs Review";
 }
@@ -138,7 +140,7 @@ function getDetectedRoomStatusStyle(status: DetectedRoomWorkflowStatus): React.C
     return { ...detectedRoomWorkflowBadgeStyle, ...detectedRoomSentBadgeStyle };
   }
 
-  if (status === "confirmed") {
+  if (status === "confirmed" || status === "converted-to-trace") {
     return { ...detectedRoomWorkflowBadgeStyle, ...detectedRoomConfirmedBadgeStyle };
   }
 
@@ -626,6 +628,33 @@ export default function LoadCalculator() {
       rooms: currentPipeline.rooms.filter((room) => room.id !== roomId),
     }));
     setDetectedRoomActionMessage("Room removed");
+  };
+
+  const useDetectedRoomAsTrace = (room: DetectedBlueprintRoom) => {
+    const leftPercent = room.overlay.leftPercent;
+    const topPercent = room.overlay.topPercent;
+    const rightPercent = Math.min(100, leftPercent + room.overlay.widthPercent);
+    const bottomPercent = Math.min(100, topPercent + room.overlay.heightPercent);
+
+    setBlueprintWorkspaceMode("manual-trace");
+    setSelectedDetectedRoomId(room.id);
+    setBlueprintRoomTrace((currentTrace) =>
+      startBlueprintRoomTraceFromPoints(currentTrace, [
+        { xPercent: leftPercent, yPercent: topPercent },
+        { xPercent: rightPercent, yPercent: topPercent },
+        { xPercent: rightPercent, yPercent: bottomPercent },
+        { xPercent: leftPercent, yPercent: bottomPercent },
+      ])
+    );
+    setBlueprintDetectionPipeline((currentPipeline) => ({
+      ...currentPipeline,
+      rooms: currentPipeline.rooms.map((currentRoom) =>
+        currentRoom.id === room.id
+          ? { ...currentRoom, confirmed: true, workflowStatus: "converted-to-trace" }
+          : currentRoom
+      ),
+    }));
+    setDetectedRoomActionMessage("Detected room converted to editable trace. Adjust points, then finish the outline.");
   };
 
   const sendDetectedRoomToManualD = (room: DetectedBlueprintRoom) => {
@@ -2578,6 +2607,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                           }}
                         >
                           Confirm
+                        </button>
+                        <button
+                          type="button"
+                          style={detectedRoomButtonStyle}
+                          onClick={() => useDetectedRoomAsTrace(room)}
+                          onPointerUp={(event) => {
+                            if (event.pointerType === "mouse") return;
+                            event.preventDefault();
+                            useDetectedRoomAsTrace(room);
+                          }}
+                        >
+                          Use as Trace
                         </button>
                         <button
                           type="button"

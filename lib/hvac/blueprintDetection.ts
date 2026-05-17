@@ -1,4 +1,8 @@
-export type DetectedRoomWorkflowStatus = "needs-review" | "confirmed" | "sent-to-manual-d";
+export type DetectedRoomWorkflowStatus =
+  | "needs-review"
+  | "confirmed"
+  | "converted-to-trace"
+  | "sent-to-manual-d";
 
 export type DetectedBlueprintRoom = {
   id: string;
