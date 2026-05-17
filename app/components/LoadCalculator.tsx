@@ -33,6 +33,7 @@ import {
   startBlueprintRoomTrace,
   startBlueprintRoomTraceFromPoints,
   undoBlueprintRoomTracePoint,
+  updateBlueprintRoomTracePoint,
 } from "@/lib/hvac/blueprintRoomTracing";
 import {
   adaptDetectedRoomToManualDBlueprintRoom,
@@ -213,6 +214,7 @@ export default function LoadCalculator() {
   const blueprintImageRef = useRef<HTMLImageElement | null>(null);
   const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
   const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
+  const suppressNextBlueprintOverlayClickRef = useRef(false);
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
   const [activeTechnicianSection, setActiveTechnicianSection] = useState<TechnicianSection>("manual-d");
   const [squareFeet, setSquareFeet] = useState("2200");
@@ -246,6 +248,7 @@ export default function LoadCalculator() {
   const [blueprintOverlaySize, setBlueprintOverlaySize] = useState({ widthPx: 0, heightPx: 0 });
   const [blueprintCalibration, setBlueprintCalibration] = useState(createDefaultBlueprintCalibrationState);
   const [blueprintRoomTrace, setBlueprintRoomTrace] = useState(createDefaultBlueprintRoomTraceState);
+  const [draggingTracePointIndex, setDraggingTracePointIndex] = useState<number | null>(null);
   const [blueprintWorkspaceMode, setBlueprintWorkspaceMode] =
     useState<BlueprintWorkspaceMode>("manual-trace");
   const [isVerificationMode, setIsVerificationMode] = useState(false);
@@ -706,7 +709,48 @@ export default function LoadCalculator() {
     };
   };
 
+  const getBlueprintOverlayPointFromPointer = (
+    event: React.PointerEvent<HTMLDivElement | HTMLSpanElement>
+  ) => {
+    const overlayElement = blueprintOverlayRef.current;
+    const overlayBounds = overlayElement?.getBoundingClientRect();
+    if (!overlayBounds) return null;
+
+    return {
+      xPercent: Math.min(
+        100,
+        Math.max(0, ((event.clientX - overlayBounds.left) / overlayBounds.width) * 100)
+      ),
+      yPercent: Math.min(
+        100,
+        Math.max(0, ((event.clientY - overlayBounds.top) / overlayBounds.height) * 100)
+      ),
+    };
+  };
+
+  const moveDraggedBlueprintTracePoint = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingTracePointIndex === null) return;
+
+    const nextPoint = getBlueprintOverlayPointFromPointer(event);
+    if (!nextPoint) return;
+
+    setBlueprintRoomTrace((currentTrace) =>
+      updateBlueprintRoomTracePoint(currentTrace, draggingTracePointIndex, nextPoint)
+    );
+  };
+
+  const finishDraggingBlueprintTracePoint = () => {
+    setDraggingTracePointIndex(null);
+  };
+
   const selectBlueprintCalibrationPointFromPreview = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressNextBlueprintOverlayClickRef.current) {
+      suppressNextBlueprintOverlayClickRef.current = false;
+      return;
+    }
+
+    if (draggingTracePointIndex !== null) return;
+
     const overlayBounds = event.currentTarget.getBoundingClientRect();
     let xPercent = Math.min(
       100,
@@ -2159,6 +2203,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                       style={blueprintCalibrationOverlayStyle}
                       aria-label="Blueprint calibration point selection overlay"
                       onClick={selectBlueprintCalibrationPointFromPreview}
+                      onPointerMove={moveDraggedBlueprintTracePoint}
+                      onPointerUp={finishDraggingBlueprintTracePoint}
+                      onPointerLeave={finishDraggingBlueprintTracePoint}
                     >
                       {tracedRoomsWithSqft.map((outline) => (
                         <svg
@@ -2198,9 +2245,16 @@ const averageTonnage = (minTon + maxTon) / 2;
                           key={`blueprint-room-draft-point-${index}-${point.xPercent}-${point.yPercent}`}
                           style={{
                             ...blueprintRoomTracePointStyle,
+                            ...(draggingTracePointIndex === index ? blueprintRoomTracePointDraggingStyle : null),
                             left: `${point.xPercent}%`,
                             top: `${point.yPercent}%`,
                           }}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            suppressNextBlueprintOverlayClickRef.current = true;
+                            setDraggingTracePointIndex(index);
+                          }}
+                          onClick={(event) => event.stopPropagation()}
                         >
                           {index + 1}
                         </span>
@@ -3958,7 +4012,16 @@ const blueprintRoomTracePointStyle: React.CSSProperties = {
   fontSize: "12px",
   fontWeight: 900,
   transform: "translate(-50%, -50%)",
-  pointerEvents: "none",
+  cursor: "grab",
+  pointerEvents: "auto",
+  touchAction: "none",
+};
+
+const blueprintRoomTracePointDraggingStyle: React.CSSProperties = {
+  border: "3px solid rgba(250,204,21,0.98)",
+  background: "rgba(30,41,59,0.96)",
+  boxShadow: "0 0 0 5px rgba(250,204,21,0.18), 0 14px 30px rgba(0,0,0,0.36)",
+  cursor: "grabbing",
 };
 
 const blueprintOverlayLayerStyle: React.CSSProperties = {

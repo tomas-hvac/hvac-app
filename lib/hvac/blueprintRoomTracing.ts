@@ -132,6 +132,23 @@ export function undoBlueprintRoomTracePoint(
   };
 }
 
+export function updateBlueprintRoomTracePoint(
+  currentState: BlueprintRoomTraceState,
+  pointIndex: number,
+  point: BlueprintCalibrationPoint
+): BlueprintRoomTraceState {
+  if (!currentState.isTracing || pointIndex < 0 || pointIndex >= currentState.draftPoints.length) {
+    return currentState;
+  }
+
+  return {
+    ...currentState,
+    draftPoints: currentState.draftPoints.map((currentPoint, index) =>
+      index === pointIndex ? { ...point } : currentPoint
+    ),
+  };
+}
+
 export function cancelBlueprintRoomTrace(
   currentState: BlueprintRoomTraceState
 ): BlueprintRoomTraceState {
