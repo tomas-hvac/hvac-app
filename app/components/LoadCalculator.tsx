@@ -6,6 +6,8 @@ import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
   calculateBlueprintMeasuredFeet,
+  calculateBlueprintPixelDistance,
+  calculateBlueprintPixelsPerFoot,
   confirmBlueprintCalibration,
   createDefaultBlueprintCalibrationState,
   getConfirmedBlueprintPixelsPerFoot,
@@ -196,6 +198,7 @@ const InputField = ({ icon, title, description, children }: InputFieldProps) => 
 export default function LoadCalculator() {
   const blueprintFileInputRef = useRef<HTMLInputElement | null>(null);
   const blueprintPreviewRef = useRef<HTMLDivElement | null>(null);
+  const blueprintOverlayRef = useRef<HTMLDivElement | null>(null);
   const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
   const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
@@ -228,6 +231,7 @@ export default function LoadCalculator() {
   const [blueprintFile, setBlueprintFile] = useState<File | null>(null);
   const [blueprintPreviewUrl, setBlueprintPreviewUrl] = useState("");
   const [blueprintZoom, setBlueprintZoom] = useState(1);
+  const [blueprintOverlaySize, setBlueprintOverlaySize] = useState({ widthPx: 0, heightPx: 0 });
   const [blueprintCalibration, setBlueprintCalibration] = useState(createDefaultBlueprintCalibrationState);
   const [blueprintRoomTrace, setBlueprintRoomTrace] = useState(createDefaultBlueprintRoomTraceState);
   const [blueprintWorkspaceMode, setBlueprintWorkspaceMode] =
@@ -357,6 +361,24 @@ export default function LoadCalculator() {
     return () => {
       window.URL.revokeObjectURL(previewUrl);
     };
+  }, [blueprintFile]);
+
+  useEffect(() => {
+    const overlay = blueprintOverlayRef.current;
+    if (!overlay) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setBlueprintOverlaySize({
+          widthPx: entry.contentRect.width,
+          heightPx: entry.contentRect.height,
+        });
+      }
+    });
+
+    observer.observe(overlay);
+    return () => observer.disconnect();
   }, [blueprintFile]);
 
   const getCurrentProposalSnapshot = (): SavedProposalSnapshot | null => {
@@ -637,20 +659,11 @@ export default function LoadCalculator() {
   const getCurrentBlueprintTraceFinishOptions = (
     draftPoints: Array<{ xPercent: number; yPercent: number }>
   ) => {
-    const overlayElement = document.getElementById("blueprint-calibration-overlay");
-    const overlayBounds = overlayElement?.getBoundingClientRect();
-    const confirmedPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
-
     return {
       squareFeet: calculateBlueprintPolygonSquareFeet(
         draftPoints,
-        confirmedPixelsPerFoot,
-        overlayBounds
-          ? {
-              widthPx: overlayBounds.width / blueprintZoom,
-              heightPx: overlayBounds.height / blueprintZoom,
-            }
-          : undefined
+        activePixelsPerFoot,
+        blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
       ),
       ceilingHeight: blueprintCeilingHeight,
       floorLevel: blueprintFloorLevel,
@@ -738,7 +751,7 @@ export default function LoadCalculator() {
   };
 
   const sendTracedRoomToManualD = (outlineId: string) => {
-    const tracedRoom = blueprintRoomTrace.roomOutlines.find((outline) => outline.id === outlineId);
+    const tracedRoom = tracedRoomsWithSqft.find((outline) => outline.id === outlineId);
     const tracedSquareFeet = tracedRoom?.squareFeet;
 
     if (blueprintCalibration.status !== "calibrated") {
@@ -881,6 +894,32 @@ export default function LoadCalculator() {
     };
   }, [result.recommendedTonnage, selectedDetectedRoom, squareFeet]);
 
+  const activePixelsDistance = useMemo(() => {
+    if (
+      !blueprintCalibration.startPoint ||
+      !blueprintCalibration.endPoint ||
+      blueprintOverlaySize.widthPx <= 0
+    ) {
+      return null;
+    }
+    return calculateBlueprintPixelDistance(
+      blueprintCalibration.startPoint,
+      blueprintCalibration.endPoint,
+      blueprintOverlaySize.widthPx,
+      blueprintOverlaySize.heightPx
+    );
+  }, [blueprintCalibration.startPoint, blueprintCalibration.endPoint, blueprintOverlaySize]);
+
+  const activePixelsPerFoot = useMemo(() => {
+    if (activePixelsDistance === null) return null;
+
+    return calculateBlueprintPixelsPerFoot(
+      activePixelsDistance,
+      blueprintCalibration.realWorldDistance,
+      blueprintCalibration.realWorldUnit
+    );
+  }, [activePixelsDistance, blueprintCalibration.realWorldDistance, blueprintCalibration.realWorldUnit]);
+
   const blueprintCalibrationStatusText =
     blueprintCalibration.status === "calibrated"
       ? "Calibration confirmed"
@@ -888,11 +927,11 @@ export default function LoadCalculator() {
       ? "Ready to confirm"
       : "Not calibrated";
   const blueprintCalibrationScaleText =
-    blueprintCalibration.pixelsPerFoot === null
+    activePixelsPerFoot === null
       ? "Select two points and enter a known length"
       : blueprintCalibration.status === "ready"
-      ? `Scale ready - ${blueprintCalibration.pixelsPerFoot.toFixed(2)} px / ft`
-      : `${blueprintCalibration.pixelsPerFoot.toFixed(2)} px / ft`;
+      ? `Scale ready - ${activePixelsPerFoot.toFixed(2)} px / ft`
+      : `${activePixelsPerFoot.toFixed(2)} px / ft`;
   const parsedCalibrationFeet = parseFieldMeasurementToFeet(blueprintCalibration.realWorldDistance);
   const blueprintCalibrationMeasurementText =
     blueprintCalibration.realWorldDistance.trim() === ""
@@ -903,15 +942,27 @@ export default function LoadCalculator() {
           parsedCalibrationFeet.toFixed(3)
         ).toLocaleString()} ft`;
   const canConfirmBlueprintCalibration =
-    blueprintCalibration.status === "ready" && blueprintCalibration.pixelsPerFoot !== null;
+    blueprintCalibration.status === "ready" && activePixelsPerFoot !== null;
   const blueprintTraceCalibrationStatusText = getBlueprintTraceCalibrationStatusText(blueprintCalibration.status);
   const blueprintMeasuredFeet = calculateBlueprintMeasuredFeet(
-    blueprintCalibration.pixelsDistance,
-    blueprintCalibration.pixelsPerFoot
+    activePixelsDistance,
+    activePixelsPerFoot
   );
+
+  const tracedRoomsWithSqft = useMemo(() => {
+    return blueprintRoomTrace.roomOutlines.map((outline) => ({
+      ...outline,
+      squareFeet: calculateBlueprintPolygonSquareFeet(
+        outline.points,
+        activePixelsPerFoot,
+        blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
+      ),
+    }));
+  }, [blueprintRoomTrace.roomOutlines, activePixelsPerFoot, blueprintOverlaySize]);
+
   const blueprintRoomTraceStatusText = blueprintRoomTrace.isTracing
     ? `${blueprintRoomTrace.draftPoints.length} point${blueprintRoomTrace.draftPoints.length === 1 ? "" : "s"} selected`
-    : `${blueprintRoomTrace.roomOutlines.length} outline${blueprintRoomTrace.roomOutlines.length === 1 ? "" : "s"} saved`;
+    : `${tracedRoomsWithSqft.length} outline${tracedRoomsWithSqft.length === 1 ? "" : "s"} saved`;
 
   const snapshotSummary = useMemo(() => {
     const sqft = Math.max(0, parseInt(squareFeet, 10) || 0);
@@ -2018,12 +2069,13 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     )}
                     <div
+                      ref={blueprintOverlayRef}
                       id="blueprint-calibration-overlay"
                       style={blueprintCalibrationOverlayStyle}
                       aria-label="Blueprint calibration point selection overlay"
                       onClick={selectBlueprintCalibrationPointFromPreview}
                     >
-                      {blueprintRoomTrace.roomOutlines.map((outline) => (
+                      {tracedRoomsWithSqft.map((outline) => (
                         <svg
                           key={outline.id}
                           viewBox="0 0 100 100"
@@ -2209,7 +2261,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                     </div>
                     <div style={blueprintAirflowPreviewMetricStyle}>
                       <span style={blueprintAirflowPreviewMetricLabelStyle}>Outlines</span>
-                      <strong>{blueprintRoomTrace.roomOutlines.length}</strong>
+                      <strong>{tracedRoomsWithSqft.length}</strong>
                     </div>
                   </div>
                 </div>
@@ -2399,7 +2451,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
             <details open style={blueprintDrawerStyle}>
               <summary style={blueprintDrawerSummaryStyle}>
-                Traced Rooms · {blueprintRoomTrace.roomOutlines.length}
+                Traced Rooms · {tracedRoomsWithSqft.length}
               </summary>
               <div style={detectedRoomsSectionStyle}>
                 <div>
@@ -2412,9 +2464,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                     <p style={detectedRoomActionMessageStyle}>{detectedRoomActionMessage}</p>
                   ) : null}
                 </div>
-                {blueprintRoomTrace.roomOutlines.length > 0 ? (
+                {tracedRoomsWithSqft.length > 0 ? (
                   <div style={detectedRoomsGridStyle}>
-                    {blueprintRoomTrace.roomOutlines.map((outline) => (
+                    {tracedRoomsWithSqft.map((outline) => (
                       <div key={outline.id} style={detectedRoomCardStyle}>
                         <div style={detectedRoomHeaderStyle}>
                           <p style={tracedRoomTitleStyle}>{outline.name}</p>
