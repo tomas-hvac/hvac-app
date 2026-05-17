@@ -669,7 +669,7 @@ export default function LoadCalculator() {
     return {
       squareFeet: calculateBlueprintPolygonSquareFeet(
         draftPoints,
-        activePixelsPerFoot,
+        confirmedBlueprintPixelsPerFoot,
         blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
       ),
       ceilingHeight: blueprintCeilingHeight,
@@ -1037,17 +1037,18 @@ export default function LoadCalculator() {
     activePixelsDistance,
     activePixelsPerFoot
   );
+  const confirmedBlueprintPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
 
   const tracedRoomsWithSqft = useMemo(() => {
     return blueprintRoomTrace.roomOutlines.map((outline) => ({
       ...outline,
       squareFeet: calculateBlueprintPolygonSquareFeet(
         outline.points,
-        activePixelsPerFoot,
+        confirmedBlueprintPixelsPerFoot,
         blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
       ),
     }));
-  }, [blueprintRoomTrace.roomOutlines, activePixelsPerFoot, blueprintOverlaySize]);
+  }, [blueprintRoomTrace.roomOutlines, confirmedBlueprintPixelsPerFoot, blueprintOverlaySize]);
 
   const blueprintRoomTraceStatusText = blueprintRoomTrace.isTracing
     ? `${blueprintRoomTrace.draftPoints.length} point${blueprintRoomTrace.draftPoints.length === 1 ? "" : "s"} selected`
