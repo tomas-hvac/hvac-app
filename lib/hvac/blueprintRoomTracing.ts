@@ -1,9 +1,24 @@
 import type { BlueprintCalibrationPoint } from "./blueprintCalibration";
 
+export type BlueprintRoomBoundaryType =
+  | "exterior"
+  | "interior"
+  | "garage"
+  | "attic"
+  | "crawlspace"
+  | "unknown";
+
+export type BlueprintRoomBoundaryEdge = {
+  startPointIndex: number;
+  endPointIndex: number;
+  boundaryType: BlueprintRoomBoundaryType;
+};
+
 export type BlueprintRoomOutline = {
   id: string;
   name: string;
   points: BlueprintCalibrationPoint[];
+  boundaryEdges?: BlueprintRoomBoundaryEdge[];
   squareFeet: number | null;
   ceilingHeight: string;
   floorLevel: string;
@@ -28,6 +43,18 @@ type BlueprintRoomTraceFinishOptions = {
 
 const TRACE_CLOSE_THRESHOLD_PERCENT = 3;
 const TRACE_CORNER_SNAP_THRESHOLD_PERCENT = 1.5;
+
+export function createDefaultBlueprintRoomBoundaryEdges(
+  points: BlueprintCalibrationPoint[]
+): BlueprintRoomBoundaryEdge[] {
+  if (points.length < 2) return [];
+
+  return points.map((_, index) => ({
+    startPointIndex: index,
+    endPointIndex: (index + 1) % points.length,
+    boundaryType: "unknown",
+  }));
+}
 
 function getPointDistancePercent(
   firstPoint: BlueprintCalibrationPoint,
@@ -178,6 +205,7 @@ export function finishBlueprintRoomTrace(
         id: `blueprint-outline-${Date.now()}-${currentState.roomOutlines.length + 1}`,
         name: `Traced Room ${roomNumber}`,
         points: currentState.draftPoints,
+        boundaryEdges: createDefaultBlueprintRoomBoundaryEdges(currentState.draftPoints),
         squareFeet: options.squareFeet ?? null,
         ceilingHeight: options.ceilingHeight ?? "8",
         floorLevel: options.floorLevel ?? "1",
