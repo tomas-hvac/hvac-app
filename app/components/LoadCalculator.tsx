@@ -8,6 +8,7 @@ import {
   calculateBlueprintMeasuredFeet,
   calculateBlueprintPixelDistance,
   calculateBlueprintPixelsPerFoot,
+  calculateBlueprintVerificationError,
   confirmBlueprintCalibration,
   createDefaultBlueprintCalibrationState,
   getConfirmedBlueprintPixelsPerFoot,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/hvac/blueprintCalibration";
 import { detectRoomsFromBlueprint } from "@/lib/hvac/blueprintDetection";
 import type { DetectedBlueprintRoom, DetectedRoomWorkflowStatus } from "@/lib/hvac/blueprintDetection";
+import { findSnapPoint } from "@/lib/hvac/blueprintSnapping";
 import {
   addBlueprintRoomTracePoint,
   cancelBlueprintRoomTrace,
@@ -31,6 +33,7 @@ import {
   startBlueprintRoomTrace,
   undoBlueprintRoomTracePoint,
 } from "@/lib/hvac/blueprintRoomTracing";
+import { adaptTracedRoomToManualDBlueprintRoom } from "@/lib/hvac/roomCalculationPipeline";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -201,6 +204,7 @@ export default function LoadCalculator() {
   const blueprintFileInputRef = useRef<HTMLInputElement | null>(null);
   const blueprintPreviewRef = useRef<HTMLDivElement | null>(null);
   const blueprintOverlayRef = useRef<HTMLDivElement | null>(null);
+  const blueprintImageRef = useRef<HTMLImageElement | null>(null);
   const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
   const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
@@ -675,24 +679,51 @@ export default function LoadCalculator() {
 
   const selectBlueprintCalibrationPointFromPreview = (event: React.MouseEvent<HTMLDivElement>) => {
     const overlayBounds = event.currentTarget.getBoundingClientRect();
-    const xPercent = Math.min(
+    let xPercent = Math.min(
       100,
       Math.max(0, ((event.clientX - overlayBounds.left) / overlayBounds.width) * 100)
     );
-    const yPercent = Math.min(
+    let yPercent = Math.min(
       100,
       Math.max(0, ((event.clientY - overlayBounds.top) / overlayBounds.height) * 100)
     );
 
     if (blueprintRoomTrace.isTracing) {
+      let tracePoint = { xPercent, yPercent };
+
+      if (blueprintImageRef.current) {
+        try {
+          const img = blueprintImageRef.current;
+          const naturalX = (xPercent / 100) * img.naturalWidth;
+          const naturalY = (yPercent / 100) * img.naturalHeight;
+          const existingPolygons = [
+            ...blueprintRoomTrace.roomOutlines.map((o) => o.points),
+            blueprintRoomTrace.draftPoints,
+          ];
+          const snapRadius = (9 / overlayBounds.width) * img.naturalWidth;
+          const snapped = findSnapPoint(img, naturalX, naturalY, snapRadius, existingPolygons);
+
+          tracePoint = {
+            xPercent: Math.min(100, Math.max(0, (snapped.x / img.naturalWidth) * 100)),
+            yPercent: Math.min(100, Math.max(0, (snapped.y / img.naturalHeight) * 100)),
+          };
+        } catch {
+          tracePoint = { xPercent, yPercent };
+        }
+      }
+
       setBlueprintRoomTrace((currentTrace) =>
-        addBlueprintRoomTracePoint(currentTrace, { xPercent, yPercent }, {
-          straightLineAssist: event.shiftKey,
-          finishOptions: getCurrentBlueprintTraceFinishOptions([
-            ...currentTrace.draftPoints,
-            { xPercent, yPercent },
-          ]),
-        })
+        addBlueprintRoomTracePoint(
+          currentTrace,
+          tracePoint,
+          {
+            straightLineAssist: event.shiftKey,
+            finishOptions: getCurrentBlueprintTraceFinishOptions([
+              ...currentTrace.draftPoints,
+              tracePoint,
+            ]),
+          }
+        )
       );
       return;
     }
@@ -786,13 +817,10 @@ export default function LoadCalculator() {
 
     setBlueprintRoomsForManualD((currentRooms) => [
       ...currentRooms,
-      {
-        id: `traced-${tracedRoom.id}-${Date.now()}`,
-        name: tracedRoom.name.trim() || "Traced Room",
-        squareFeet: Math.round(tracedSquareFeet),
-        ceilingHeight: tracedRoom.ceilingHeight,
-        floorLevel: tracedRoom.floorLevel,
-      },
+      adaptTracedRoomToManualDBlueprintRoom({
+        tracedRoom,
+        outputId: `traced-${tracedRoom.id}-${Date.now()}`,
+      }),
     ]);
     setDetectedRoomActionMessage(`Added ${tracedRoom.name} to Manual D`);
   };
@@ -2119,6 +2147,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                   >
                     {blueprintPreviewUrl ? (
                       <img
+                        ref={blueprintImageRef}
                         src={blueprintPreviewUrl}
                         alt={`${blueprintFileName} preview`}
                         style={blueprintImagePreviewStyle}
