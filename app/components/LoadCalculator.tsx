@@ -33,7 +33,11 @@ import {
   startBlueprintRoomTrace,
   undoBlueprintRoomTracePoint,
 } from "@/lib/hvac/blueprintRoomTracing";
-import { adaptTracedRoomToManualDBlueprintRoom } from "@/lib/hvac/roomCalculationPipeline";
+import {
+  adaptDetectedRoomToManualDBlueprintRoom,
+  adaptManualFallbackRoomToManualDBlueprintRoom,
+  adaptTracedRoomToManualDBlueprintRoom,
+} from "@/lib/hvac/roomCalculationPipeline";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -526,13 +530,13 @@ export default function LoadCalculator() {
 
     setBlueprintRoomsForManualD((currentRooms) => [
       ...currentRooms,
-      {
+      adaptManualFallbackRoomToManualDBlueprintRoom({
         id: `blueprint-room-${Date.now()}-${currentRooms.length + 1}`,
-        name: blueprintRoomName.trim() || "New Room",
+        name: blueprintRoomName,
         squareFeet: calculatedSquareFeet,
         ceilingHeight: blueprintCeilingHeight,
         floorLevel: blueprintFloorLevel,
-      },
+      }),
     ]);
   };
 
@@ -627,16 +631,12 @@ export default function LoadCalculator() {
   const sendDetectedRoomToManualD = (room: DetectedBlueprintRoom) => {
     setBlueprintRoomsForManualD((currentRooms) => [
       ...currentRooms,
-      {
-        id: `detected-${room.id}-${Date.now()}`,
-        name: room.name.trim() || "Detected Room",
-        squareFeet: room.squareFeet,
-        ceilingHeight: blueprintCeilingHeight,
-        floorLevel: room.floorLevel || blueprintFloorLevel,
-        windowsCount: room.windowsCount,
-        exteriorWallsCount: room.exteriorWallsCount,
-        sourceBlueprintRoomId: room.id,
-      },
+      adaptDetectedRoomToManualDBlueprintRoom({
+        detectedRoom: room,
+        outputId: `detected-${room.id}-${Date.now()}`,
+        defaultCeilingHeight: blueprintCeilingHeight,
+        defaultFloorLevel: blueprintFloorLevel,
+      }),
     ]);
     setSelectedDetectedRoomId(room.id);
     setBlueprintDetectionPipeline((currentPipeline) => ({
@@ -2042,44 +2042,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                   <div>
                     <p style={blueprintWorkspaceLabelStyle}>Review Preview</p>
                     <p style={blueprintWorkspaceMetaStyle}>{Math.round(blueprintZoom * 100)}% zoom</p>
-                  </div>
-                  <div style={blueprintCalibrationInlineStyle}>
-                    <div>
-                      <p style={blueprintCalibrationStatusStyle}>{blueprintCalibrationStatusText}</p>
-                      <p style={blueprintCalibrationHelperStyle}>{blueprintCalibrationScaleText}</p>
-                    </div>
-                    <label style={blueprintCalibrationInputGroupStyle}>
-                      <span style={blueprintCalibrationInputLabelStyle}>Known Length</span>
-                      <input
-                        className="load-input blueprint-takeoff-control"
-                        type="text"
-                        value={blueprintCalibration.realWorldDistance}
-                        onChange={updateBlueprintCalibrationKnownLengthInput}
-                        aria-label="Known blueprint calibration length"
-                        placeholder={`12' 6"`}
-                        style={blueprintCalibrationInputStyle}
-                        disabled={blueprintCalibration.isLocked}
-                      />
-                      <span style={blueprintCalibrationFieldMeasurementStyle}>
-                        {blueprintCalibrationMeasurementText}
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      style={blueprintCalibrationButtonStyle}
-                      onClick={recalibrateBlueprintScale}
-                    >
-                      Reset Calibration
-                    </button>
-                    {canConfirmBlueprintCalibration ? (
-                      <button
-                        type="button"
-                        style={blueprintCalibrationConfirmButtonStyle}
-                        onClick={confirmCurrentBlueprintCalibration}
-                      >
-                        Confirm Calibration
-                      </button>
-                    ) : null}
+                    <p style={blueprintWorkspaceMetaStyle}>
+                      {blueprintCalibrationStatusText} · {blueprintTraceCalibrationStatusText}
+                    </p>
                   </div>
                   <div style={blueprintTraceInlineStyle}>
                     <div>

@@ -1,6 +1,7 @@
 import type { RoundDuctSizingRecommendation } from "./manualD";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "./manualD";
 import type { BlueprintRoomOutline } from "./blueprintRoomTracing";
+import type { DetectedBlueprintRoom } from "./blueprintDetection";
 
 export type HvacRoomSource = "traced" | "manual" | "detected";
 
@@ -43,6 +44,23 @@ type RoomCalculationContext = {
 type TracedRoomAdapterInput = {
   tracedRoom: BlueprintRoomOutline;
   outputId: string;
+  context?: RoomCalculationContext;
+};
+
+type ManualFallbackRoomAdapterInput = {
+  id: string;
+  name: string;
+  squareFeet: number;
+  ceilingHeight: string;
+  floorLevel: string;
+  context?: RoomCalculationContext;
+};
+
+type DetectedRoomAdapterInput = {
+  detectedRoom: DetectedBlueprintRoom;
+  outputId: string;
+  defaultCeilingHeight: string;
+  defaultFloorLevel: string;
   context?: RoomCalculationContext;
 };
 
@@ -129,5 +147,103 @@ export function adaptTracedRoomToManualDBlueprintRoom({
     ceilingHeight: unifiedRoom.ceilingHeight,
     floorLevel: unifiedRoom.floorLevel,
     sourceBlueprintRoomId: tracedRoom.id,
+  };
+}
+
+export function createUnifiedManualFallbackRoom({
+  id,
+  name,
+  squareFeet,
+  ceilingHeight,
+  floorLevel,
+  context,
+}: ManualFallbackRoomAdapterInput): UnifiedHvacRoom {
+  const normalizedSquareFeet = Math.max(0, Math.round(squareFeet));
+  const volume = calculateUnifiedRoomVolume(normalizedSquareFeet, ceilingHeight);
+  const targetCfm = calculateUnifiedRoomTargetCfm(normalizedSquareFeet, context);
+  const ductSizeRecommendation = calculateUnifiedRoomDuctSize(targetCfm);
+  const registerCountRecommendation = recommendUnifiedRoomRegisterCount(targetCfm);
+
+  return {
+    id,
+    source: "manual",
+    name: name.trim() || "New Room",
+    squareFeet: normalizedSquareFeet,
+    ceilingHeight,
+    floorLevel,
+    volume,
+    targetCfm,
+    ductSizeRecommendation,
+    registerCountRecommendation,
+    confidenceStatus: normalizedSquareFeet > 0 ? "calculation-ready" : "needs-review",
+  };
+}
+
+export function adaptManualFallbackRoomToManualDBlueprintRoom(
+  input: ManualFallbackRoomAdapterInput
+): ManualDBlueprintRoomOutput {
+  const unifiedRoom = createUnifiedManualFallbackRoom(input);
+
+  return {
+    id: input.id,
+    name: unifiedRoom.name,
+    squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
+    ceilingHeight: unifiedRoom.ceilingHeight,
+    floorLevel: unifiedRoom.floorLevel,
+  };
+}
+
+export function createUnifiedDetectedRoom({
+  detectedRoom,
+  defaultCeilingHeight,
+  defaultFloorLevel,
+  context,
+}: Omit<DetectedRoomAdapterInput, "outputId">): UnifiedHvacRoom {
+  const squareFeet = Math.max(0, Math.round(detectedRoom.squareFeet));
+  const ceilingHeight = defaultCeilingHeight;
+  const floorLevel = detectedRoom.floorLevel || defaultFloorLevel;
+  const volume = calculateUnifiedRoomVolume(squareFeet, ceilingHeight);
+  const targetCfm = calculateUnifiedRoomTargetCfm(squareFeet, context);
+  const ductSizeRecommendation = calculateUnifiedRoomDuctSize(targetCfm);
+  const registerCountRecommendation = recommendUnifiedRoomRegisterCount(targetCfm);
+
+  return {
+    id: detectedRoom.id,
+    source: "detected",
+    name: detectedRoom.name.trim() || "Detected Room",
+    squareFeet,
+    ceilingHeight,
+    floorLevel,
+    volume,
+    targetCfm,
+    ductSizeRecommendation,
+    registerCountRecommendation,
+    confidenceStatus: detectedRoom.confirmed ? "confirmed" : "needs-review",
+  };
+}
+
+export function adaptDetectedRoomToManualDBlueprintRoom({
+  detectedRoom,
+  outputId,
+  defaultCeilingHeight,
+  defaultFloorLevel,
+  context,
+}: DetectedRoomAdapterInput): ManualDBlueprintRoomOutput {
+  const unifiedRoom = createUnifiedDetectedRoom({
+    detectedRoom,
+    defaultCeilingHeight,
+    defaultFloorLevel,
+    context,
+  });
+
+  return {
+    id: outputId,
+    name: unifiedRoom.name,
+    squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
+    ceilingHeight: unifiedRoom.ceilingHeight,
+    floorLevel: unifiedRoom.floorLevel,
+    windowsCount: detectedRoom.windowsCount,
+    exteriorWallsCount: detectedRoom.exteriorWallsCount,
+    sourceBlueprintRoomId: detectedRoom.id,
   };
 }
