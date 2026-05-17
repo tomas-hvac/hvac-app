@@ -4,13 +4,14 @@ export type BlueprintCalibrationPoint = {
 };
 
 export type BlueprintCalibrationState = {
-  status: "uncalibrated" | "calibrating" | "calibrated";
+  status: "uncalibrated" | "calibrating" | "ready" | "calibrated";
   startPoint: BlueprintCalibrationPoint | null;
   endPoint: BlueprintCalibrationPoint | null;
   pixelsDistance: number | null;
   pixelsPerFoot: number | null;
   realWorldDistance: string;
   realWorldUnit: "feet" | "inches";
+  isLocked: boolean;
 };
 
 export function createDefaultBlueprintCalibrationState(): BlueprintCalibrationState {
@@ -22,6 +23,7 @@ export function createDefaultBlueprintCalibrationState(): BlueprintCalibrationSt
     pixelsPerFoot: null,
     realWorldDistance: "",
     realWorldUnit: "feet",
+    isLocked: false,
   };
 }
 
@@ -37,13 +39,44 @@ export function calculateBlueprintPixelDistance(
   return Math.sqrt(xDistancePx ** 2 + yDistancePx ** 2);
 }
 
+export function parseFieldMeasurementToFeet(input: string): number | null {
+  const normalizedInput = input.trim().toLowerCase();
+  if (!normalizedInput) return null;
+
+  const decimalFeet = Number(normalizedInput);
+  if (Number.isFinite(decimalFeet) && decimalFeet > 0) return decimalFeet;
+
+  const feetInchesShorthandMatch = normalizedInput.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+  if (feetInchesShorthandMatch) {
+    const feet = Number(feetInchesShorthandMatch[1]);
+    const inches = Number(feetInchesShorthandMatch[2]);
+    if (Number.isFinite(feet) && Number.isFinite(inches) && inches >= 0) {
+      return feet + inches / 12;
+    }
+  }
+
+  const feetMatch = normalizedInput.match(/(\d+(?:\.\d+)?)\s*(?:'|ft\b|feet\b)/);
+  const inchesMatch = normalizedInput.match(/(\d+(?:\.\d+)?)\s*(?:"|in\b|inch\b|inches\b)/);
+  if (feetMatch || inchesMatch) {
+    const feet = feetMatch ? Number(feetMatch[1]) : 0;
+    const inches = inchesMatch ? Number(inchesMatch[1]) : 0;
+    if (Number.isFinite(feet) && Number.isFinite(inches) && inches >= 0) {
+      return feet + inches / 12;
+    }
+  }
+
+  return null;
+}
+
 export function calculateBlueprintPixelsPerFoot(
   pixelsDistance: number,
   realWorldDistance: string,
   realWorldUnit: BlueprintCalibrationState["realWorldUnit"]
 ) {
+  const parsedFieldDistance = parseFieldMeasurementToFeet(realWorldDistance);
   const parsedDistance = Math.max(0, Number(realWorldDistance) || 0);
-  const distanceInFeet = realWorldUnit === "inches" ? parsedDistance / 12 : parsedDistance;
+  const distanceInFeet =
+    parsedFieldDistance ?? (realWorldUnit === "inches" ? parsedDistance / 12 : parsedDistance);
 
   if (pixelsDistance <= 0 || distanceInFeet <= 0) return null;
 
@@ -64,6 +97,8 @@ export function selectBlueprintCalibrationPoint(
   point: BlueprintCalibrationPoint,
   overlaySize?: { widthPx: number; heightPx: number }
 ): BlueprintCalibrationState {
+  if (currentState.isLocked) return currentState;
+
   if (!currentState.startPoint || currentState.endPoint) {
     return {
       ...currentState,
@@ -94,7 +129,7 @@ export function selectBlueprintCalibrationPoint(
 
   return {
     ...currentState,
-    status: pixelsPerFoot === null ? "calibrating" : "calibrated",
+    status: pixelsPerFoot === null ? "calibrating" : "ready",
     endPoint: point,
     pixelsDistance,
     pixelsPerFoot,
@@ -106,6 +141,8 @@ export function updateBlueprintCalibrationKnownLength(
   realWorldDistance: string,
   overlaySize?: { widthPx: number; heightPx: number }
 ): BlueprintCalibrationState {
+  if (currentState.isLocked) return currentState;
+
   const pixelsDistance =
     currentState.startPoint && currentState.endPoint && overlaySize
       ? calculateBlueprintPixelDistance(
@@ -126,9 +163,29 @@ export function updateBlueprintCalibrationKnownLength(
 
   return {
     ...currentState,
-    status: currentState.startPoint && currentState.endPoint && pixelsPerFoot !== null ? "calibrated" : currentState.status,
+    status: currentState.startPoint && currentState.endPoint && pixelsPerFoot !== null ? "ready" : currentState.status,
     realWorldDistance,
     pixelsDistance,
     pixelsPerFoot,
   };
+}
+
+export function confirmBlueprintCalibration(
+  currentState: BlueprintCalibrationState
+): BlueprintCalibrationState {
+  if (!currentState.startPoint || !currentState.endPoint || currentState.pixelsPerFoot === null) {
+    return currentState;
+  }
+
+  return {
+    ...currentState,
+    status: "calibrated",
+    isLocked: true,
+  };
+}
+
+export function getConfirmedBlueprintPixelsPerFoot(
+  currentState: BlueprintCalibrationState
+) {
+  return currentState.status === "calibrated" ? currentState.pixelsPerFoot : null;
 }

@@ -1292,7 +1292,10 @@ const appGridStyle: React.CSSProperties = {
     "radial-gradient(circle at 14% 0%, rgba(212,175,55,0.075), transparent 30%), radial-gradient(circle at 88% 8%, rgba(30,64,175,0.11), transparent 34%), linear-gradient(180deg, #02040a 0%, #06101d 46%, #03060d 100%)",
   padding: "18px",
   color: "#f8fafc",
-  maxWidth: "1280px",
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
   margin: "0 auto",
 };
 
@@ -1529,6 +1532,8 @@ const footerVersionStyle: React.CSSProperties = {
 const mainStyle: React.CSSProperties = {
   display: "grid",
   gap: "18px",
+  minWidth: 0,
+  maxWidth: "100%",
 };
 
 const proposalPageHeaderStyle: React.CSSProperties = {

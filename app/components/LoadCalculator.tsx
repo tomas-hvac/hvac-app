@@ -740,7 +740,22 @@ export default function LoadCalculator() {
   const sendTracedRoomToManualD = (outlineId: string) => {
     const tracedRoom = blueprintRoomTrace.roomOutlines.find((outline) => outline.id === outlineId);
     const tracedSquareFeet = tracedRoom?.squareFeet;
-    if (!tracedRoom || tracedSquareFeet === null || tracedSquareFeet === undefined || tracedSquareFeet <= 0) return;
+
+    if (blueprintCalibration.status !== "calibrated") {
+      setDetectedRoomActionMessage("Please confirm calibration before sending to Manual D.");
+      return;
+    }
+
+    if (
+      !tracedRoom ||
+      tracedSquareFeet === null ||
+      tracedSquareFeet === undefined ||
+      tracedSquareFeet <= 0 ||
+      !Number.isFinite(tracedSquareFeet)
+    ) {
+      setDetectedRoomActionMessage("Invalid room square footage. Recalculate or re-trace.");
+      return;
+    }
 
     setBlueprintRoomsForManualD((currentRooms) => [
       ...currentRooms,
@@ -752,6 +767,7 @@ export default function LoadCalculator() {
         floorLevel: tracedRoom.floorLevel,
       },
     ]);
+    setDetectedRoomActionMessage(`Added ${tracedRoom.name} to Manual D`);
   };
 
   const updateBlueprintCalibrationKnownLengthInput = (
@@ -1902,6 +1918,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                         aria-label="Known blueprint calibration length"
                         placeholder={`12' 6"`}
                         style={blueprintCalibrationInputStyle}
+                        disabled={blueprintCalibration.isLocked}
                       />
                       <span style={blueprintCalibrationFieldMeasurementStyle}>
                         {blueprintCalibrationMeasurementText}
@@ -2391,6 +2408,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                     Traced rooms are the source of truth for takeoff. Area calculations use:{" "}
                     {blueprintTraceCalibrationStatusText}.
                   </p>
+                  {detectedRoomActionMessage ? (
+                    <p style={detectedRoomActionMessageStyle}>{detectedRoomActionMessage}</p>
+                  ) : null}
                 </div>
                 {blueprintRoomTrace.roomOutlines.length > 0 ? (
                   <div style={detectedRoomsGridStyle}>
@@ -2429,11 +2449,19 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <button
                             type="button"
                             style={
-                              outline.squareFeet === null
+                              blueprintCalibration.status !== "calibrated" ||
+                              outline.squareFeet === null ||
+                              outline.squareFeet <= 0 ||
+                              !Number.isFinite(outline.squareFeet)
                                 ? { ...detectedRoomButtonStyle, ...tracedRoomButtonDisabledStyle }
                                 : detectedRoomButtonStyle
                             }
-                            disabled={outline.squareFeet === null}
+                            disabled={
+                              blueprintCalibration.status !== "calibrated" ||
+                              outline.squareFeet === null ||
+                              outline.squareFeet <= 0 ||
+                              !Number.isFinite(outline.squareFeet)
+                            }
                             onClick={() => sendTracedRoomToManualD(outline.id)}
                           >
                             Send to Manual D
