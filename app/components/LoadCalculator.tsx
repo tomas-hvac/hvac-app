@@ -13,7 +13,9 @@ import {
   getConfirmedBlueprintPixelsPerFoot,
   parseFieldMeasurementToFeet,
   selectBlueprintCalibrationPoint,
+  selectBlueprintVerificationPoint,
   updateBlueprintCalibrationKnownLength,
+  updateBlueprintVerificationKnownLength,
 } from "@/lib/hvac/blueprintCalibration";
 import { detectRoomsFromBlueprint } from "@/lib/hvac/blueprintDetection";
 import type { DetectedBlueprintRoom, DetectedRoomWorkflowStatus } from "@/lib/hvac/blueprintDetection";
@@ -236,6 +238,7 @@ export default function LoadCalculator() {
   const [blueprintRoomTrace, setBlueprintRoomTrace] = useState(createDefaultBlueprintRoomTraceState);
   const [blueprintWorkspaceMode, setBlueprintWorkspaceMode] =
     useState<BlueprintWorkspaceMode>("manual-trace");
+  const [isVerificationMode, setIsVerificationMode] = useState(false);
   const [blueprintDetectionPipeline, setBlueprintDetectionPipeline] =
     useState<BlueprintDetectionPipeline>({
       mode: "preview",
@@ -694,6 +697,16 @@ export default function LoadCalculator() {
       return;
     }
 
+    if (isVerificationMode) {
+      setBlueprintCalibration((currentCalibration) =>
+        selectBlueprintVerificationPoint(currentCalibration, { xPercent, yPercent }, {
+          widthPx: overlayBounds.width / blueprintZoom,
+          heightPx: overlayBounds.height / blueprintZoom,
+        })
+      );
+      return;
+    }
+
     setBlueprintCalibration((currentCalibration) =>
       selectBlueprintCalibrationPoint(currentCalibration, { xPercent, yPercent }, {
         widthPx: overlayBounds.width / blueprintZoom,
@@ -724,6 +737,7 @@ export default function LoadCalculator() {
 
   const recalibrateBlueprintScale = () => {
     setBlueprintCalibration(createDefaultBlueprintCalibrationState());
+    setIsVerificationMode(false);
     setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
   };
 
@@ -788,6 +802,22 @@ export default function LoadCalculator() {
   ) => {
     const overlayElement = document.getElementById("blueprint-calibration-overlay");
     const overlayBounds = overlayElement?.getBoundingClientRect();
+
+    if (isVerificationMode) {
+      setBlueprintCalibration((currentCalibration) =>
+        updateBlueprintVerificationKnownLength(
+          currentCalibration,
+          event.target.value,
+          overlayBounds
+            ? {
+                widthPx: overlayBounds.width / blueprintZoom,
+                heightPx: overlayBounds.height / blueprintZoom,
+              }
+            : undefined
+        )
+      );
+      return;
+    }
 
     setBlueprintCalibration((currentCalibration) =>
       updateBlueprintCalibrationKnownLength(
@@ -919,6 +949,37 @@ export default function LoadCalculator() {
       blueprintCalibration.realWorldUnit
     );
   }, [activePixelsDistance, blueprintCalibration.realWorldDistance, blueprintCalibration.realWorldUnit]);
+
+  const verificationErrorPercentage = useMemo(() => {
+    if (
+      !blueprintCalibration.verification?.startPoint ||
+      !blueprintCalibration.verification?.endPoint ||
+      !activePixelsPerFoot ||
+      !blueprintCalibration.verification?.realWorldDistance
+    ) {
+      return null;
+    }
+
+    const pixelsDistance = calculateBlueprintPixelDistance(
+      blueprintCalibration.verification.startPoint,
+      blueprintCalibration.verification.endPoint,
+      blueprintOverlaySize.widthPx,
+      blueprintOverlaySize.heightPx
+    );
+
+    const measuredFeet = calculateBlueprintMeasuredFeet(pixelsDistance, activePixelsPerFoot);
+
+    return calculateBlueprintVerificationError(
+      measuredFeet,
+      blueprintCalibration.verification.realWorldDistance,
+      blueprintCalibration.realWorldUnit
+    );
+  }, [
+    blueprintCalibration.verification,
+    activePixelsPerFoot,
+    blueprintCalibration.realWorldUnit,
+    blueprintOverlaySize,
+  ]);
 
   const blueprintCalibrationStatusText =
     blueprintCalibration.status === "calibrated"
@@ -2175,6 +2236,46 @@ const averageTonnage = (minTon + maxTon) / 2;
                           B
                         </span>
                       ) : null}
+
+                      {/* Verification Overlay */}
+                      {blueprintCalibration.verification?.startPoint && (
+                        <span
+                          style={{
+                            ...blueprintVerificationPointStyle,
+                            left: `${blueprintCalibration.verification.startPoint.xPercent}%`,
+                            top: `${blueprintCalibration.verification.startPoint.yPercent}%`,
+                          }}
+                        >
+                          V1
+                        </span>
+                      )}
+                      {blueprintCalibration.verification?.endPoint && (
+                        <>
+                          <svg
+                            viewBox="0 0 100 100"
+                            preserveAspectRatio="none"
+                            style={blueprintCalibrationLineSvgStyle}
+                            aria-hidden="true"
+                          >
+                            <line
+                              x1={blueprintCalibration.verification.startPoint?.xPercent || 0}
+                              y1={blueprintCalibration.verification.startPoint?.yPercent || 0}
+                              x2={blueprintCalibration.verification.endPoint.xPercent}
+                              y2={blueprintCalibration.verification.endPoint.yPercent}
+                              style={blueprintVerificationLineStyle}
+                            />
+                          </svg>
+                          <span
+                            style={{
+                              ...blueprintVerificationPointStyle,
+                              left: `${blueprintCalibration.verification.endPoint.xPercent}%`,
+                              top: `${blueprintCalibration.verification.endPoint.yPercent}%`,
+                            }}
+                          >
+                            V2
+                          </span>
+                        </>
+                      )}
                     </div>
                     {blueprintWorkspaceMode === "review-detected" && detectedBlueprintRooms.length > 0 ? (
                       <div style={blueprintOverlayLayerStyle} aria-label="Detected room preview overlay">
@@ -2249,6 +2350,72 @@ const averageTonnage = (minTon + maxTon) / 2;
                       Confirm Calibration
                     </button>
                   ) : null}
+
+                  {/* Verification Section */}
+                  {blueprintCalibration.status === "calibrated" && (
+                    <div style={{ marginTop: "20px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsVerificationMode(!isVerificationMode)}
+                        style={{
+                          ...blueprintTraceButtonStyle,
+                          background: isVerificationMode ? "rgba(168,85,247,0.24)" : "rgba(15,23,42,0.64)",
+                          border: `1px solid ${isVerificationMode ? "rgba(168,85,247,0.64)" : "rgba(168,85,247,0.24)"}`,
+                          color: "#f8fafc",
+                          width: "100%",
+                        }}
+                      >
+                        {isVerificationMode ? "Exit Verification" : "Verify Calibration"}
+                      </button>
+
+                      {isVerificationMode && (
+                        <div style={{ marginTop: "12px" }}>
+                          <label style={blueprintCalibrationInputGroupStyle}>
+                            <span style={blueprintCalibrationInputLabelStyle}>Verification Length</span>
+                            <input
+                              className="load-input"
+                              type="text"
+                              value={blueprintCalibration.verification?.realWorldDistance || ""}
+                              onChange={updateBlueprintCalibrationKnownLengthInput}
+                              placeholder="Measure known wall"
+                              style={blueprintCalibrationInputStyle}
+                            />
+                          </label>
+
+                          {blueprintCalibration.confidence !== "unverified" && (
+                            <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8" }}>
+                                Accuracy {verificationErrorPercentage !== null ? `(${verificationErrorPercentage.toFixed(1)}%)` : ""}
+                              </span>
+                              <span
+                                style={{
+                                  padding: "3px 8px",
+                                  borderRadius: "999px",
+                                  fontSize: "10px",
+                                  fontWeight: 900,
+                                  background:
+                                    blueprintCalibration.confidence === "warning"
+                                      ? "rgba(239,68,68,0.2)"
+                                      : "rgba(34,197,94,0.2)",
+                                  color:
+                                    blueprintCalibration.confidence === "warning"
+                                      ? "#f87171"
+                                      : "#4ade80",
+                                  border: `1px solid ${
+                                    blueprintCalibration.confidence === "warning"
+                                      ? "rgba(239,68,68,0.4)"
+                                      : "rgba(34,197,94,0.4)"
+                                  }`,
+                                }}
+                              >
+                                {blueprintCalibration.confidence.toUpperCase()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div style={blueprintInspectorCardStyle}>
@@ -3695,6 +3862,18 @@ const blueprintMeasurementLabelStyle: React.CSSProperties = {
   transform: "translate(-50%, -50%)",
   pointerEvents: "none",
   whiteSpace: "nowrap",
+};
+
+const blueprintVerificationLineStyle: React.CSSProperties = {
+  stroke: "rgba(168,85,247,0.95)",
+  strokeWidth: 0.35,
+  strokeDasharray: "1.4 1",
+  vectorEffect: "non-scaling-stroke",
+};
+
+const blueprintVerificationPointStyle: React.CSSProperties = {
+  ...blueprintCalibrationPointStyle,
+  border: "2px solid rgba(168,85,247,0.95)",
 };
 
 const blueprintRoomOutlineSvgStyle: React.CSSProperties = {
