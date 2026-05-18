@@ -48,6 +48,16 @@ import {
   calculateBlueprintRoomEnvelopeConfidence,
   explainBlueprintRoomEnvelopePreview,
 } from "@/lib/hvac/blueprintExteriorLoad";
+import {
+  BlueprintProject,
+  createBlueprintProjectSnapshot,
+  updateBlueprintProjectSnapshot,
+} from "@/lib/hvac/blueprintProject";
+import {
+  saveBlueprintProjectToLocalStorage,
+  loadBlueprintProjectFromLocalStorage,
+  listBlueprintProjectsFromLocalStorage,
+} from "@/lib/hvac/blueprintPersistence";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -289,6 +299,14 @@ export default function LoadCalculator() {
   const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [projectActionMessage, setProjectActionMessage] = useState("");
+  const [v3ProjectName, setV3ProjectName] = useState("New Blueprint Project");
+  const [v3SaveStatus, setV3SaveStatus] = useState("");
+  const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
+  const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
+  }, []);
   const isBlueprintWorkspaceActive =
     activeLoadView === "technician" && activeTechnicianSection === "manual-room-takeoff";
 
@@ -487,6 +505,136 @@ export default function LoadCalculator() {
       setProjectActionMessage("Project save failed");
     }
   };
+
+  const handleV3SaveProject = () => {
+    try {
+      const input = {
+        name: v3ProjectName,
+        blueprintImage: blueprintFile
+          ? {
+              name: blueprintFile.name,
+              size: blueprintFile.size,
+              type: blueprintFile.type,
+              lastModified: blueprintFile.lastModified,
+              dataUrl: blueprintPreviewUrl,
+            }
+          : null,
+        calibration: blueprintCalibration,
+        tracedRooms: blueprintRoomTrace.roomOutlines,
+        envelopeSettings: {
+          insulationQuality,
+          oregonRegion,
+        },
+        manualDProjectState,
+      };
+
+      let snapshot: BlueprintProject;
+      if (activeV3ProjectId) {
+        const existing = loadBlueprintProjectFromLocalStorage(activeV3ProjectId);
+        if (existing) {
+          snapshot = updateBlueprintProjectSnapshot(existing, input);
+        } else {
+          snapshot = createBlueprintProjectSnapshot(input);
+        }
+      } else {
+        snapshot = createBlueprintProjectSnapshot(input);
+      }
+
+      saveBlueprintProjectToLocalStorage(snapshot);
+      setActiveV3ProjectId(snapshot.id);
+      setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
+      setV3SaveStatus("Project saved locally");
+      window.setTimeout(() => setV3SaveStatus(""), 3000);
+    } catch (error) {
+      console.error("V3 Project save failed", error);
+      setV3SaveStatus("Save failed");
+    }
+  };
+
+  const handleLoadV3Project = (projectId: string) => {
+    try {
+      const project = loadBlueprintProjectFromLocalStorage(projectId);
+      if (!project) {
+        setV3SaveStatus("Project not found");
+        return;
+      }
+
+      setActiveV3ProjectId(project.id);
+      setV3ProjectName(project.name);
+      setBlueprintCalibration(project.calibration);
+      setBlueprintRoomTrace((currentTrace) => ({
+        ...currentTrace,
+        roomOutlines: project.tracedRooms,
+      }));
+      setInsulationQuality(project.envelopeSettings.insulationQuality);
+      setOregonRegion(project.envelopeSettings.oregonRegion);
+      
+      if (project.manualDProjectState) {
+        setLoadedManualDProjectState(project.manualDProjectState);
+      }
+
+      if (project.blueprintImage?.dataUrl) {
+        setBlueprintPreviewUrl(project.blueprintImage.dataUrl);
+        setBlueprintFileName(project.blueprintImage.name);
+      }
+
+      setV3SaveStatus("Project loaded");
+      window.setTimeout(() => setV3SaveStatus(""), 3000);
+    } catch (error) {
+      console.error("V3 Project load failed", error);
+      setV3SaveStatus("Load failed");
+    }
+  };
+
+  useEffect(() => {
+    if (!activeV3ProjectId) return;
+
+    const timer = window.setTimeout(() => {
+      try {
+        const existing = loadBlueprintProjectFromLocalStorage(activeV3ProjectId);
+        if (!existing) return;
+
+        const snapshot = updateBlueprintProjectSnapshot(existing, {
+          name: v3ProjectName,
+          blueprintImage: blueprintFile
+            ? {
+                name: blueprintFile.name,
+                size: blueprintFile.size,
+                type: blueprintFile.type,
+                lastModified: blueprintFile.lastModified,
+                dataUrl: blueprintPreviewUrl,
+              }
+            : null,
+          calibration: blueprintCalibration,
+          tracedRooms: blueprintRoomTrace.roomOutlines,
+          envelopeSettings: {
+            insulationQuality,
+            oregonRegion,
+          },
+          manualDProjectState,
+        });
+
+        saveBlueprintProjectToLocalStorage(snapshot);
+        setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
+        setV3SaveStatus("Autosaved");
+        window.setTimeout(() => setV3SaveStatus(""), 2000);
+      } catch (error) {
+        console.error("Autosave failed", error);
+      }
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    activeV3ProjectId,
+    v3ProjectName,
+    blueprintFile,
+    blueprintPreviewUrl,
+    blueprintCalibration,
+    blueprintRoomTrace.roomOutlines,
+    insulationQuality,
+    oregonRegion,
+    manualDProjectState,
+  ]);
 
   const handleLoadProject = (project: SavedProject) => {
     try {
@@ -1768,6 +1916,75 @@ const averageTonnage = (minTon + maxTon) / 2;
                 </button>
               );
             })}
+          </div>
+
+          <div className="load-section-panel" style={{ ...projectSavePanelStyle, background: "rgba(30, 41, 59, 0.4)" }}>
+            <div style={projectSaveHeaderStyle}>
+              <div style={{ flex: 1 }}>
+                <p style={sectionPanelTitleStyle}>Blueprint AI Project Persistence</p>
+                <p style={sectionPanelDescriptionStyle}>Capture full engine state including rooms and calibration.</p>
+                <div style={{ display: "flex", gap: "10px", marginTop: "12px", alignItems: "center" }}>
+                  <input
+                    type="text"
+                    className="load-input"
+                    value={v3ProjectName}
+                    onChange={(e) => setV3ProjectName(e.target.value)}
+                    placeholder="Project Name"
+                    style={{ ...inputControlStyle, maxWidth: "260px" }}
+                  />
+                  <button
+                    type="button"
+                    className="calc-action-button"
+                    style={{ ...calcActionButtonStyle, marginTop: 0, width: "auto", minWidth: "120px" }}
+                    onClick={handleV3SaveProject}
+                  >
+                    Save Project
+                  </button>
+                  {v3SaveStatus ? (
+                    <p style={{ ...projectActionMessageStyle, margin: 0, color: "#4ade80" }}>{v3SaveStatus}</p>
+                  ) : null}
+                </div>
+                {v3RecentProjects.length > 0 && (
+                  <div style={{ marginTop: "16px", display: "grid", gap: "8px" }}>
+                    <p style={{ ...sectionPanelDescriptionStyle, fontWeight: 800, color: "#cbd5e1" }}>Recent Blueprint Projects</p>
+                    <div style={{ display: "grid", gap: "6px" }}>
+                      {v3RecentProjects.slice(0, 5).map((project) => (
+                        <div key={project.id} style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "8px 12px",
+                          borderRadius: "12px",
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.06)"
+                        }}>
+                          <div>
+                            <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#f8fafc" }}>{project.name}</p>
+                            <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8" }}>Updated {new Date(project.updatedAt).toLocaleString()}</p>
+                          </div>
+                          <button
+                            type="button"
+                            style={{
+                              padding: "4px 10px",
+                              borderRadius: "8px",
+                              fontSize: "11px",
+                              fontWeight: 800,
+                              background: "rgba(212,175,55,0.15)",
+                              color: "#fde68a",
+                              border: "1px solid rgba(212,175,55,0.2)",
+                              cursor: "pointer"
+                            }}
+                            onClick={() => handleLoadV3Project(project.id)}
+                          >
+                            Load
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="load-section-panel" style={projectSavePanelStyle}>
