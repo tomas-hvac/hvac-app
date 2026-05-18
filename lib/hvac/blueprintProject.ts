@@ -105,3 +105,26 @@ export function deserializeBlueprintProject(json: string): BlueprintProject {
 
   return data as BlueprintProject;
 }
+
+export function exportBlueprintProjectToFileData(project: BlueprintProject): string {
+  // We use the standard serialization but wrap it in an export envelope if needed.
+  // For now, the serialized project is the portable format.
+  return serializeBlueprintProject(project);
+}
+
+export function importBlueprintProjectFromFileData(json: string): BlueprintProject | null {
+  try {
+    const project = deserializeBlueprintProject(json);
+    
+    // Basic structural validation
+    if (!project.id || !project.name || !Array.isArray(project.tracedRooms)) {
+      console.error("Import failed: Invalid project structure");
+      return null;
+    }
+
+    return project;
+  } catch (error) {
+    console.error("Import failed: Malformed project file", error);
+    return null;
+  }
+}
