@@ -44,6 +44,7 @@ import {
   adaptTracedRoomToManualDBlueprintRoom,
 } from "@/lib/hvac/roomCalculationPipeline";
 import {
+  calculateBlueprintRoomBoundaryCompleteness,
   calculateBlueprintRoomEnvelopeConfidence,
   explainBlueprintRoomEnvelopePreview,
 } from "@/lib/hvac/blueprintExteriorLoad";
@@ -2860,6 +2861,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       };
                       const envelopeInsight = explainBlueprintRoomEnvelopePreview(envelopeInput);
                       const envelopeConfidence = calculateBlueprintRoomEnvelopeConfidence(envelopeInput);
+                      const boundaryCompleteness = calculateBlueprintRoomBoundaryCompleteness(outline);
                       const envelopeInsightMessages =
                         envelopeInsight.status === "ready"
                           ? envelopeInsight.messages.slice(0, 3)
@@ -2888,6 +2890,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <span>Level {outline.floorLevel || "1"}</span>
                           <span>{outline.ceilingHeight || "8"} ft ceiling</span>
                           <span>{outline.points.length} points</span>
+                          <span style={{ color: boundaryCompleteness.isFullyClassified ? "#4ade80" : "#94a3b8" }}>
+                            {boundaryCompleteness.completionPercent}% classified ({boundaryCompleteness.classifiedEdges}/{boundaryCompleteness.totalEdges} edges)
+                          </span>
                         </div>
                         {selectedCardEdge ? (
                           <label style={detectedRoomEditFieldStyle}>

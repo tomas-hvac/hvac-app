@@ -771,6 +771,47 @@ export function calculateBlueprintEnvelopeContributionBreakdown(
   };
 }
 
+export type BlueprintRoomBoundaryCompleteness = {
+  totalEdges: number;
+  classifiedEdges: number;
+  unknownEdges: number;
+  exteriorEdges: number;
+  completionPercent: number;
+  isFullyClassified: boolean;
+};
+
+export function calculateBlueprintRoomBoundaryCompleteness(
+  room: BlueprintRoomOutline
+): BlueprintRoomBoundaryCompleteness {
+  const edges = room.boundaryEdges ?? [];
+  const totalEdges = edges.length;
+
+  if (totalEdges === 0) {
+    return {
+      totalEdges: 0,
+      classifiedEdges: 0,
+      unknownEdges: 0,
+      exteriorEdges: 0,
+      completionPercent: 0,
+      isFullyClassified: false,
+    };
+  }
+
+  const classifiedEdges = edges.filter((edge) => edge.boundaryType !== "unknown").length;
+  const unknownEdges = totalEdges - classifiedEdges;
+  const exteriorEdges = edges.filter((edge) => edge.boundaryType === "exterior").length;
+  const completionPercent = Math.round((classifiedEdges / totalEdges) * 100);
+
+  return {
+    totalEdges,
+    classifiedEdges,
+    unknownEdges,
+    exteriorEdges,
+    completionPercent,
+    isFullyClassified: unknownEdges === 0,
+  };
+}
+
 export type BlueprintRoomEnvelopeConfidence = {
   score: "high" | "medium" | "low";
   assumptionsUsed: string[];
@@ -793,43 +834,41 @@ export function calculateBlueprintRoomEnvelopeConfidence(
     warnings.push("Calculations are using unscaled pixel distances.");
   }
 
-  // 2. Boundary Classification Check
-  const hasExteriorBoundaries = input.room.boundaryEdges?.some(
-    (edge) => edge.boundaryType === "exterior"
-  );
+  // 2. Boundary Completeness Check
+  const completeness = calculateBlueprintRoomBoundaryCompleteness(input.room);
 
-  if (!hasExteriorBoundaries) {
+  if (completeness.totalEdges === 0) {
     score = "low";
-    warnings.push("No exterior boundaries identified; envelope load may be underestimated.");
+    warnings.push("Room has no defined boundaries.");
+  } else if (!completeness.isFullyClassified) {
+    if (completeness.completionPercent < 50) {
+      score = "low";
+    } else if (score === "high") {
+      score = "medium";
+    }
+    assumptionsUsed.push("Unknown boundaries treated as interior/non-load");
+    warnings.push(`${100 - completeness.completionPercent}% of boundaries are unclassified.`);
   }
 
-  const hasUnknownBoundaries = input.room.boundaryEdges?.some(
-    (edge) => edge.boundaryType === "unknown"
-  );
-
-  if (hasUnknownBoundaries) {
+  if (completeness.exteriorEdges === 0 && completeness.totalEdges > 0) {
     if (score === "high") score = "medium";
-    assumptionsUsed.push("Unknown boundaries treated as interior/non-load");
-    warnings.push("Some room boundaries are unclassified.");
+    warnings.push("No exterior boundaries identified; envelope load may be underestimated.");
   }
 
   // 3. Orientation Check
   const orientations = getBlueprintExteriorEdgeOrientationPreviews(input.room);
   const hasUnknownOrientation = orientations.some((p) => p.orientation === "unknown");
 
-  if (hasUnknownOrientation && hasExteriorBoundaries) {
+  if (hasUnknownOrientation && completeness.exteriorEdges > 0) {
     if (score === "high") score = "medium";
     assumptionsUsed.push("Default orientation used for unmapped exterior edges");
     warnings.push("Compass orientation could not be determined for some edges.");
   }
 
   // 4. Window Data Check
-  const exteriorEdgeCount = input.room.boundaryEdges?.filter(
-    (edge) => edge.boundaryType === "exterior"
-  ).length ?? 0;
   const windows = input.windows ?? [];
 
-  if (exteriorEdgeCount > 0 && windows.length === 0) {
+  if (completeness.exteriorEdges > 0 && windows.length === 0) {
     if (score === "high") score = "medium";
     assumptionsUsed.push("No windows model; assuming 0% window-to-wall ratio");
     warnings.push("No windows have been placed on exterior walls.");

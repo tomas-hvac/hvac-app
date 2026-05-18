@@ -139,6 +139,9 @@ export function adaptTracedRoomToManualDBlueprintRoom({
   context,
 }: TracedRoomAdapterInput): ManualDBlueprintRoomOutput {
   const unifiedRoom = createUnifiedTracedRoom({ tracedRoom, context });
+  const exteriorWallsCount = tracedRoom.boundaryEdges?.filter(
+    (edge) => edge.boundaryType === "exterior"
+  ).length ?? 0;
 
   return {
     id: outputId,
@@ -146,6 +149,7 @@ export function adaptTracedRoomToManualDBlueprintRoom({
     squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
     ceilingHeight: unifiedRoom.ceilingHeight,
     floorLevel: unifiedRoom.floorLevel,
+    exteriorWallsCount: String(exteriorWallsCount),
     sourceBlueprintRoomId: tracedRoom.id,
   };
 }
