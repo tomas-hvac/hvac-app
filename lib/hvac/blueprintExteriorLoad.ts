@@ -113,11 +113,126 @@ export type BlueprintRoomEnvelopePreview = {
   windowLoads: BlueprintWindowLoadPreview[];
 };
 
+export type BlueprintEnvelopeContributionSource =
+  | "exterior-wall-conduction"
+  | "window-conduction"
+  | "solar-gain"
+  | "none"
+  | "not-ready";
+
+export type BlueprintEnvelopeContributionPercentages = {
+  exteriorWallConductionPercent: number;
+  windowConductionPercent: number;
+  solarGainPercent: number;
+};
+
+export type BlueprintEnvelopeContributionBreakdown = {
+  status: BlueprintRoomEnvelopePreviewStatus;
+  dominantHeatingSource: BlueprintEnvelopeContributionSource;
+  dominantCoolingSource: BlueprintEnvelopeContributionSource;
+  dominantSolarOrientation: BlueprintExteriorEdgeOrientation;
+  largestExteriorExposureOrientation: BlueprintExteriorEdgeOrientation;
+  heatingContributionPercentages: BlueprintEnvelopeContributionPercentages | null;
+  coolingContributionPercentages: BlueprintEnvelopeContributionPercentages | null;
+  exteriorWallHeatingBtu: number;
+  exteriorWallCoolingBtu: number;
+  windowHeatingConductionBtu: number;
+  windowCoolingConductionBtu: number;
+  solarGainBtu: number;
+};
+
 function getValidPoint(
   points: BlueprintCalibrationPoint[],
   index: number
 ): BlueprintCalibrationPoint | null {
   return index >= 0 && index < points.length ? points[index] : null;
+}
+
+function getContributionPercentages(
+  exteriorWallConductionBtu: number,
+  windowConductionBtu: number,
+  solarGainBtu: number
+): BlueprintEnvelopeContributionPercentages | null {
+  const total = exteriorWallConductionBtu + windowConductionBtu + solarGainBtu;
+  if (total <= 0) return null;
+
+  return {
+    exteriorWallConductionPercent: Math.round((exteriorWallConductionBtu / total) * 100),
+    windowConductionPercent: Math.round((windowConductionBtu / total) * 100),
+    solarGainPercent: Math.round((solarGainBtu / total) * 100),
+  };
+}
+
+function getDominantContributionSource(
+  contributions: Array<{ source: BlueprintEnvelopeContributionSource; btu: number }>
+): BlueprintEnvelopeContributionSource {
+  const dominantContribution = contributions
+    .filter((contribution) => contribution.btu > 0)
+    .sort((first, second) => second.btu - first.btu)[0];
+
+  return dominantContribution?.source ?? "none";
+}
+
+function getDominantSolarOrientation(
+  windowLoads: BlueprintWindowLoadPreview[]
+): BlueprintExteriorEdgeOrientation {
+  const solarByOrientation = windowLoads.reduce(
+    (totals, windowLoad) => {
+      totals[windowLoad.orientation] += windowLoad.solarGainBtu;
+      return totals;
+    },
+    {
+      north: 0,
+      south: 0,
+      east: 0,
+      west: 0,
+      northeast: 0,
+      northwest: 0,
+      southeast: 0,
+      southwest: 0,
+      unknown: 0,
+    } satisfies Record<BlueprintExteriorEdgeOrientation, number>
+  );
+
+  return (Object.entries(solarByOrientation) as Array<[BlueprintExteriorEdgeOrientation, number]>)
+    .filter(([, solarGainBtu]) => solarGainBtu > 0)
+    .sort((first, second) => second[1] - first[1])[0]?.[0] ?? "unknown";
+}
+
+function getLargestExteriorExposureOrientation(
+  room: BlueprintRoomOutline,
+  pixelsPerFoot: number | null,
+  overlaySize?: BlueprintExteriorLoadOverlaySize
+): BlueprintExteriorEdgeOrientation {
+  if (!room.boundaryEdges || room.boundaryEdges.length === 0) return "unknown";
+
+  const exposureByOrientation = room.boundaryEdges
+    .map((edge, edgeIndex) => ({ edge, edgeIndex }))
+    .filter(({ edge }) => edge.boundaryType === "exterior")
+    .reduce(
+      (totals, { edge }) => {
+        const orientation = calculateBlueprintExteriorEdgeOrientation(room.points, edge);
+        const lengthFeet =
+          calculateBlueprintBoundaryEdgeLengthFeet(room.points, edge, pixelsPerFoot, overlaySize) ?? 0;
+        totals[orientation] += lengthFeet;
+        return totals;
+      },
+      {
+        north: 0,
+        south: 0,
+        east: 0,
+        west: 0,
+        northeast: 0,
+        northwest: 0,
+        southeast: 0,
+        southwest: 0,
+        unknown: 0,
+      } satisfies Record<BlueprintExteriorEdgeOrientation, number>
+    );
+
+  return (Object.entries(exposureByOrientation) as Array<[BlueprintExteriorEdgeOrientation, number]>)
+    .filter(([, lengthFeet]) => lengthFeet > 0)
+    .sort((first, second) => second[1] - first[1])[0]?.[0] ?? "unknown";
 }
 
 function calculateBlueprintPolygonCentroid(
@@ -508,5 +623,77 @@ export function calculateBlueprintRoomEnvelopePreview({
     dominantEnvelopeBtu: Math.max(heatingEnvelopeBtu, coolingEnvelopeBtu),
     exteriorWallLoad,
     windowLoads,
+  };
+}
+
+export function calculateBlueprintEnvelopeContributionBreakdown(
+  input: BlueprintRoomEnvelopePreviewInput
+): BlueprintEnvelopeContributionBreakdown {
+  const envelopePreview = calculateBlueprintRoomEnvelopePreview(input);
+
+  if (envelopePreview.status !== "ready" || !envelopePreview.exteriorWallLoad) {
+    return {
+      status: envelopePreview.status,
+      dominantHeatingSource: "not-ready",
+      dominantCoolingSource: "not-ready",
+      dominantSolarOrientation: "unknown",
+      largestExteriorExposureOrientation: "unknown",
+      heatingContributionPercentages: null,
+      coolingContributionPercentages: null,
+      exteriorWallHeatingBtu: 0,
+      exteriorWallCoolingBtu: 0,
+      windowHeatingConductionBtu: 0,
+      windowCoolingConductionBtu: 0,
+      solarGainBtu: 0,
+    };
+  }
+
+  const exteriorWallHeatingBtu = envelopePreview.exteriorWallLoad.heatingBtu;
+  const exteriorWallCoolingBtu = envelopePreview.exteriorWallLoad.coolingBtu;
+  const windowHeatingConductionBtu = envelopePreview.windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.heatingConductionBtu,
+    0
+  );
+  const windowCoolingConductionBtu = envelopePreview.windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.coolingConductionBtu,
+    0
+  );
+  const solarGainBtu = envelopePreview.windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.solarGainBtu,
+    0
+  );
+
+  return {
+    status: "ready",
+    dominantHeatingSource: getDominantContributionSource([
+      { source: "exterior-wall-conduction", btu: exteriorWallHeatingBtu },
+      { source: "window-conduction", btu: windowHeatingConductionBtu },
+    ]),
+    dominantCoolingSource: getDominantContributionSource([
+      { source: "exterior-wall-conduction", btu: exteriorWallCoolingBtu },
+      { source: "window-conduction", btu: windowCoolingConductionBtu },
+      { source: "solar-gain", btu: solarGainBtu },
+    ]),
+    dominantSolarOrientation: getDominantSolarOrientation(envelopePreview.windowLoads),
+    largestExteriorExposureOrientation: getLargestExteriorExposureOrientation(
+      input.room,
+      input.pixelsPerFoot,
+      input.overlaySize
+    ),
+    heatingContributionPercentages: getContributionPercentages(
+      exteriorWallHeatingBtu,
+      windowHeatingConductionBtu,
+      0
+    ),
+    coolingContributionPercentages: getContributionPercentages(
+      exteriorWallCoolingBtu,
+      windowCoolingConductionBtu,
+      solarGainBtu
+    ),
+    exteriorWallHeatingBtu,
+    exteriorWallCoolingBtu,
+    windowHeatingConductionBtu,
+    windowCoolingConductionBtu,
+    solarGainBtu,
   };
 }
