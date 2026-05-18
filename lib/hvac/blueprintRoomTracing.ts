@@ -227,6 +227,30 @@ export function renameBlueprintRoomOutline(
   };
 }
 
+export function updateBlueprintRoomBoundaryEdgeType(
+  currentState: BlueprintRoomTraceState,
+  outlineId: string,
+  edgeIndex: number,
+  boundaryType: BlueprintRoomBoundaryType
+): BlueprintRoomTraceState {
+  return {
+    ...currentState,
+    roomOutlines: currentState.roomOutlines.map((outline) => {
+      if (outline.id !== outlineId) return outline;
+
+      const boundaryEdges = outline.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(outline.points);
+      if (edgeIndex < 0 || edgeIndex >= boundaryEdges.length) return outline;
+
+      return {
+        ...outline,
+        boundaryEdges: boundaryEdges.map((edge, index) =>
+          index === edgeIndex ? { ...edge, boundaryType } : edge
+        ),
+      };
+    }),
+  };
+}
+
 export function removeBlueprintRoomOutline(
   currentState: BlueprintRoomTraceState,
   outlineId: string

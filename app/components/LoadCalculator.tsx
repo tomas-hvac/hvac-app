@@ -24,6 +24,7 @@ import { findSnapPoint } from "@/lib/hvac/blueprintSnapping";
 import {
   addBlueprintRoomTracePoint,
   cancelBlueprintRoomTrace,
+  createDefaultBlueprintRoomBoundaryEdges,
   createDefaultBlueprintRoomTraceState,
   editBlueprintRoomOutline,
   finishBlueprintRoomTrace,
@@ -33,7 +34,9 @@ import {
   startBlueprintRoomTrace,
   startBlueprintRoomTraceFromPoints,
   undoBlueprintRoomTracePoint,
+  updateBlueprintRoomBoundaryEdgeType,
   updateBlueprintRoomTracePoint,
+  type BlueprintRoomBoundaryType,
 } from "@/lib/hvac/blueprintRoomTracing";
 import {
   adaptDetectedRoomToManualDBlueprintRoom,
@@ -53,6 +56,19 @@ type DetectedRoomEditableField =
   | "floorLevel"
   | "windowsCount"
   | "exteriorWallsCount";
+type SelectedBlueprintBoundaryEdge = {
+  outlineId: string;
+  edgeIndex: number;
+};
+
+const BLUEPRINT_BOUNDARY_TYPE_OPTIONS: Array<{ label: string; value: BlueprintRoomBoundaryType }> = [
+  { label: "Unknown", value: "unknown" },
+  { label: "Exterior", value: "exterior" },
+  { label: "Interior", value: "interior" },
+  { label: "Garage", value: "garage" },
+  { label: "Attic", value: "attic" },
+  { label: "Crawlspace", value: "crawlspace" },
+];
 
 type BlueprintDetectionPipeline = {
   mode: "preview";
@@ -260,6 +276,8 @@ export default function LoadCalculator() {
       rooms: [],
     });
   const [selectedDetectedRoomId, setSelectedDetectedRoomId] = useState<string | null>(null);
+  const [selectedBlueprintBoundaryEdge, setSelectedBlueprintBoundaryEdge] =
+    useState<SelectedBlueprintBoundaryEdge | null>(null);
   const [detectedRoomActionMessage, setDetectedRoomActionMessage] = useState("");
   const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<ManualDBlueprintRoom[]>([]);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
@@ -554,6 +572,7 @@ export default function LoadCalculator() {
     setBlueprintRoomTrace(createDefaultBlueprintRoomTraceState());
     setBlueprintWorkspaceMode("manual-trace");
     setSelectedDetectedRoomId(null);
+    setSelectedBlueprintBoundaryEdge(null);
     setBlueprintDetectionPipeline({
       mode: "preview",
       status: "mock",
@@ -568,6 +587,7 @@ export default function LoadCalculator() {
 
     setBlueprintWorkspaceMode("review-detected");
     setSelectedDetectedRoomId(null);
+    setSelectedBlueprintBoundaryEdge(null);
     setBlueprintRoomTrace((currentTrace) => cancelBlueprintRoomTrace(currentTrace));
     setBlueprintDetectionPipeline({
       mode: "preview",
@@ -822,6 +842,7 @@ export default function LoadCalculator() {
 
   const startBlueprintRoomOutlineTrace = () => {
     setBlueprintWorkspaceMode("manual-trace");
+    setSelectedBlueprintBoundaryEdge(null);
     setBlueprintRoomTrace((currentTrace) => startBlueprintRoomTrace(currentTrace));
   };
 
@@ -861,11 +882,33 @@ export default function LoadCalculator() {
 
   const editTracedRoomOutline = (outlineId: string) => {
     setBlueprintWorkspaceMode("manual-trace");
+    setSelectedBlueprintBoundaryEdge(null);
     setBlueprintRoomTrace((currentTrace) => editBlueprintRoomOutline(currentTrace, outlineId));
   };
 
   const removeTracedRoom = (outlineId: string) => {
+    setSelectedBlueprintBoundaryEdge((currentEdge) =>
+      currentEdge?.outlineId === outlineId ? null : currentEdge
+    );
     setBlueprintRoomTrace((currentTrace) => removeBlueprintRoomOutline(currentTrace, outlineId));
+  };
+
+  const selectTracedRoomBoundaryEdge = (outlineId: string, edgeIndex: number) => {
+    setSelectedDetectedRoomId(outlineId);
+    setSelectedBlueprintBoundaryEdge({ outlineId, edgeIndex });
+  };
+
+  const updateSelectedBoundaryType = (boundaryType: BlueprintRoomBoundaryType) => {
+    if (!selectedBlueprintBoundaryEdge) return;
+
+    setBlueprintRoomTrace((currentTrace) =>
+      updateBlueprintRoomBoundaryEdgeType(
+        currentTrace,
+        selectedBlueprintBoundaryEdge.outlineId,
+        selectedBlueprintBoundaryEdge.edgeIndex,
+        boundaryType
+      )
+    );
   };
 
   const sendTracedRoomToManualD = (outlineId: string) => {
@@ -1122,6 +1165,18 @@ export default function LoadCalculator() {
       ),
     }));
   }, [blueprintRoomTrace.roomOutlines, confirmedBlueprintPixelsPerFoot, blueprintOverlaySize]);
+
+  const selectedTracedRoom = useMemo(
+    () => tracedRoomsWithSqft.find((outline) => outline.id === selectedDetectedRoomId) ?? null,
+    [tracedRoomsWithSqft, selectedDetectedRoomId]
+  );
+  const selectedBoundaryEdgeMetadata =
+    selectedTracedRoom && selectedBlueprintBoundaryEdge?.outlineId === selectedTracedRoom.id
+      ? (selectedTracedRoom.boundaryEdges ??
+          createDefaultBlueprintRoomBoundaryEdges(selectedTracedRoom.points))[
+          selectedBlueprintBoundaryEdge.edgeIndex
+        ] ?? null
+      : null;
 
   const blueprintRoomTraceStatusText = blueprintRoomTrace.isTracing
     ? `${blueprintRoomTrace.draftPoints.length} point${blueprintRoomTrace.draftPoints.length === 1 ? "" : "s"} selected`
@@ -2212,13 +2267,51 @@ const averageTonnage = (minTon + maxTon) / 2;
                           key={outline.id}
                           viewBox="0 0 100 100"
                           preserveAspectRatio="none"
-                          style={blueprintRoomOutlineSvgStyle}
-                          aria-hidden="true"
+                          style={{ ...blueprintRoomOutlineSvgStyle, pointerEvents: "auto" }}
+                          aria-label={`${outline.name} boundary edges`}
                         >
                           <polygon
                             points={outline.points.map((point) => `${point.xPercent},${point.yPercent}`).join(" ")}
                             style={blueprintRoomOutlinePolygonStyle}
                           />
+                          {(outline.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(outline.points)).map(
+                            (edge, edgeIndex) => {
+                              const startPoint = outline.points[edge.startPointIndex];
+                              const endPoint = outline.points[edge.endPointIndex];
+                              const isSelectedEdge =
+                                selectedBlueprintBoundaryEdge?.outlineId === outline.id &&
+                                selectedBlueprintBoundaryEdge.edgeIndex === edgeIndex;
+
+                              if (!startPoint || !endPoint) return null;
+
+                              return (
+                                <line
+                                  key={`${outline.id}-boundary-${edgeIndex}`}
+                                  x1={startPoint.xPercent}
+                                  y1={startPoint.yPercent}
+                                  x2={endPoint.xPercent}
+                                  y2={endPoint.yPercent}
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-label={`Select ${outline.name} boundary edge ${edgeIndex + 1}`}
+                                  style={
+                                    isSelectedEdge
+                                      ? { ...blueprintRoomBoundaryLineStyle, ...blueprintRoomBoundaryLineSelectedStyle }
+                                      : blueprintRoomBoundaryLineStyle
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectTracedRoomBoundaryEdge(outline.id, edgeIndex);
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key !== "Enter" && event.key !== " ") return;
+                                    event.preventDefault();
+                                    selectTracedRoomBoundaryEdge(outline.id, edgeIndex);
+                                  }}
+                                />
+                              );
+                            }
+                          )}
                         </svg>
                       ))}
                       {blueprintRoomTrace.draftPoints.length > 0 ? (
@@ -2511,7 +2604,31 @@ const averageTonnage = (minTon + maxTon) / 2;
                   </div>
                 </div>
 
-                {selectedDetectedRoom && selectedDetectedRoomAirflow ? (
+                {selectedTracedRoom && selectedBoundaryEdgeMetadata && selectedBlueprintBoundaryEdge ? (
+                  <div style={blueprintInspectorCardStyle}>
+                    <p style={blueprintCalibrationStatusStyle}>Boundary Edge</p>
+                    <p style={blueprintCalibrationHelperStyle}>
+                      {selectedTracedRoom.name} · Edge {selectedBlueprintBoundaryEdge.edgeIndex + 1}
+                    </p>
+                    <label style={{ ...blueprintCalibrationInputGroupStyle, marginTop: "10px" }}>
+                      <span style={blueprintCalibrationInputLabelStyle}>Boundary Type</span>
+                      <select
+                        className="load-input blueprint-takeoff-control"
+                        value={selectedBoundaryEdgeMetadata.boundaryType}
+                        onChange={(event) =>
+                          updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
+                        }
+                        style={blueprintCalibrationInputStyle}
+                      >
+                        {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : selectedDetectedRoom && selectedDetectedRoomAirflow ? (
                   <div style={blueprintAirflowPreviewStyle}>
                     <div>
                       <p style={blueprintAirflowPreviewLabelStyle}>Selected Room Airflow</p>
@@ -2723,8 +2840,23 @@ const averageTonnage = (minTon + maxTon) / 2;
                 </div>
                 {tracedRoomsWithSqft.length > 0 ? (
                   <div style={detectedRoomsGridStyle}>
-                    {tracedRoomsWithSqft.map((outline) => (
-                      <div key={outline.id} style={detectedRoomCardStyle}>
+                    {tracedRoomsWithSqft.map((outline) => {
+                      const selectedCardEdge =
+                        selectedBlueprintBoundaryEdge?.outlineId === outline.id
+                          ? (outline.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(outline.points))[
+                              selectedBlueprintBoundaryEdge.edgeIndex
+                            ] ?? null
+                          : null;
+
+                      return (
+                      <div
+                        key={outline.id}
+                        style={
+                          selectedDetectedRoomId === outline.id
+                            ? { ...detectedRoomCardStyle, ...detectedRoomCardActiveStyle }
+                            : detectedRoomCardStyle
+                        }
+                      >
                         <div style={detectedRoomHeaderStyle}>
                           <p style={tracedRoomTitleStyle}>{outline.name}</p>
                           <span style={detectedRoomConfirmedBadgeStyle}>Traced</span>
@@ -2740,6 +2872,27 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <span>{outline.ceilingHeight || "8"} ft ceiling</span>
                           <span>{outline.points.length} points</span>
                         </div>
+                        {selectedCardEdge ? (
+                          <label style={detectedRoomEditFieldStyle}>
+                            <span style={detectedRoomEditLabelStyle}>
+                              Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Boundary
+                            </span>
+                            <select
+                              className="load-input blueprint-takeoff-control"
+                              value={selectedCardEdge.boundaryType}
+                              onChange={(event) =>
+                                updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
+                              }
+                              style={detectedRoomCompactInputStyle}
+                            >
+                              {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
                         <div style={detectedRoomActionsStyle}>
                           <button
                             type="button"
@@ -2784,7 +2937,8 @@ const averageTonnage = (minTon + maxTon) / 2;
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p style={detectedRoomsNoteStyle}>No traced rooms yet.</p>
@@ -3980,6 +4134,21 @@ const blueprintRoomOutlinePolygonStyle: React.CSSProperties = {
   stroke: "rgba(56,189,248,0.96)",
   strokeWidth: 0.55,
   vectorEffect: "non-scaling-stroke",
+  pointerEvents: "none",
+};
+
+const blueprintRoomBoundaryLineStyle: React.CSSProperties = {
+  fill: "none",
+  stroke: "rgba(14,165,233,0.72)",
+  strokeWidth: 1.2,
+  vectorEffect: "non-scaling-stroke",
+  cursor: "pointer",
+  pointerEvents: "stroke",
+};
+
+const blueprintRoomBoundaryLineSelectedStyle: React.CSSProperties = {
+  stroke: "rgba(250,204,21,0.98)",
+  strokeWidth: 1.8,
 };
 
 const blueprintRoomDraftPolygonStyle: React.CSSProperties = {
