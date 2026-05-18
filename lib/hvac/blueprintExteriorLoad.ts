@@ -15,6 +15,24 @@ export type BlueprintOregonDesignDeltaT = {
   coolingDeltaT: number;
 };
 
+export type BlueprintExteriorEdgeOrientation =
+  | "north"
+  | "south"
+  | "east"
+  | "west"
+  | "northeast"
+  | "northwest"
+  | "southeast"
+  | "southwest"
+  | "unknown";
+
+export type BlueprintExteriorEdgeOrientationPreview = {
+  edgeIndex: number;
+  startPointIndex: number;
+  endPointIndex: number;
+  orientation: BlueprintExteriorEdgeOrientation;
+};
+
 export type BlueprintExteriorWallLoadInput = {
   room: BlueprintRoomOutline;
   pixelsPerFoot: number | null;
@@ -41,6 +59,81 @@ function getValidPoint(
   index: number
 ): BlueprintCalibrationPoint | null {
   return index >= 0 && index < points.length ? points[index] : null;
+}
+
+function calculateBlueprintPolygonCentroid(
+  points: BlueprintCalibrationPoint[]
+): BlueprintCalibrationPoint | null {
+  if (points.length === 0) return null;
+
+  const pointTotal = points.reduce(
+    (total, point) => ({
+      xPercent: total.xPercent + point.xPercent,
+      yPercent: total.yPercent + point.yPercent,
+    }),
+    { xPercent: 0, yPercent: 0 }
+  );
+
+  return {
+    xPercent: pointTotal.xPercent / points.length,
+    yPercent: pointTotal.yPercent / points.length,
+  };
+}
+
+function getCompassOrientationFromVector(
+  xDelta: number,
+  yDelta: number
+): BlueprintExteriorEdgeOrientation {
+  if (!Number.isFinite(xDelta) || !Number.isFinite(yDelta)) return "unknown";
+  if (Math.abs(xDelta) < 0.001 && Math.abs(yDelta) < 0.001) return "unknown";
+
+  const degrees = (Math.atan2(yDelta, xDelta) * 180) / Math.PI;
+  const normalizedDegrees = (degrees + 360) % 360;
+
+  if (normalizedDegrees >= 337.5 || normalizedDegrees < 22.5) return "east";
+  if (normalizedDegrees < 67.5) return "southeast";
+  if (normalizedDegrees < 112.5) return "south";
+  if (normalizedDegrees < 157.5) return "southwest";
+  if (normalizedDegrees < 202.5) return "west";
+  if (normalizedDegrees < 247.5) return "northwest";
+  if (normalizedDegrees < 292.5) return "north";
+  return "northeast";
+}
+
+export function calculateBlueprintExteriorEdgeOrientation(
+  points: BlueprintCalibrationPoint[],
+  edge: BlueprintRoomBoundaryEdge
+): BlueprintExteriorEdgeOrientation {
+  const centroid = calculateBlueprintPolygonCentroid(points);
+  const startPoint = getValidPoint(points, edge.startPointIndex);
+  const endPoint = getValidPoint(points, edge.endPointIndex);
+  if (!centroid || !startPoint || !endPoint) return "unknown";
+
+  const edgeMidpoint = {
+    xPercent: (startPoint.xPercent + endPoint.xPercent) / 2,
+    yPercent: (startPoint.yPercent + endPoint.yPercent) / 2,
+  };
+
+  return getCompassOrientationFromVector(
+    edgeMidpoint.xPercent - centroid.xPercent,
+    edgeMidpoint.yPercent - centroid.yPercent
+  );
+}
+
+export function getBlueprintExteriorEdgeOrientationPreviews(
+  room: BlueprintRoomOutline
+): BlueprintExteriorEdgeOrientationPreview[] {
+  if (!room.boundaryEdges || room.boundaryEdges.length === 0) return [];
+
+  return room.boundaryEdges
+    .map((edge, edgeIndex) => ({ edge, edgeIndex }))
+    .filter(({ edge }) => edge.boundaryType === "exterior")
+    .map(({ edge, edgeIndex }) => ({
+      edgeIndex,
+      startPointIndex: edge.startPointIndex,
+      endPointIndex: edge.endPointIndex,
+      orientation: calculateBlueprintExteriorEdgeOrientation(room.points, edge),
+    }));
 }
 
 export function getBlueprintExteriorWallUFactor(insulationQuality = "Average") {
