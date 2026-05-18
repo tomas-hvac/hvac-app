@@ -37,6 +37,7 @@ import {
   updateBlueprintRoomBoundaryEdgeType,
   updateBlueprintRoomTracePoint,
   type BlueprintRoomBoundaryType,
+  type BlueprintRoomOutline,
 } from "@/lib/hvac/blueprintRoomTracing";
 import {
   adaptDetectedRoomToManualDBlueprintRoom,
@@ -303,6 +304,8 @@ export default function LoadCalculator() {
   const [v3SaveStatus, setV3SaveStatus] = useState("");
   const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
   const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
+  const [isBlueprintRestoring, setIsBlueprintRestoring] = useState(false);
+  const [pendingV3Rooms, setPendingV3Rooms] = useState<BlueprintRoomOutline[] | null>(null);
 
   useEffect(() => {
     setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
@@ -562,20 +565,24 @@ export default function LoadCalculator() {
       setActiveV3ProjectId(project.id);
       setV3ProjectName(project.name);
       setBlueprintCalibration(project.calibration);
-      setBlueprintRoomTrace((currentTrace) => ({
-        ...currentTrace,
-        roomOutlines: project.tracedRooms,
-      }));
+      
+      if (project.blueprintImage?.dataUrl) {
+        setIsBlueprintRestoring(true);
+        setPendingV3Rooms(project.tracedRooms);
+        setBlueprintPreviewUrl(project.blueprintImage.dataUrl);
+        setBlueprintFileName(project.blueprintImage.name);
+      } else {
+        setBlueprintRoomTrace((currentTrace) => ({
+          ...currentTrace,
+          roomOutlines: project.tracedRooms,
+        }));
+      }
+
       setInsulationQuality(project.envelopeSettings.insulationQuality);
       setOregonRegion(project.envelopeSettings.oregonRegion);
       
       if (project.manualDProjectState) {
         setLoadedManualDProjectState(project.manualDProjectState);
-      }
-
-      if (project.blueprintImage?.dataUrl) {
-        setBlueprintPreviewUrl(project.blueprintImage.dataUrl);
-        setBlueprintFileName(project.blueprintImage.name);
       }
 
       setV3SaveStatus("Project loaded");
@@ -2461,12 +2468,50 @@ const averageTonnage = (minTon + maxTon) / 2;
                       transform: `scale(${blueprintZoom})`,
                     }}
                   >
+                    {isBlueprintRestoring && (
+                      <div style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "rgba(15, 23, 42, 0.8)",
+                        zIndex: 20,
+                        borderRadius: "16px",
+                      }}>
+                        <p style={{ color: "#fde68a", fontSize: "12px", fontWeight: 800 }}>Restoring Blueprint...</p>
+                      </div>
+                    )}
                     {blueprintPreviewUrl ? (
                       <img
                         ref={blueprintImageRef}
                         src={blueprintPreviewUrl}
                         alt={`${blueprintFileName} preview`}
-                        style={blueprintImagePreviewStyle}
+                        style={{
+                          ...blueprintImagePreviewStyle,
+                          opacity: isBlueprintRestoring ? 0 : 1,
+                          transition: "opacity 0.2s ease",
+                        }}
+                        onLoad={() => {
+                          if (isBlueprintRestoring && pendingV3Rooms) {
+                            setBlueprintRoomTrace((currentTrace) => ({
+                              ...currentTrace,
+                              roomOutlines: pendingV3Rooms,
+                            }));
+                            setPendingV3Rooms(null);
+                            setIsBlueprintRestoring(false);
+                          }
+                        }}
+                        onError={() => {
+                          if (isBlueprintRestoring && pendingV3Rooms) {
+                            setBlueprintRoomTrace((currentTrace) => ({
+                              ...currentTrace,
+                              roomOutlines: pendingV3Rooms,
+                            }));
+                            setPendingV3Rooms(null);
+                            setIsBlueprintRestoring(false);
+                          }
+                        }}
                       />
                     ) : (
                       <div style={blueprintPdfPreviewStyle}>
@@ -2477,7 +2522,10 @@ const averageTonnage = (minTon + maxTon) / 2;
                     <div
                       ref={blueprintOverlayRef}
                       id="blueprint-calibration-overlay"
-                      style={blueprintCalibrationOverlayStyle}
+                      style={{
+                        ...blueprintCalibrationOverlayStyle,
+                        visibility: isBlueprintRestoring ? "hidden" : "visible",
+                      }}
                       aria-label="Blueprint calibration point selection overlay"
                       onClick={selectBlueprintCalibrationPointFromPreview}
                       onPointerMove={moveDraggedBlueprintTracePoint}
