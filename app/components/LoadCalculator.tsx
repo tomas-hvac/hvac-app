@@ -43,6 +43,10 @@ import {
   adaptManualFallbackRoomToManualDBlueprintRoom,
   adaptTracedRoomToManualDBlueprintRoom,
 } from "@/lib/hvac/roomCalculationPipeline";
+import {
+  calculateBlueprintRoomEnvelopeConfidence,
+  explainBlueprintRoomEnvelopePreview,
+} from "@/lib/hvac/blueprintExteriorLoad";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -2847,6 +2851,19 @@ const averageTonnage = (minTon + maxTon) / 2;
                               selectedBlueprintBoundaryEdge.edgeIndex
                             ] ?? null
                           : null;
+                      const envelopeInput = {
+                        room: outline,
+                        pixelsPerFoot: activePixelsPerFoot,
+                        overlaySize: blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined,
+                        insulationQuality,
+                        oregonRegion,
+                      };
+                      const envelopeInsight = explainBlueprintRoomEnvelopePreview(envelopeInput);
+                      const envelopeConfidence = calculateBlueprintRoomEnvelopeConfidence(envelopeInput);
+                      const envelopeInsightMessages =
+                        envelopeInsight.status === "ready"
+                          ? envelopeInsight.messages.slice(0, 3)
+                          : ["Envelope insight not ready."];
 
                       return (
                       <div
@@ -2893,6 +2910,35 @@ const averageTonnage = (minTon + maxTon) / 2;
                             </select>
                           </label>
                         ) : null}
+                        <div style={tracedRoomEnvelopeInsightStyle}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                            <p style={tracedRoomEnvelopeInsightTitleStyle}>Envelope Insight</p>
+                            <p style={{
+                              ...tracedRoomEnvelopeInsightTitleStyle,
+                              color: envelopeConfidence.score === "high" ? "#4ade80" : envelopeConfidence.score === "medium" ? "#fbbf24" : "#f87171",
+                              fontSize: "9px"
+                            }}>
+                              Confidence: {envelopeConfidence.score.toUpperCase()}
+                            </p>
+                          </div>
+                          <div style={tracedRoomEnvelopeInsightMessagesStyle}>
+                            {envelopeInsightMessages.map((message) => (
+                              <p key={message} style={tracedRoomEnvelopeInsightMessageStyle}>
+                                {message}
+                              </p>
+                            ))}
+                            {envelopeConfidence.assumptionsUsed.length > 0 && (
+                              <p style={{ ...tracedRoomEnvelopeInsightMessageStyle, color: "#94a3b8", fontSize: "10px", marginTop: "2px" }}>
+                                Assumptions: {envelopeConfidence.assumptionsUsed.join(", ")}
+                              </p>
+                            )}
+                            {envelopeConfidence.warnings.length > 0 && envelopeConfidence.score === "low" && (
+                              <p style={{ ...tracedRoomEnvelopeInsightMessageStyle, color: "#fca5a5", fontSize: "10px" }}>
+                                Warning: {envelopeConfidence.warnings[0]}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                         <div style={detectedRoomActionsStyle}>
                           <button
                             type="button"
@@ -4430,6 +4476,37 @@ const detectedRoomFactsStyle: React.CSSProperties = {
   color: "#cbd5e1",
   fontSize: "11px",
   fontWeight: 800,
+};
+
+const tracedRoomEnvelopeInsightStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "7px",
+  padding: "10px",
+  borderRadius: "12px",
+  border: "1px solid rgba(56,189,248,0.18)",
+  background: "rgba(3,7,18,0.28)",
+};
+
+const tracedRoomEnvelopeInsightTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#bae6fd",
+  fontSize: "10px",
+  fontWeight: 950,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+};
+
+const tracedRoomEnvelopeInsightMessagesStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+};
+
+const tracedRoomEnvelopeInsightMessageStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#dbeafe",
+  fontSize: "11px",
+  fontWeight: 800,
+  lineHeight: 1.45,
 };
 
 const detectedRoomEditGridStyle: React.CSSProperties = {

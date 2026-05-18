@@ -771,6 +771,95 @@ export function calculateBlueprintEnvelopeContributionBreakdown(
   };
 }
 
+export type BlueprintRoomEnvelopeConfidence = {
+  score: "high" | "medium" | "low";
+  assumptionsUsed: string[];
+  missingInputs: string[];
+  warnings: string[];
+};
+
+export function calculateBlueprintRoomEnvelopeConfidence(
+  input: BlueprintRoomEnvelopePreviewInput
+): BlueprintRoomEnvelopeConfidence {
+  const assumptionsUsed: string[] = [];
+  const missingInputs: string[] = [];
+  const warnings: string[] = [];
+  let score: "high" | "medium" | "low" = "high";
+
+  // 1. Calibration Check
+  if (!input.pixelsPerFoot || input.pixelsPerFoot <= 0) {
+    score = "low";
+    missingInputs.push("Blueprint calibration/scale");
+    warnings.push("Calculations are using unscaled pixel distances.");
+  }
+
+  // 2. Boundary Classification Check
+  const hasExteriorBoundaries = input.room.boundaryEdges?.some(
+    (edge) => edge.boundaryType === "exterior"
+  );
+
+  if (!hasExteriorBoundaries) {
+    score = "low";
+    warnings.push("No exterior boundaries identified; envelope load may be underestimated.");
+  }
+
+  const hasUnknownBoundaries = input.room.boundaryEdges?.some(
+    (edge) => edge.boundaryType === "unknown"
+  );
+
+  if (hasUnknownBoundaries) {
+    if (score === "high") score = "medium";
+    assumptionsUsed.push("Unknown boundaries treated as interior/non-load");
+    warnings.push("Some room boundaries are unclassified.");
+  }
+
+  // 3. Orientation Check
+  const orientations = getBlueprintExteriorEdgeOrientationPreviews(input.room);
+  const hasUnknownOrientation = orientations.some((p) => p.orientation === "unknown");
+
+  if (hasUnknownOrientation && hasExteriorBoundaries) {
+    if (score === "high") score = "medium";
+    assumptionsUsed.push("Default orientation used for unmapped exterior edges");
+    warnings.push("Compass orientation could not be determined for some edges.");
+  }
+
+  // 4. Window Data Check
+  const exteriorEdgeCount = input.room.boundaryEdges?.filter(
+    (edge) => edge.boundaryType === "exterior"
+  ).length ?? 0;
+  const windows = input.windows ?? [];
+
+  if (exteriorEdgeCount > 0 && windows.length === 0) {
+    if (score === "high") score = "medium";
+    assumptionsUsed.push("No windows model; assuming 0% window-to-wall ratio");
+    warnings.push("No windows have been placed on exterior walls.");
+  }
+
+  // 5. Insulation Check
+  if (!input.insulationQuality || input.insulationQuality === "Average") {
+    assumptionsUsed.push("Standard 'Average' insulation U-factors (0.055)");
+  }
+
+  // 6. Region Check
+  if (!input.oregonRegion) {
+    assumptionsUsed.push("Default 'Portland / Beaverton' design temperatures");
+  }
+
+  // Final score adjustments
+  if (missingInputs.length > 0 || warnings.length >= 3) {
+    score = "low";
+  } else if (assumptionsUsed.length >= 3) {
+    if (score === "high") score = "medium";
+  }
+
+  return {
+    score,
+    assumptionsUsed,
+    missingInputs,
+    warnings,
+  };
+}
+
 export function explainBlueprintEnvelopeContributionBreakdown(
   breakdown: BlueprintEnvelopeContributionBreakdown
 ): BlueprintEnvelopeExplanation {
