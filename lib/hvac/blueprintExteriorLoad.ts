@@ -33,6 +33,38 @@ export type BlueprintExteriorEdgeOrientationPreview = {
   orientation: BlueprintExteriorEdgeOrientation;
 };
 
+export type BlueprintBoundaryWindow = {
+  id: string;
+  edgeIndex: number;
+  widthFeet: number;
+  heightFeet: number;
+  uFactor: number;
+  shgc: number;
+  orientation?: BlueprintExteriorEdgeOrientation;
+};
+
+export type BlueprintWindowLoadInput = {
+  window: BlueprintBoundaryWindow;
+  edgeOrientation?: BlueprintExteriorEdgeOrientation;
+  oregonRegion?: string;
+};
+
+export type BlueprintWindowLoadPreview = {
+  id: string;
+  edgeIndex: number;
+  orientation: BlueprintExteriorEdgeOrientation;
+  areaSquareFeet: number;
+  uFactor: number;
+  shgc: number;
+  heatingDeltaT: number;
+  coolingDeltaT: number;
+  heatingConductionBtu: number;
+  coolingConductionBtu: number;
+  solarGainBtu: number;
+  dominantConductionBtu: number;
+  designRegion: string;
+};
+
 export type BlueprintExteriorWallLoadInput = {
   room: BlueprintRoomOutline;
   pixelsPerFoot: number | null;
@@ -52,6 +84,33 @@ export type BlueprintExteriorWallLoadPreview = {
   coolingBtu: number;
   dominantBtu: number;
   designRegion: string;
+};
+
+export type BlueprintRoomEnvelopePreviewStatus =
+  | "ready"
+  | "not-ready"
+  | "no-exterior-boundaries";
+
+export type BlueprintRoomEnvelopePreviewInput = {
+  room: BlueprintRoomOutline;
+  pixelsPerFoot: number | null;
+  overlaySize?: BlueprintExteriorLoadOverlaySize;
+  insulationQuality?: string;
+  oregonRegion?: string;
+  windows?: BlueprintBoundaryWindow[];
+};
+
+export type BlueprintRoomEnvelopePreview = {
+  status: BlueprintRoomEnvelopePreviewStatus;
+  exteriorWallLengthFeet: number;
+  exteriorWallAreaSquareFeet: number;
+  totalWindowAreaSquareFeet: number;
+  heatingEnvelopeBtu: number;
+  coolingEnvelopeBtu: number;
+  solarGainBtu: number;
+  dominantEnvelopeBtu: number;
+  exteriorWallLoad: BlueprintExteriorWallLoadPreview | null;
+  windowLoads: BlueprintWindowLoadPreview[];
 };
 
 function getValidPoint(
@@ -145,6 +204,109 @@ export function getBlueprintExteriorWallUFactor(insulationQuality = "Average") {
   };
 
   return uFactors[insulationQuality] ?? uFactors.Average;
+}
+
+export function calculateBlueprintWindowAreaSquareFeet(
+  window: Pick<BlueprintBoundaryWindow, "widthFeet" | "heightFeet">
+) {
+  const widthFeet = Math.max(0, window.widthFeet);
+  const heightFeet = Math.max(0, window.heightFeet);
+  if (widthFeet <= 0 || heightFeet <= 0) return null;
+
+  return widthFeet * heightFeet;
+}
+
+export function calculateBlueprintWindowConductionBtu(
+  areaSquareFeet: number | null,
+  uFactor: number,
+  deltaT: number
+) {
+  if (areaSquareFeet === null || areaSquareFeet <= 0) return null;
+  if (!Number.isFinite(uFactor) || uFactor <= 0) return null;
+  if (!Number.isFinite(deltaT) || deltaT < 0) return null;
+
+  return areaSquareFeet * uFactor * deltaT;
+}
+
+export function getBlueprintWindowSolarFactor(
+  orientation: BlueprintExteriorEdgeOrientation = "unknown"
+) {
+  const solarFactors: Record<BlueprintExteriorEdgeOrientation, number> = {
+    north: 85,
+    northeast: 105,
+    east: 125,
+    southeast: 145,
+    south: 150,
+    southwest: 165,
+    west: 180,
+    northwest: 120,
+    unknown: 130,
+  };
+
+  return solarFactors[orientation];
+}
+
+export function calculateBlueprintWindowSolarGainBtu(
+  areaSquareFeet: number | null,
+  shgc: number,
+  solarFactor: number
+) {
+  if (areaSquareFeet === null || areaSquareFeet <= 0) return null;
+  if (!Number.isFinite(shgc) || shgc < 0) return null;
+  if (!Number.isFinite(solarFactor) || solarFactor < 0) return null;
+
+  return areaSquareFeet * shgc * solarFactor;
+}
+
+export function calculateBlueprintWindowLoadPreview({
+  window,
+  edgeOrientation,
+  oregonRegion,
+}: BlueprintWindowLoadInput): BlueprintWindowLoadPreview | null {
+  const areaSquareFeet = calculateBlueprintWindowAreaSquareFeet(window);
+  if (areaSquareFeet === null) return null;
+
+  const orientation = window.orientation ?? edgeOrientation ?? "unknown";
+  const designDeltaT = getBlueprintOregonDesignDeltaT(oregonRegion);
+  const heatingConductionBtu = calculateBlueprintWindowConductionBtu(
+    areaSquareFeet,
+    window.uFactor,
+    designDeltaT.heatingDeltaT
+  );
+  const coolingConductionBtu = calculateBlueprintWindowConductionBtu(
+    areaSquareFeet,
+    window.uFactor,
+    designDeltaT.coolingDeltaT
+  );
+  const solarGainBtu = calculateBlueprintWindowSolarGainBtu(
+    areaSquareFeet,
+    window.shgc,
+    getBlueprintWindowSolarFactor(orientation)
+  );
+
+  if (
+    heatingConductionBtu === null ||
+    coolingConductionBtu === null ||
+    solarGainBtu === null
+  ) {
+    return null;
+  }
+
+  return {
+    id: window.id,
+    edgeIndex: window.edgeIndex,
+    orientation,
+    areaSquareFeet,
+    uFactor: window.uFactor,
+    shgc: window.shgc,
+    heatingDeltaT: designDeltaT.heatingDeltaT,
+    coolingDeltaT: designDeltaT.coolingDeltaT,
+    heatingConductionBtu: Math.round(heatingConductionBtu),
+    coolingConductionBtu: Math.round(coolingConductionBtu),
+    solarGainBtu: Math.round(solarGainBtu),
+    dominantConductionBtu: Math.round(Math.max(heatingConductionBtu, coolingConductionBtu)),
+    designRegion: designDeltaT.region,
+  };
 }
 
 export function getBlueprintOregonDesignDeltaT(
@@ -250,5 +412,101 @@ export function calculateBlueprintExteriorWallLoadPreview({
     coolingBtu: Math.round(coolingBtu),
     dominantBtu: Math.round(Math.max(heatingBtu, coolingBtu)),
     designRegion: designDeltaT.region,
+  };
+}
+
+export function calculateBlueprintRoomEnvelopePreview({
+  room,
+  pixelsPerFoot,
+  overlaySize,
+  insulationQuality = "Average",
+  oregonRegion,
+  windows = [],
+}: BlueprintRoomEnvelopePreviewInput): BlueprintRoomEnvelopePreview {
+  const exteriorWallLoad = calculateBlueprintExteriorWallLoadPreview({
+    room,
+    pixelsPerFoot,
+    overlaySize,
+    insulationQuality,
+    oregonRegion,
+  });
+
+  if (!room.boundaryEdges || room.boundaryEdges.length === 0) {
+    return {
+      status: "no-exterior-boundaries",
+      exteriorWallLengthFeet: 0,
+      exteriorWallAreaSquareFeet: 0,
+      totalWindowAreaSquareFeet: 0,
+      heatingEnvelopeBtu: 0,
+      coolingEnvelopeBtu: 0,
+      solarGainBtu: 0,
+      dominantEnvelopeBtu: 0,
+      exteriorWallLoad: null,
+      windowLoads: [],
+    };
+  }
+
+  if (!exteriorWallLoad) {
+    return {
+      status: "not-ready",
+      exteriorWallLengthFeet: 0,
+      exteriorWallAreaSquareFeet: 0,
+      totalWindowAreaSquareFeet: 0,
+      heatingEnvelopeBtu: 0,
+      coolingEnvelopeBtu: 0,
+      solarGainBtu: 0,
+      dominantEnvelopeBtu: 0,
+      exteriorWallLoad: null,
+      windowLoads: [],
+    };
+  }
+
+  const exteriorEdgeOrientationsByIndex = new Map(
+    getBlueprintExteriorEdgeOrientationPreviews(room).map((preview) => [
+      preview.edgeIndex,
+      preview.orientation,
+    ])
+  );
+  const windowLoads = windows
+    .map((window) =>
+      calculateBlueprintWindowLoadPreview({
+        window,
+        edgeOrientation: exteriorEdgeOrientationsByIndex.get(window.edgeIndex),
+        oregonRegion,
+      })
+    )
+    .filter((windowLoad): windowLoad is BlueprintWindowLoadPreview => windowLoad !== null);
+
+  const totalWindowAreaSquareFeet = windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.areaSquareFeet,
+    0
+  );
+  const windowHeatingConductionBtu = windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.heatingConductionBtu,
+    0
+  );
+  const windowCoolingConductionBtu = windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.coolingConductionBtu,
+    0
+  );
+  const solarGainBtu = windowLoads.reduce(
+    (sum, windowLoad) => sum + windowLoad.solarGainBtu,
+    0
+  );
+  const heatingEnvelopeBtu = exteriorWallLoad.heatingBtu + windowHeatingConductionBtu;
+  const coolingEnvelopeBtu =
+    exteriorWallLoad.coolingBtu + windowCoolingConductionBtu + solarGainBtu;
+
+  return {
+    status: "ready",
+    exteriorWallLengthFeet: exteriorWallLoad.exteriorLengthFeet,
+    exteriorWallAreaSquareFeet: exteriorWallLoad.wallAreaSquareFeet,
+    totalWindowAreaSquareFeet,
+    heatingEnvelopeBtu,
+    coolingEnvelopeBtu,
+    solarGainBtu,
+    dominantEnvelopeBtu: Math.max(heatingEnvelopeBtu, coolingEnvelopeBtu),
+    exteriorWallLoad,
+    windowLoads,
   };
 }
