@@ -141,11 +141,84 @@ export type BlueprintEnvelopeContributionBreakdown = {
   solarGainBtu: number;
 };
 
+export type BlueprintEnvelopeExplanation = {
+  status: BlueprintRoomEnvelopePreviewStatus;
+  messages: string[];
+};
+
 function getValidPoint(
   points: BlueprintCalibrationPoint[],
   index: number
 ): BlueprintCalibrationPoint | null {
   return index >= 0 && index < points.length ? points[index] : null;
+}
+
+function formatBlueprintOrientationLabel(orientation: BlueprintExteriorEdgeOrientation) {
+  const labels: Record<BlueprintExteriorEdgeOrientation, string> = {
+    north: "north-facing",
+    south: "south-facing",
+    east: "east-facing",
+    west: "west-facing",
+    northeast: "northeast-facing",
+    northwest: "northwest-facing",
+    southeast: "southeast-facing",
+    southwest: "southwest-facing",
+    unknown: "unknown-orientation",
+  };
+
+  return labels[orientation];
+}
+
+function getEnvelopeSourceLabel(source: BlueprintEnvelopeContributionSource) {
+  const labels: Record<BlueprintEnvelopeContributionSource, string> = {
+    "exterior-wall-conduction": "exterior wall conduction",
+    "window-conduction": "window conduction",
+    "solar-gain": "solar gain",
+    none: "limited envelope load",
+    "not-ready": "not-ready",
+  };
+
+  return labels[source];
+}
+
+function getCoolingSourceMessage(breakdown: BlueprintEnvelopeContributionBreakdown) {
+  if (breakdown.dominantCoolingSource === "solar-gain") {
+    const orientationLabel = formatBlueprintOrientationLabel(breakdown.dominantSolarOrientation);
+    return breakdown.dominantSolarOrientation === "unknown"
+      ? "Cooling load is mostly driven by window solar gain."
+      : `Cooling load is mostly driven by ${orientationLabel} solar gain.`;
+  }
+
+  if (breakdown.dominantCoolingSource === "none") {
+    return "Cooling envelope load is limited for this room.";
+  }
+
+  return `Cooling load is mostly driven by ${getEnvelopeSourceLabel(
+    breakdown.dominantCoolingSource
+  )}.`;
+}
+
+function getHeatingSourceMessage(breakdown: BlueprintEnvelopeContributionBreakdown) {
+  if (breakdown.dominantHeatingSource === "none") {
+    return "Heating envelope load is limited for this room.";
+  }
+
+  return `Heating load is mostly driven by ${getEnvelopeSourceLabel(
+    breakdown.dominantHeatingSource
+  )}.`;
+}
+
+function getExteriorExposureMessage(breakdown: BlueprintEnvelopeContributionBreakdown) {
+  if (
+    breakdown.largestExteriorExposureOrientation === "unknown" ||
+    breakdown.exteriorWallHeatingBtu <= 0
+  ) {
+    return "This room has limited exterior exposure.";
+  }
+
+  return `Largest exterior exposure is ${formatBlueprintOrientationLabel(
+    breakdown.largestExteriorExposureOrientation
+  )}.`;
 }
 
 function getContributionPercentages(
@@ -696,4 +769,39 @@ export function calculateBlueprintEnvelopeContributionBreakdown(
     windowCoolingConductionBtu,
     solarGainBtu,
   };
+}
+
+export function explainBlueprintEnvelopeContributionBreakdown(
+  breakdown: BlueprintEnvelopeContributionBreakdown
+): BlueprintEnvelopeExplanation {
+  if (breakdown.status === "no-exterior-boundaries") {
+    return {
+      status: breakdown.status,
+      messages: ["This room has limited exterior exposure."],
+    };
+  }
+
+  if (breakdown.status !== "ready") {
+    return {
+      status: breakdown.status,
+      messages: ["Envelope load preview is not ready yet."],
+    };
+  }
+
+  return {
+    status: breakdown.status,
+    messages: [
+      getHeatingSourceMessage(breakdown),
+      getCoolingSourceMessage(breakdown),
+      getExteriorExposureMessage(breakdown),
+    ],
+  };
+}
+
+export function explainBlueprintRoomEnvelopePreview(
+  input: BlueprintRoomEnvelopePreviewInput
+): BlueprintEnvelopeExplanation {
+  return explainBlueprintEnvelopeContributionBreakdown(
+    calculateBlueprintEnvelopeContributionBreakdown(input)
+  );
 }
