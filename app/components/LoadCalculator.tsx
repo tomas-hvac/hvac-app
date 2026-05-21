@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -59,6 +59,10 @@ import {
   loadBlueprintProjectFromLocalStorage,
   listBlueprintProjectsFromLocalStorage,
 } from "@/lib/hvac/blueprintPersistence";
+import {
+  createBlueprintTechnicianReport,
+  type BlueprintTechnicianReport,
+} from "@/lib/hvac/blueprintReport";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -306,10 +310,34 @@ export default function LoadCalculator() {
   const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
   const [isBlueprintRestoring, setIsBlueprintRestoring] = useState(false);
   const [pendingV3Rooms, setPendingV3Rooms] = useState<BlueprintRoomOutline[] | null>(null);
+  const [v3ReportPreview, setV3ReportPreview] = useState<BlueprintTechnicianReport | null>(null);
 
   useEffect(() => {
     setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
   }, []);
+
+  const handlePreviewV3Report = () => {
+    const project = createBlueprintProjectSnapshot({
+      name: v3ProjectName,
+      blueprintImage: blueprintFile ? {
+        name: blueprintFile.name,
+        size: blueprintFile.size,
+        type: blueprintFile.type,
+        lastModified: blueprintFile.lastModified,
+      } : null,
+      calibration: blueprintCalibration,
+      tracedRooms: blueprintRoomTrace.roomOutlines,
+      envelopeSettings: {
+        insulationQuality,
+        oregonRegion,
+      },
+      manualDProjectState,
+    });
+
+    const report = createBlueprintTechnicianReport(project);
+    setV3ReportPreview(report);
+  };
+
   const isBlueprintWorkspaceActive =
     activeLoadView === "technician" && activeTechnicianSection === "manual-room-takeoff";
 
@@ -1947,6 +1975,15 @@ const averageTonnage = (minTon + maxTon) / 2;
                   >
                     Save Project
                   </button>
+                  <button
+                    type="button"
+                    className="calc-action-button"
+                    style={{ ...calcActionButtonStyle, marginTop: 0, width: "auto", minWidth: "140px", background: "rgba(212,175,55,0.15)", color: "#fde68a", border: "1px solid rgba(212,175,55,0.2)" }}
+                    onClick={handlePreviewV3Report}
+                  >
+                    <FileText size={14} style={{ marginRight: '6px' }} />
+                    Preview Report
+                  </button>
                   {v3SaveStatus ? (
                     <p style={{ ...projectActionMessageStyle, margin: 0, color: "#4ade80" }}>{v3SaveStatus}</p>
                   ) : null}
@@ -3580,6 +3617,170 @@ const averageTonnage = (minTon + maxTon) / 2;
           )}
         </div>
       </div>
+
+      {v3ReportPreview && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+          background: "rgba(15, 23, 42, 0.9)",
+          backdropFilter: "blur(8px)"
+        }}>
+          <div style={{
+            width: "100%",
+            maxWidth: "800px",
+            maxHeight: "90vh",
+            background: "#1e293b",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "24px",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            overflow: "hidden"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: "24px",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "rgba(30, 41, 59, 0.8)"
+            }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#f8fafc", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <ClipboardCheck size={24} color="#d4af37" />
+                  Technician Report Preview
+                </h2>
+                <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#94a3b8" }}>
+                  {v3ReportPreview.projectName} • Generated {new Date(v3ReportPreview.generatedAt).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setV3ReportPreview(null)}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "none",
+                  borderRadius: "50%",
+                  width: "36px",
+                  height: "36px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  color: "#94a3b8"
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: "24px", overflowY: "auto", flex: 1 }}>
+              {/* Metadata */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
+                <div style={{ padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <p style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Blueprint Status</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Activity size={16} color="#4ade80" />
+                    <span style={{ fontSize: "14px", color: "#f1f5f9", fontWeight: 600 }}>{v3ReportPreview.blueprintMetadata.calibrationStatus}</span>
+                  </div>
+                </div>
+                <div style={{ padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <p style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Calibration Confidence</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <ShieldCheck size={16} color="#d4af37" />
+                    <span style={{ fontSize: "14px", color: "#f1f5f9", fontWeight: 600 }}>{v3ReportPreview.blueprintMetadata.calibrationConfidence}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Room Summaries */}
+              <div style={{ marginBottom: "24px" }}>
+                <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 800, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em" }}>Room Takeoff Summaries</h3>
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {v3ReportPreview.rooms.map((room) => (
+                    <div key={room.id} style={{ padding: "14px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <p style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#f8fafc" }}>{room.name}</p>
+                        <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "6px", background: "rgba(212,175,55,0.15)", color: "#fde68a", border: "1px solid rgba(212,175,55,0.2)" }}>
+                          Confidence: {room.confidence.score}%
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: "20px", marginBottom: "12px" }}>
+                        <div>
+                          <p style={{ margin: 0, fontSize: "10px", color: "#64748b", textTransform: "uppercase" }}>Area</p>
+                          <p style={{ margin: 0, fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }}>{room.squareFeet ? `${Math.round(room.squareFeet)} sqft` : 'TBD'}</p>
+                        </div>
+                        <div>
+                          <p style={{ margin: 0, fontSize: "10px", color: "#64748b", textTransform: "uppercase" }}>Level</p>
+                          <p style={{ margin: 0, fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }}>Floor {room.floorLevel}</p>
+                        </div>
+                      </div>
+                      {room.envelopeInsight.messages.length > 0 && (
+                        <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)" }}>
+                          {room.envelopeInsight.messages.map((msg, i) => (
+                            <p key={i} style={{ margin: 0, fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#d4af37", display: "inline-block" }} />
+                              {msg}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manual D Summary */}
+              {v3ReportPreview.manualDSummary && (
+                <div>
+                  <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 800, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em" }}>Manual D Airflow Design</h3>
+                  <div style={{ padding: "16px", background: "rgba(212,175,55,0.05)", borderRadius: "20px", border: "1px solid rgba(212,175,55,0.15)" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }}>System Size</p>
+                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }}>{v3ReportPreview.manualDSummary.systemTons} Tons</p>
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }}>Total CFM</p>
+                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }}>{v3ReportPreview.manualDSummary.totalCfm} CFM</p>
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }}>Static Target</p>
+                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }}>{v3ReportPreview.manualDSummary.availableStatic} inwc</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "20px 24px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(30, 41, 59, 0.4)", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setV3ReportPreview(null)}
+                style={{
+                  padding: "10px 24px",
+                  borderRadius: "12px",
+                  background: "#d4af37",
+                  color: "#1e293b",
+                  border: "none",
+                  fontWeight: 800,
+                  fontSize: "14px",
+                  cursor: "pointer"
+                }}
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
