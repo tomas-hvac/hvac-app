@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -336,6 +336,10 @@ export default function LoadCalculator() {
 
     const report = createBlueprintTechnicianReport(project);
     setV3ReportPreview(report);
+  };
+
+  const handlePrintReport = () => {
+    window.print();
   };
 
   const isBlueprintWorkspaceActive =
@@ -3630,7 +3634,40 @@ const averageTonnage = (minTon + maxTon) / 2;
           background: "rgba(15, 23, 42, 0.9)",
           backdropFilter: "blur(8px)"
         }}>
-          <div style={{
+          <style>{`
+            @media print {
+              body * { visibility: hidden; }
+              .report-print-container, .report-print-container * { visibility: visible; }
+              .report-print-container {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: none !important;
+                height: auto !important;
+                max-height: none !important;
+                background: white !important;
+                color: black !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                overflow: visible !important;
+              }
+              .no-print { display: none !important; }
+              .report-print-header { border-bottom: 2px solid #e2e8f0 !important; background: #f8fafc !important; color: black !important; }
+              .report-print-content { background: white !important; color: black !important; padding: 40px !important; }
+              .report-print-section { background: #fff !important; color: black !important; border: 1px solid #e2e8f0 !important; }
+              .report-print-text-primary { color: #000 !important; }
+              .report-print-text-muted { color: #64748b !important; }
+              .report-print-insight { background: #f8fafc !important; border: 1px solid #e2e8f0 !important; }
+              .report-print-badge { background: #f1f5f9 !important; color: black !important; border: 1px solid #cbd5e1 !important; }
+              .report-print-manual-d { background: #fffbeb !important; border: 1px solid #fde68a !important; color: #92400e !important; }
+              * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            }
+          `}</style>
+          <div className="report-print-container" style={{
             width: "100%",
             maxWidth: "800px",
             maxHeight: "90vh",
@@ -3643,7 +3680,7 @@ const averageTonnage = (minTon + maxTon) / 2;
             overflow: "hidden"
           }}>
             {/* Header */}
-            <div style={{
+            <div className="report-print-header" style={{
               padding: "24px",
               borderBottom: "1px solid rgba(255,255,255,0.06)",
               display: "flex",
@@ -3652,15 +3689,16 @@ const averageTonnage = (minTon + maxTon) / 2;
               background: "rgba(30, 41, 59, 0.8)"
             }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#f8fafc", display: "flex", alignItems: "center", gap: "10px" }}>
+                <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800, color: "#f8fafc", display: "flex", alignItems: "center", gap: "10px" }} className="report-print-text-primary">
                   <ClipboardCheck size={24} color="#d4af37" />
                   Technician Report Preview
                 </h2>
-                <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#94a3b8" }}>
+                <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#94a3b8" }} className="report-print-text-muted">
                   {v3ReportPreview.projectName} • Generated {new Date(v3ReportPreview.generatedAt).toLocaleString()}
                 </p>
               </div>
               <button
+                className="no-print"
                 onClick={() => setV3ReportPreview(null)}
                 style={{
                   background: "rgba(255,255,255,0.05)",
@@ -3680,52 +3718,52 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
 
             {/* Content */}
-            <div style={{ padding: "24px", overflowY: "auto", flex: 1 }}>
+            <div className="report-print-content" style={{ padding: "24px", overflowY: "auto", flex: 1 }}>
               {/* Metadata */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
-                <div style={{ padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
-                  <p style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Blueprint Status</p>
+                <div className="report-print-section" style={{ padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <p style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase" }} className="report-print-text-muted">Blueprint Status</p>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <Activity size={16} color="#4ade80" />
-                    <span style={{ fontSize: "14px", color: "#f1f5f9", fontWeight: 600 }}>{v3ReportPreview.blueprintMetadata.calibrationStatus}</span>
+                    <span style={{ fontSize: "14px", color: "#f1f5f9", fontWeight: 600 }} className="report-print-text-primary">{v3ReportPreview.blueprintMetadata.calibrationStatus}</span>
                   </div>
                 </div>
-                <div style={{ padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
-                  <p style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Calibration Confidence</p>
+                <div className="report-print-section" style={{ padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  <p style={{ margin: "0 0 8px 0", fontSize: "11px", fontWeight: 800, color: "#64748b", textTransform: "uppercase" }} className="report-print-text-muted">Calibration Confidence</p>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <ShieldCheck size={16} color="#d4af37" />
-                    <span style={{ fontSize: "14px", color: "#f1f5f9", fontWeight: 600 }}>{v3ReportPreview.blueprintMetadata.calibrationConfidence}</span>
+                    <span style={{ fontSize: "14px", color: "#f1f5f9", fontWeight: 600 }} className="report-print-text-primary">{v3ReportPreview.blueprintMetadata.calibrationConfidence}</span>
                   </div>
                 </div>
               </div>
 
               {/* Room Summaries */}
               <div style={{ marginBottom: "24px" }}>
-                <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 800, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em" }}>Room Takeoff Summaries</h3>
+                <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 800, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em" }} className="report-print-text-primary">Room Takeoff Summaries</h3>
                 <div style={{ display: "grid", gap: "10px" }}>
                   {v3ReportPreview.rooms.map((room) => (
-                    <div key={room.id} style={{ padding: "14px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div key={room.id} className="report-print-section" style={{ padding: "14px", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.04)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <p style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#f8fafc" }}>{room.name}</p>
-                        <span style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "6px", background: "rgba(212,175,55,0.15)", color: "#fde68a", border: "1px solid rgba(212,175,55,0.2)" }}>
+                        <p style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#f8fafc" }} className="report-print-text-primary">{room.name}</p>
+                        <span className="report-print-badge" style={{ fontSize: "12px", padding: "2px 8px", borderRadius: "6px", background: "rgba(212,175,55,0.15)", color: "#fde68a", border: "1px solid rgba(212,175,55,0.2)" }}>
                           Confidence: {room.confidence.score}%
                         </span>
                       </div>
                       <div style={{ display: "flex", gap: "20px", marginBottom: "12px" }}>
                         <div>
-                          <p style={{ margin: 0, fontSize: "10px", color: "#64748b", textTransform: "uppercase" }}>Area</p>
-                          <p style={{ margin: 0, fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }}>{room.squareFeet ? `${Math.round(room.squareFeet)} sqft` : 'TBD'}</p>
+                          <p style={{ margin: 0, fontSize: "10px", color: "#64748b", textTransform: "uppercase" }} className="report-print-text-muted">Area</p>
+                          <p style={{ margin: 0, fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }} className="report-print-text-primary">{room.squareFeet ? `${Math.round(room.squareFeet)} sqft` : 'TBD'}</p>
                         </div>
                         <div>
-                          <p style={{ margin: 0, fontSize: "10px", color: "#64748b", textTransform: "uppercase" }}>Level</p>
-                          <p style={{ margin: 0, fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }}>Floor {room.floorLevel}</p>
+                          <p style={{ margin: 0, fontSize: "10px", color: "#64748b", textTransform: "uppercase" }} className="report-print-text-muted">Level</p>
+                          <p style={{ margin: 0, fontSize: "13px", color: "#e2e8f0", fontWeight: 600 }} className="report-print-text-primary">Floor {room.floorLevel}</p>
                         </div>
                       </div>
                       {room.envelopeInsight.messages.length > 0 && (
-                        <div style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)" }}>
+                        <div className="report-print-insight" style={{ padding: "8px 12px", background: "rgba(0,0,0,0.2)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)" }}>
                           {room.envelopeInsight.messages.map((msg, i) => (
-                            <p key={i} style={{ margin: 0, fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }}>
-                              <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#d4af37", display: "inline-block" }} />
+                            <p key={i} style={{ margin: 0, fontSize: "11px", color: "#94a3b8", display: "flex", alignItems: "center", gap: "6px" }} className="report-print-text-muted">
+                              <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#d4af37", display: "inline-block" }} className="no-print" />
                               {msg}
                             </p>
                           ))}
@@ -3739,20 +3777,20 @@ const averageTonnage = (minTon + maxTon) / 2;
               {/* Manual D Summary */}
               {v3ReportPreview.manualDSummary && (
                 <div>
-                  <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 800, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em" }}>Manual D Airflow Design</h3>
-                  <div style={{ padding: "16px", background: "rgba(212,175,55,0.05)", borderRadius: "20px", border: "1px solid rgba(212,175,55,0.15)" }}>
+                  <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 800, color: "#cbd5e1", textTransform: "uppercase", letterSpacing: "0.05em" }} className="report-print-text-primary">Manual D Airflow Design</h3>
+                  <div className="report-print-manual-d" style={{ padding: "16px", background: "rgba(212,175,55,0.05)", borderRadius: "20px", border: "1px solid rgba(212,175,55,0.15)" }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
                       <div>
-                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }}>System Size</p>
-                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }}>{v3ReportPreview.manualDSummary.systemTons} Tons</p>
+                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }} className="report-print-text-muted">System Size</p>
+                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }} className="report-print-text-primary">{v3ReportPreview.manualDSummary.systemTons} Tons</p>
                       </div>
                       <div>
-                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }}>Total CFM</p>
-                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }}>{v3ReportPreview.manualDSummary.totalCfm} CFM</p>
+                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }} className="report-print-text-muted">Total CFM</p>
+                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }} className="report-print-text-primary">{v3ReportPreview.manualDSummary.totalCfm} CFM</p>
                       </div>
                       <div>
-                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }}>Static Target</p>
-                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }}>{v3ReportPreview.manualDSummary.availableStatic} inwc</p>
+                        <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8", textTransform: "uppercase" }} className="report-print-text-muted">Static Target</p>
+                        <p style={{ margin: 0, fontSize: "16px", color: "#fde68a", fontWeight: 800 }} className="report-print-text-primary">{v3ReportPreview.manualDSummary.availableStatic} inwc</p>
                       </div>
                     </div>
                   </div>
@@ -3761,7 +3799,26 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
 
             {/* Footer */}
-            <div style={{ padding: "20px 24px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(30, 41, 59, 0.4)", display: "flex", justifyContent: "flex-end" }}>
+            <div className="no-print" style={{ padding: "20px 24px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(30, 41, 59, 0.4)", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button
+                onClick={handlePrintReport}
+                style={{
+                  padding: "10px 24px",
+                  borderRadius: "12px",
+                  background: "rgba(255,255,255,0.1)",
+                  color: "#f8fafc",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  fontWeight: 800,
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                <Printer size={18} />
+                Print / Save PDF
+              </button>
               <button
                 onClick={() => setV3ReportPreview(null)}
                 style={{
