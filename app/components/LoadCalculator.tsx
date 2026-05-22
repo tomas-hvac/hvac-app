@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer } from "lucide-react";
+import type { Dispatch, MutableRefObject } from "react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -66,6 +67,116 @@ import {
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
+import { ProjectEngineProvider } from "./project/ProjectEngineProvider";
+import { useProjectEngine } from "./project/useProjectEngine";
+import { prepareEngineStateForSave } from "@/lib/hvac/engine/projectEnginePersistence";
+import type { ProjectAction, ProjectEngineMetadata, ProjectEngineState, ProjectTimelineEventType } from "@/lib/hvac/engine/projectEngineTypes";
+import { WorkflowRail } from "./project/WorkflowRail";
+import { ProjectNextStepBanner } from "./project/ProjectNextStepBanner";
+import { ProjectCommandCenter } from "./project/ProjectCommandCenter";
+import { ProjectIssuesDrawer } from "./project/ProjectIssuesDrawer";
+
+/**
+ * ProjectEngineSync helper:
+ * Keeps the ProjectEngine in sync with the legacy LoadCalculator state 
+ * during the migration phase.
+ */
+const ProjectEngineSync = ({ 
+  project, 
+  activeTechnicianSection, 
+  setActiveTechnicianSection 
+}: { 
+  project: BlueprintProject;
+  activeTechnicianSection: TechnicianSection;
+  setActiveTechnicianSection: (section: TechnicianSection) => void;
+}) => {
+  const { engineState, dispatchEngineAction } = useProjectEngine();
+  const lastProjectRef = useRef<BlueprintProject | null>(null);
+
+  // Sync stage to UI section
+  useEffect(() => {
+    const stage = engineState.workflowStage;
+    if (stage === "CALIBRATION" || stage === "TAKEOFF" || stage === "SETUP") {
+      if (activeTechnicianSection !== "manual-room-takeoff") setActiveTechnicianSection("manual-room-takeoff");
+    } else if (stage === "LOAD_CALC") {
+      if (activeTechnicianSection !== "room-airflow") setActiveTechnicianSection("room-airflow");
+    } else if (stage === "DUCT_DESIGN") {
+      if (activeTechnicianSection !== "manual-d" && activeTechnicianSection !== "return-air" && activeTechnicianSection !== "room-airflow") {
+        setActiveTechnicianSection("manual-d");
+      }
+    } else if (stage === "REPORT" || stage === "EXPORT") {
+      if (activeTechnicianSection !== "reports") setActiveTechnicianSection("reports");
+    }
+  }, [engineState.workflowStage, setActiveTechnicianSection]);
+
+  // Sync legacy project state to engine
+  useEffect(() => {
+    const lastProject = lastProjectRef.current;
+    
+    // Initial sync or major project swap
+    if (!lastProject || lastProject.id !== project.id) {
+      dispatchEngineAction({ type: "SET_PROJECT", project });
+      lastProjectRef.current = project;
+      return;
+    }
+
+    // Detect specific changes to trigger invalidation
+    const calibrationChanged = lastProject.calibration.status !== project.calibration.status || 
+                               lastProject.calibration.pixelsPerFoot !== project.calibration.pixelsPerFoot;
+    
+    const roomsChanged = JSON.stringify(lastProject.tracedRooms) !== JSON.stringify(project.tracedRooms);
+    
+    const envelopeChanged = JSON.stringify(lastProject.envelopeSettings) !== JSON.stringify(project.envelopeSettings);
+
+    const manualDChanged = JSON.stringify(lastProject.manualDProjectState) !== JSON.stringify(project.manualDProjectState);
+
+    if (calibrationChanged) {
+      dispatchEngineAction({ type: "SET_PROJECT", project });
+      dispatchEngineAction({ type: "UPDATE_CALIBRATION" });
+    } else if (roomsChanged) {
+      dispatchEngineAction({ type: "SET_PROJECT", project });
+      dispatchEngineAction({ type: "UPDATE_ROOM_TRACE" });
+    } else if (envelopeChanged) {
+      dispatchEngineAction({ type: "SET_PROJECT", project });
+      dispatchEngineAction({ type: "UPDATE_ENVELOPE" });
+    } else if (manualDChanged) {
+      dispatchEngineAction({ type: "SET_PROJECT", project });
+      dispatchEngineAction({ type: "UPDATE_MANUAL_D" });
+    } else {
+      // General update if something else changed
+      dispatchEngineAction({ type: "SET_PROJECT", project });
+    }
+
+    lastProjectRef.current = project;
+  }, [project, dispatchEngineAction]);
+
+  return null;
+};
+
+/**
+ * CalculationLifecycleSync:
+ * Listens to the legacy isCalculating state and dispatches 
+ * lifecycle actions to the ProjectEngine.
+ */
+const CalculationLifecycleSync = ({ isCalculating }: { isCalculating: boolean }) => {
+  const { dispatchEngineAction } = useProjectEngine();
+  const lastIsCalculating = useRef(isCalculating);
+
+  useEffect(() => {
+    if (isCalculating && !lastIsCalculating.current) {
+      dispatchEngineAction({ type: "START_RECALCULATION" });
+    } else if (!isCalculating && lastIsCalculating.current) {
+      // For now, we assume all load-related flags are cleared on any calculate click
+      dispatchEngineAction({ 
+        type: "COMPLETE_RECALCULATION", 
+        clearedFlags: ["MANUAL_J", "MANUAL_D", "ROOM_AREAS", "PROPOSAL", "REPORT"] 
+      });
+    }
+    lastIsCalculating.current = isCalculating;
+  }, [isCalculating, dispatchEngineAction]);
+
+  return null;
+};
 
 type LoadCalculatorView = "customer" | "technician";
 type TechnicianSection = ManualDPanelSection | "manual-room-takeoff";
@@ -141,10 +252,89 @@ type SavedProject = {
   proposalSelection: SavedProposalSnapshot | null;
   loadCalculator: SavedLoadCalculatorState;
   manualD: ManualDProjectState | null;
+  engineMetadata?: ProjectEngineMetadata;
 };
 
 const SAVED_PROJECTS_STORAGE_KEY = "panda-hvac-saved-projects";
 const CURRENT_PROPOSAL_STORAGE_KEY = "panda-hvac-current-proposal";
+
+const readCurrentProposalSnapshot = (): SavedProposalSnapshot | null => {
+  if (typeof window === "undefined") return null;
+
+  const proposalJson = window.localStorage.getItem(CURRENT_PROPOSAL_STORAGE_KEY);
+  if (!proposalJson) return null;
+
+  try {
+    return JSON.parse(proposalJson) as SavedProposalSnapshot;
+  } catch {
+    return null;
+  }
+};
+
+const ProjectMilestoneSync = ({
+  reportPreview,
+  reportExportCount,
+}: {
+  reportPreview: BlueprintTechnicianReport | null;
+  reportExportCount: number;
+}) => {
+  const { dispatchEngineAction } = useProjectEngine();
+
+  useEffect(() => {
+    if (!reportPreview) return;
+    dispatchEngineAction({ type: "MARK_REPORT_GENERATED" });
+  }, [reportPreview?.generatedAt, dispatchEngineAction]);
+
+  useEffect(() => {
+    if (reportExportCount <= 0) return;
+    dispatchEngineAction({ type: "MARK_REPORT_EXPORTED" });
+  }, [reportExportCount, dispatchEngineAction]);
+
+  useEffect(() => {
+    const markConfirmedProposal = () => {
+      const proposalSnapshot = readCurrentProposalSnapshot();
+      if (!proposalSnapshot?.proposalConfirmed) return;
+      dispatchEngineAction({ type: "MARK_PROPOSAL_GENERATED" });
+    };
+
+    markConfirmedProposal();
+    window.addEventListener("focus", markConfirmedProposal);
+    window.addEventListener("storage", markConfirmedProposal);
+    return () => {
+      window.removeEventListener("focus", markConfirmedProposal);
+      window.removeEventListener("storage", markConfirmedProposal);
+    };
+  }, [dispatchEngineAction]);
+
+  return null;
+};
+
+const ProjectEnginePersistenceBridge = ({
+  engineStateRef,
+  dispatchRef,
+  pendingEvent,
+  onPendingEventHandled,
+}: {
+  engineStateRef: MutableRefObject<ProjectEngineState | null>;
+  dispatchRef: MutableRefObject<Dispatch<ProjectAction> | null>;
+  pendingEvent: ProjectAction | null;
+  onPendingEventHandled: () => void;
+}) => {
+  const { engineState, dispatchEngineAction } = useProjectEngine();
+
+  useEffect(() => {
+    engineStateRef.current = engineState;
+    dispatchRef.current = dispatchEngineAction;
+  }, [engineState, dispatchEngineAction, engineStateRef, dispatchRef]);
+
+  useEffect(() => {
+    if (!pendingEvent) return;
+    dispatchEngineAction(pendingEvent);
+    onPendingEventHandled();
+  }, [pendingEvent, dispatchEngineAction, onPendingEventHandled]);
+
+  return null;
+};
 
 const getSavedProjectDedupeKey = (project: SavedProject) =>
   `${project.name.trim().toLowerCase()}-${new Date(project.savedAt).toLocaleDateString()}`;
@@ -243,6 +433,73 @@ const InputField = ({ icon, title, description, children }: InputFieldProps) => 
   </div>
 );
 
+/**
+ * ProjectIssuesBadge:
+ * Fixed-position contextual badge for workflow issues.
+ */
+const ProjectIssuesBadge = ({ onClick }: { onClick: () => void }) => {
+  const { engineState, readiness } = useProjectEngine();
+  const { blockers, warnings } = readiness;
+  const { dirtyFlags, project } = engineState;
+
+  const issueCount = blockers.length + warnings.length + (dirtyFlags.length > 0 ? 1 : 0);
+  
+  if (issueCount === 0 && project.calibration.status === "calibrated" && project.tracedRooms.length > 0) {
+    return null;
+  }
+
+  let label = `${issueCount} Workflow Issues`;
+  let color = "#fbbf24"; // warning gold
+  let bg = "rgba(212, 175, 55, 0.12)";
+  let border = "1px solid rgba(212, 175, 55, 0.25)";
+
+  if (blockers.length > 0) {
+    label = blockers[0].length > 25 ? "Workflow Blocked" : blockers[0];
+    color = "#f87171"; // critical red
+    bg = "rgba(127, 29, 29, 0.2)";
+    border = "1px solid rgba(248, 113, 113, 0.3)";
+  } else if (project.calibration.status === "uncalibrated") {
+    label = "Calibration Required";
+    color = "#f87171";
+    bg = "rgba(127, 29, 29, 0.2)";
+    border = "1px solid rgba(248, 113, 113, 0.3)";
+  } else if (dirtyFlags.length > 0) {
+    if (dirtyFlags.includes("MANUAL_J")) label = "Manual J Outdated";
+    else if (dirtyFlags.includes("REPORT")) label = "Export Requires Refresh";
+    else label = "Calculations Stale";
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        position: "fixed",
+        bottom: "24px",
+        left: "24px",
+        zIndex: 9998,
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "10px 16px",
+        borderRadius: "12px",
+        background: bg,
+        backdropFilter: "blur(12px)",
+        border: border,
+        color: color,
+        fontSize: "12px",
+        fontWeight: 900,
+        letterSpacing: "0.02em",
+        cursor: "pointer",
+        boxShadow: "0 12px 30px rgba(0,0,0,0.4)",
+        transition: "all 0.2s ease"
+      }}
+    >
+      <AlertTriangle size={16} color={color} />
+      {label}
+    </button>
+  );
+};
+
 export default function LoadCalculator() {
   const blueprintFileInputRef = useRef<HTMLInputElement | null>(null);
   const blueprintPreviewRef = useRef<HTMLDivElement | null>(null);
@@ -311,6 +568,35 @@ export default function LoadCalculator() {
   const [isBlueprintRestoring, setIsBlueprintRestoring] = useState(false);
   const [pendingV3Rooms, setPendingV3Rooms] = useState<BlueprintRoomOutline[] | null>(null);
   const [v3ReportPreview, setV3ReportPreview] = useState<BlueprintTechnicianReport | null>(null);
+  const [reportExportCount, setReportExportCount] = useState(0);
+  const [isIssuesDrawerOpen, setIsIssuesDrawerOpen] = useState(false);
+  const [loadedEngineMetadata, setLoadedEngineMetadata] = useState<ProjectEngineMetadata | undefined>(undefined);
+  const [pendingEngineEvent, setPendingEngineEvent] = useState<ProjectAction | null>(null);
+  const projectEngineStateRef = useRef<ProjectEngineState | null>(null);
+  const dispatchProjectEngineActionRef = useRef<Dispatch<ProjectAction> | null>(null);
+
+  const prepareCurrentEngineMetadataForSave = (
+    eventType: Extract<ProjectTimelineEventType, "PROJECT_SAVED" | "AUTOSAVE_COMPLETED">
+  ) => {
+    const engineState = projectEngineStateRef.current;
+    if (!engineState) {
+      return { metadata: undefined };
+    }
+
+    const prepared = prepareEngineStateForSave(engineState, eventType);
+    projectEngineStateRef.current = prepared.engineState;
+    return prepared;
+  };
+
+  const syncPreparedEngineSaveEvent = (
+    prepared: ReturnType<typeof prepareCurrentEngineMetadataForSave>
+  ) => {
+    if (!("appendedEvent" in prepared) || !prepared.appendedEvent) return;
+    dispatchProjectEngineActionRef.current?.({
+      type: "ADD_TIMELINE_EVENT",
+      event: prepared.appendedEvent,
+    });
+  };
 
   useEffect(() => {
     setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
@@ -339,6 +625,7 @@ export default function LoadCalculator() {
   };
 
   const handlePrintReport = () => {
+    setReportExportCount((count) => count + 1);
     window.print();
   };
 
@@ -474,14 +761,7 @@ export default function LoadCalculator() {
   }, [blueprintFile]);
 
   const getCurrentProposalSnapshot = (): SavedProposalSnapshot | null => {
-    const proposalJson = window.localStorage.getItem(CURRENT_PROPOSAL_STORAGE_KEY);
-    if (!proposalJson) return null;
-
-    try {
-      return JSON.parse(proposalJson) as SavedProposalSnapshot;
-    } catch {
-      return null;
-    }
+    return readCurrentProposalSnapshot();
   };
 
   const getLoadCalculatorSnapshot = (): SavedLoadCalculatorState => ({
@@ -513,6 +793,7 @@ export default function LoadCalculator() {
 
   const handleSaveProject = () => {
     try {
+      const preparedEngineSave = prepareCurrentEngineMetadataForSave("PROJECT_SAVED");
       const proposalSnapshot = getCurrentProposalSnapshot();
       const projectName =
         proposalSnapshot?.customerName ||
@@ -526,6 +807,7 @@ export default function LoadCalculator() {
         proposalSelection: proposalSnapshot,
         loadCalculator: getLoadCalculatorSnapshot(),
         manualD: manualDProjectState,
+        engineMetadata: preparedEngineSave.metadata,
       };
 
       setSavedProjects((currentProjects) => {
@@ -534,6 +816,7 @@ export default function LoadCalculator() {
         console.log("Project saved", nextProject);
         return nextProjects;
       });
+      syncPreparedEngineSaveEvent(preparedEngineSave);
       setProjectActionMessage("Project saved");
     } catch (error) {
       console.error("Project save failed", error);
@@ -543,6 +826,7 @@ export default function LoadCalculator() {
 
   const handleV3SaveProject = () => {
     try {
+      const preparedEngineSave = prepareCurrentEngineMetadataForSave("PROJECT_SAVED");
       const input = {
         name: v3ProjectName,
         blueprintImage: blueprintFile
@@ -561,6 +845,7 @@ export default function LoadCalculator() {
           oregonRegion,
         },
         manualDProjectState,
+        engineMetadata: preparedEngineSave.metadata,
       };
 
       let snapshot: BlueprintProject;
@@ -576,7 +861,9 @@ export default function LoadCalculator() {
       }
 
       saveBlueprintProjectToLocalStorage(snapshot);
+      syncPreparedEngineSaveEvent(preparedEngineSave);
       setActiveV3ProjectId(snapshot.id);
+      setLoadedEngineMetadata(snapshot.engineMetadata);
       setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
       setV3SaveStatus("Project saved locally");
       window.setTimeout(() => setV3SaveStatus(""), 3000);
@@ -595,6 +882,7 @@ export default function LoadCalculator() {
       }
 
       setActiveV3ProjectId(project.id);
+      setLoadedEngineMetadata(project.engineMetadata);
       setV3ProjectName(project.name);
       setBlueprintCalibration(project.calibration);
       
@@ -618,6 +906,7 @@ export default function LoadCalculator() {
       }
 
       setV3SaveStatus("Project loaded");
+      setPendingEngineEvent({ type: "MARK_PROJECT_LOADED" });
       window.setTimeout(() => setV3SaveStatus(""), 3000);
     } catch (error) {
       console.error("V3 Project load failed", error);
@@ -632,6 +921,7 @@ export default function LoadCalculator() {
       try {
         const existing = loadBlueprintProjectFromLocalStorage(activeV3ProjectId);
         if (!existing) return;
+        const preparedEngineSave = prepareCurrentEngineMetadataForSave("AUTOSAVE_COMPLETED");
 
         const snapshot = updateBlueprintProjectSnapshot(existing, {
           name: v3ProjectName,
@@ -651,9 +941,11 @@ export default function LoadCalculator() {
             oregonRegion,
           },
           manualDProjectState,
+          engineMetadata: preparedEngineSave.metadata,
         });
 
         saveBlueprintProjectToLocalStorage(snapshot);
+        syncPreparedEngineSaveEvent(preparedEngineSave);
         setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
         setV3SaveStatus("Autosaved");
         window.setTimeout(() => setV3SaveStatus(""), 2000);
@@ -1535,9 +1827,51 @@ const averageTonnage = (minTon + maxTon) / 2;
     "5. Generate Proposal / Reports",
   ];
 
+  const projectSnapshot = useMemo(() => {
+    const snapshot = createBlueprintProjectSnapshot({
+      name: v3ProjectName,
+      blueprintImage: blueprintFile ? {
+        name: blueprintFile.name,
+        size: blueprintFile.size,
+        type: blueprintFile.type,
+        lastModified: blueprintFile.lastModified,
+      } : null,
+      calibration: blueprintCalibration,
+      tracedRooms: tracedRoomsWithSqft,
+      envelopeSettings: {
+        insulationQuality,
+        oregonRegion,
+      },
+      manualDProjectState,
+      engineMetadata: loadedEngineMetadata,
+    });
+
+    return activeV3ProjectId
+      ? { ...snapshot, id: activeV3ProjectId }
+      : snapshot;
+  }, [v3ProjectName, activeV3ProjectId, blueprintFile, blueprintCalibration, tracedRoomsWithSqft, insulationQuality, oregonRegion, manualDProjectState, loadedEngineMetadata]);
+
   return (
-    <div className="load-calculator-page" style={calcPageStyle}>
-      <div className="load-calculator-header" style={calcHeaderStyle}>
+    <ProjectEngineProvider key={activeV3ProjectId ?? "draft-project-engine"} initialProject={projectSnapshot}>
+      <ProjectEnginePersistenceBridge
+        engineStateRef={projectEngineStateRef}
+        dispatchRef={dispatchProjectEngineActionRef}
+        pendingEvent={pendingEngineEvent}
+        onPendingEventHandled={() => setPendingEngineEvent(null)}
+      />
+      <ProjectEngineSync 
+        project={projectSnapshot} 
+        activeTechnicianSection={activeTechnicianSection}
+        setActiveTechnicianSection={setActiveTechnicianSection}
+      />
+      <CalculationLifecycleSync isCalculating={isCalculating} />
+      <ProjectMilestoneSync
+        reportPreview={v3ReportPreview}
+        reportExportCount={reportExportCount}
+      />
+      <div className="load-calculator-page" style={calcPageStyle}>
+        <div className="load-calculator-header" style={calcHeaderStyle}>
+
         <div className="load-calculator-title-wrapper" style={calcTitleWrapperStyle}>
           <div style={calcIconStyle}>
             <Calculator size={20} strokeWidth={1.8} />
@@ -1678,6 +2012,10 @@ const averageTonnage = (minTon + maxTon) / 2;
             .load-calculator-grid {
               grid-template-columns: 1fr !important;
               align-items: start !important;
+            }
+
+            .technician-command-grid .load-calculator-right {
+              order: -1 !important;
             }
 
             .load-calculator-header {
@@ -1876,13 +2214,12 @@ const averageTonnage = (minTon + maxTon) / 2;
       </div>
 
       <div
-        className="load-calculator-grid"
+        className={`load-calculator-grid ${activeLoadView === "technician" ? "technician-command-grid" : ""}`}
         style={isBlueprintWorkspaceActive ? { ...calcGridStyle, gridTemplateColumns: "1fr" } : calcGridStyle}
       >
         <div className="load-calculator-left" style={leftColumnStyle}>
           {activeLoadView === "customer" ? (
-            <div className="load-section-panel" style={sectionPanelStyle}>
-              <div style={sectionPanelHeaderStyle}>
+            <div className="load-section-panel" style={sectionPanelStyle}>              <div style={sectionPanelHeaderStyle}>
                 <div style={sectionPanelIconStyle}>
                   <Home size={18} strokeWidth={1.8} />
                 </div>
@@ -1922,6 +2259,8 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
           ) : (
             <>
+          <ProjectNextStepBanner />
+          {/* WorkflowRail hidden as it's redundant with the 5-step workflow row below */}
           <div style={technicianWorkflowStyle}>
             {technicianWorkflowSteps.map((step, index) => {
               const stepNumber = index + 1;
@@ -1939,8 +2278,7 @@ const averageTonnage = (minTon + maxTon) / 2;
           </div>
 
           <div style={technicianAccordionStyle}>
-            {technicianSections.map((section) => {
-              const isActive = activeTechnicianSection === section.id;
+            {technicianSections.map((section) => {              const isActive = activeTechnicianSection === section.id;
 
               return (
                 <button
@@ -3448,6 +3786,11 @@ const averageTonnage = (minTon + maxTon) / 2;
             </>
           ) : (
             <>
+          <ProjectCommandCenter
+            onRecalculate={handleCalculate}
+            onGenerateReport={handlePreviewV3Report}
+            onExport={handlePrintReport}
+          />
           <div className="load-result-header" style={resultHeaderCardStyle}>
             <div>
               <p style={resultHeaderLabelStyle}>Estimate Snapshot</p>
@@ -3838,37 +4181,42 @@ const averageTonnage = (minTon + maxTon) / 2;
           </div>
         </div>
       )}
+    <ProjectIssuesBadge onClick={() => setIsIssuesDrawerOpen(true)} />
+    <ProjectIssuesDrawer 
+      open={isIssuesDrawerOpen} 
+      onClose={() => setIsIssuesDrawerOpen(false)} 
+    />
     </div>
-  );
-}
-
+    </ProjectEngineProvider>
+    );
+    }
 const calcPageStyle: React.CSSProperties = {
   display: "grid",
-  gap: "24px",
+  gap: "12px",
 };
 
 const calcHeaderStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: "20px",
-  padding: "26px 28px",
-  background: "rgba(15, 23, 42, 0.96)",
-  borderRadius: "28px",
+  gap: "12px",
+  padding: "12px 20px",
+  background: "rgba(15, 23, 42, 0.98)",
+  borderRadius: "16px",
   border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 24px 60px rgba(0,0,0,0.22)",
+  boxShadow: "0 14px 40px rgba(0,0,0,0.22)",
 };
 
 const calcTitleWrapperStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: "16px",
+  gap: "12px",
 };
 
 const calcIconStyle: React.CSSProperties = {
-  width: "50px",
-  height: "50px",
-  borderRadius: "18px",
+  width: "36px",
+  height: "36px",
+  borderRadius: "10px",
   display: "grid",
   placeItems: "center",
   background: "rgba(212,175,55,0.12)",
@@ -3879,33 +4227,34 @@ const calcIconStyle: React.CSSProperties = {
 const calcEyebrowStyle: React.CSSProperties = {
   margin: 0,
   color: "#d4af37",
-  fontSize: "12px",
-  letterSpacing: "0.2em",
+  fontSize: "10px",
+  letterSpacing: "0.15em",
   textTransform: "uppercase",
   fontWeight: 900,
 };
 
 const calcTitleStyle: React.CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: "24px",
+  margin: "2px 0 0",
+  fontSize: "18px",
   fontWeight: 900,
   color: "#f8fafc",
 };
 
 const calcSubtitleStyle: React.CSSProperties = {
-  margin: "8px 0 0",
-  color: "#cbd5e1",
-  fontSize: "14px",
-  maxWidth: "560px",
+  margin: "0",
+  color: "#94a3b8",
+  fontSize: "12px",
+  maxWidth: "480px",
 };
 
 const calcActionButtonStyle: React.CSSProperties = {
-  padding: "14px 22px",
-  borderRadius: "18px",
+  padding: "10px 18px",
+  borderRadius: "12px",
   border: "1px solid rgba(212,175,55,0.28)",
   background: "rgba(212,175,55,0.16)",
   color: "#f8fafc",
   fontWeight: 900,
+  fontSize: "13px",
   cursor: "pointer",
   transition: "all 0.2s ease",
   touchAction: "manipulation",
@@ -3915,22 +4264,22 @@ const calcActionButtonStyle: React.CSSProperties = {
 const loadViewTabsStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
-  gap: "12px",
-  padding: "10px",
-  borderRadius: "24px",
+  gap: "8px",
+  padding: "6px",
+  borderRadius: "16px",
   background: "rgba(15, 23, 42, 0.94)",
   border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 18px 45px rgba(0,0,0,0.18)",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
 };
 
 const loadViewTabStyle: React.CSSProperties = {
-  minHeight: "48px",
-  padding: "13px 16px",
-  borderRadius: "16px",
+  minHeight: "38px",
+  padding: "8px 12px",
+  borderRadius: "10px",
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.04)",
   color: "#cbd5e1",
-  fontSize: "13px",
+  fontSize: "12px",
   fontWeight: 900,
   cursor: "pointer",
   touchAction: "manipulation",
@@ -3941,32 +4290,34 @@ const loadViewTabActiveStyle: React.CSSProperties = {
   border: "1px solid rgba(212,175,55,0.34)",
   background: "rgba(212,175,55,0.18)",
   color: "#f8fafc",
-  boxShadow: "0 12px 28px rgba(212,175,55,0.12)",
+  boxShadow: "0 8px 18px rgba(212,175,55,0.12)",
 };
 
 const technicianWorkflowStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-  gap: "8px",
-  padding: "10px",
-  borderRadius: "22px",
-  background: "rgba(15, 23, 42, 0.94)",
+  gap: "6px",
+  padding: "6px",
+  borderRadius: "16px",
+  background: "rgba(15, 23, 42, 0.96)",
   border: "1px solid rgba(255,255,255,0.08)",
-  boxShadow: "0 18px 45px rgba(0,0,0,0.16)",
+  boxShadow: "0 12px 30px rgba(0,0,0,0.16)",
 };
 
 const technicianWorkflowStepStyle: React.CSSProperties = {
-  minHeight: "40px",
-  padding: "8px 10px",
-  borderRadius: "14px",
+  minHeight: "32px",
+  padding: "4px 8px",
+  borderRadius: "10px",
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.035)",
   color: "#94a3b8",
-  fontSize: "11px",
+  fontSize: "10px",
   fontWeight: 900,
-  lineHeight: 1.25,
+  lineHeight: 1.2,
   display: "flex",
   alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
 };
 
 const technicianWorkflowStepActiveStyle: React.CSSProperties = {
@@ -3974,47 +4325,54 @@ const technicianWorkflowStepActiveStyle: React.CSSProperties = {
   border: "1px solid rgba(212,175,55,0.34)",
   background: "rgba(212,175,55,0.16)",
   color: "#f8fafc",
-  boxShadow: "0 10px 22px rgba(212,175,55,0.10)",
+  boxShadow: "0 8px 16px rgba(212,175,55,0.10)",
 };
 
 const technicianAccordionStyle: React.CSSProperties = {
   display: "grid",
-  gap: "10px",
+  gap: "6px",
 };
 
 const technicianAccordionButtonStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: "66px",
-  padding: "15px 18px",
-  borderRadius: "20px",
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(15, 23, 42, 0.92)",
+  minHeight: "36px",
+  padding: "8px 14px",
+  borderRadius: "10px",
+  border: "1px solid rgba(255,255,255,0.05)",
+  background: "rgba(15, 23, 42, 0.45)",
   color: "#f8fafc",
   cursor: "pointer",
-  display: "grid",
-  gap: "5px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "8px",
   textAlign: "left",
-  boxShadow: "0 18px 44px rgba(0,0,0,0.18)",
+  boxShadow: "none",
+  transition: "all 0.2s ease",
   touchAction: "manipulation",
 };
 
 const technicianAccordionButtonActiveStyle: React.CSSProperties = {
   ...technicianAccordionButtonStyle,
-  border: "1px solid rgba(212,175,55,0.34)",
-  background: "rgba(212,175,55,0.16)",
-  boxShadow: "0 20px 52px rgba(212,175,55,0.12)",
+  background: "rgba(212, 175, 55, 0.04)",
+  border: "1px solid rgba(255, 255, 255, 0.08)",
+  borderLeft: "3px solid #d4af37",
+  paddingLeft: "11px", // Adjust for 3px border to keep alignment
+  boxShadow: "none",
 };
 
 const technicianAccordionTitleStyle: React.CSSProperties = {
   color: "#f8fafc",
-  fontSize: "14px",
+  fontSize: "12px",
   fontWeight: 900,
+  letterSpacing: "0.02em",
 };
 
 const technicianAccordionDescriptionStyle: React.CSSProperties = {
-  color: "#cbd5e1",
-  fontSize: "12px",
-  lineHeight: 1.4,
+  color: "#64748b",
+  fontSize: "10px",
+  lineHeight: 1.1,
+  fontWeight: 600,
 };
 
 const projectSavePanelStyle: React.CSSProperties = {
@@ -4116,7 +4474,7 @@ const leftColumnStyle: React.CSSProperties = {
 const rightColumnStyle: React.CSSProperties = {
   display: "grid",
   alignContent: "start",
-  gap: "20px",
+  gap: "14px",
 };
 
 const sectionPanelStyle: React.CSSProperties = {

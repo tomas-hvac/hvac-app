@@ -1,5 +1,7 @@
 import type { BlueprintCalibrationState } from "./blueprintCalibration";
 import type { BlueprintRoomOutline } from "./blueprintRoomTracing";
+import type { ProjectEngineMetadata, ProjectEngineState } from "./engine/projectEngineTypes";
+import { migrateEngineMetadata, prepareEngineStateForSave } from "./engine/projectEnginePersistence";
 import type { ManualDProjectState } from "../../app/components/ManualDPanel";
 
 export type BlueprintProjectEnvelopeSettings = {
@@ -23,6 +25,7 @@ export type BlueprintProject = {
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
   manualDProjectState: ManualDProjectState | null;
+  engineMetadata?: ProjectEngineMetadata;
   version: string;
 };
 
@@ -63,6 +66,7 @@ export type BlueprintProjectSnapshotInput = {
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
   manualDProjectState: ManualDProjectState | null;
+  engineMetadata?: ProjectEngineMetadata;
 };
 
 export function createBlueprintProjectSnapshot(input: BlueprintProjectSnapshotInput): BlueprintProject {
@@ -74,6 +78,7 @@ export function createBlueprintProjectSnapshot(input: BlueprintProjectSnapshotIn
     tracedRooms: input.tracedRooms,
     envelopeSettings: input.envelopeSettings,
     manualDProjectState: input.manualDProjectState,
+    engineMetadata: input.engineMetadata,
   };
 }
 
@@ -103,13 +108,23 @@ export function deserializeBlueprintProject(json: string): BlueprintProject {
     data.version = "1.0";
   }
 
+  data.engineMetadata = migrateEngineMetadata(data.engineMetadata);
+
   return data as BlueprintProject;
 }
 
-export function exportBlueprintProjectToFileData(project: BlueprintProject): string {
-  // We use the standard serialization but wrap it in an export envelope if needed.
-  // For now, the serialized project is the portable format.
-  return serializeBlueprintProject(project);
+export function exportBlueprintProjectToFileData(
+  project: BlueprintProject,
+  engineState?: ProjectEngineState
+): string {
+  const portableProject = engineState
+    ? {
+        ...project,
+        engineMetadata: prepareEngineStateForSave(engineState, "PROJECT_SAVED").metadata,
+      }
+    : project;
+
+  return serializeBlueprintProject(portableProject);
 }
 
 export function importBlueprintProjectFromFileData(json: string): BlueprintProject | null {
