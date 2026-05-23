@@ -111,8 +111,10 @@ export function SmartWorkflowActions({
         {/* Primary Action Card */}
         <button
           onClick={() => handleActionClick(primaryAction)}
+          type="button"
           style={{
             width: "100%",
+            minHeight: "48px",
             textAlign: "left",
             padding: "12px",
             borderRadius: "14px",
@@ -161,8 +163,10 @@ export function SmartWorkflowActions({
           {secondaryActions.map((action) => (
             <button
               key={action.id}
+              type="button"
               onClick={() => handleActionClick(action)}
               style={{
+                minHeight: "40px",
                 padding: "8px 10px",
                 borderRadius: "10px",
                 background: "rgba(255,255,255,0.02)",

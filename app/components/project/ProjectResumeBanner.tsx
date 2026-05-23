@@ -63,6 +63,8 @@ export function ProjectResumeBanner() {
           style={{
             width: "24px",
             height: "24px",
+            minWidth: "36px",
+            minHeight: "36px",
             borderRadius: "8px",
             border: "1px solid rgba(255,255,255,0.06)",
             background: "rgba(255,255,255,0.03)",
@@ -112,6 +114,7 @@ export function ProjectResumeBanner() {
             display: "inline-flex",
             alignItems: "center",
             gap: "6px",
+            minHeight: "40px",
             padding: "7px 12px",
             borderRadius: "10px",
             background: accent,

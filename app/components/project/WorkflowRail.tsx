@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, Circle, Lock, AlertCircle, PlayCircle } from "lucide-react";
+import { CheckCircle2, Lock, AlertCircle, PlayCircle } from "lucide-react";
 import { useProjectEngine } from "./useProjectEngine";
 import type { ProjectWorkflowStage } from "@/lib/hvac/engine/projectEngineTypes";
 
@@ -23,19 +23,19 @@ export function WorkflowRail() {
   return (
     <div style={{
       width: "100%",
+      overflowX: "auto",
       borderRadius: "12px",
       border: "1px solid rgba(255,255,255,0.06)",
       background: "rgba(15, 23, 42, 0.45)",
-      padding: "6px 12px",
+      padding: "6px",
       marginBottom: "12px"
     }}>
       <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "4px"
+        display: "grid",
+        gridTemplateColumns: `repeat(${STAGES.length}, minmax(64px, 1fr))`,
+        gap: "5px",
+        minWidth: "560px"
       }}>
-        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
           {STAGES.map((stage) => {
             const guard = getStageGuard(stage.id);
             const isCurrent = currentStage === stage.id;
@@ -47,38 +47,48 @@ export function WorkflowRail() {
               (stage.id === "REPORT" && engineState.dirtyFlags.includes("REPORT"));
             const isComplete = guard.isValid && !isLocked && !isCurrent && !hasDirtyConcern;
 
+            let Icon = CheckCircle2;
             let color = "#475569";
-            if (isCurrent) color = "#d4af37";
-            else if (hasDirtyConcern || guard.warnings.length > 0) color = "#fbbf24";
-            else if (isComplete) color = "#4ade80";
-            else if (!isLocked) color = "#94a3b8";
+            if (isLocked) Icon = Lock;
+            if (isCurrent) {
+              Icon = PlayCircle;
+              color = "#d4af37";
+            } else if (hasDirtyConcern || guard.warnings.length > 0) {
+              Icon = AlertCircle;
+              color = "#fbbf24";
+            } else if (isComplete) {
+              color = "#4ade80";
+            } else if (!isLocked) {
+              color = "#94a3b8";
+            }
 
             return (
-              <div
+              <button
                 key={stage.id}
+                type="button"
                 title={`${stage.label}: ${guard.blockers[0] ?? (isLocked ? 'Locked' : isCurrent ? 'Active' : 'Ready')}`}
-                style={{
-                  width: isCurrent ? "24px" : "12px",
-                  height: "4px",
-                  borderRadius: "2px",
-                  background: color,
-                  transition: "all 0.3s ease",
-                  cursor: isLocked ? "default" : "pointer"
-                }}
+                disabled={isLocked}
                 onClick={() => !isLocked && dispatchEngineAction({ type: "SET_STAGE", stage: stage.id })}
-              />
+                style={{
+                  minHeight: "40px",
+                  borderRadius: "10px",
+                  border: isCurrent ? "1px solid rgba(212,175,55,0.28)" : "1px solid rgba(255,255,255,0.04)",
+                  background: isCurrent ? "rgba(212,175,55,0.12)" : "rgba(255,255,255,0.02)",
+                  color,
+                  transition: "all 0.3s ease",
+                  cursor: isLocked ? "default" : "pointer",
+                  display: "grid",
+                  placeItems: "center",
+                  gap: "2px",
+                  padding: "5px 6px",
+                  WebkitTapHighlightColor: "transparent"
+                }}
+              >
+                <Icon size={12} color={color} />
+                <span style={{ fontSize: "9px", fontWeight: 900, letterSpacing: "0.03em" }}>{stage.label}</span>
+              </button>
             );
           })}
-        </div>
-        <span style={{ 
-          fontSize: "9px", 
-          fontWeight: 900, 
-          color: "#94a3b8", 
-          textTransform: "uppercase", 
-          letterSpacing: "0.08em" 
-        }}>
-          Status: {currentStage}
-        </span>
       </div>
     </div>
   );

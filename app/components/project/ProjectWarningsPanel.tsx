@@ -50,6 +50,7 @@ export function ProjectWarningsPanel() {
           background: "transparent",
           border: "none",
           padding: 0,
+          minHeight: "40px",
           cursor: "pointer",
           display: "flex",
           justifyContent: "space-between",
@@ -119,9 +120,11 @@ export function ProjectWarningsPanel() {
                 <p style={{ margin: 0, fontSize: "11px", color: "#94a3b8", lineHeight: 1.4 }}>{warning.message}</p>
                 
                 <button 
+                  type="button"
                   onClick={() => dispatchEngineAction({ type: "SET_STAGE", stage: warning.relatedStage })}
                   style={{
                     marginTop: "8px",
+                    minHeight: "38px",
                     padding: "4px 8px",
                     borderRadius: "6px",
                     background: "rgba(255,255,255,0.02)",

@@ -71,7 +71,6 @@ import { ProjectEngineProvider } from "./project/ProjectEngineProvider";
 import { useProjectEngine } from "./project/useProjectEngine";
 import { prepareEngineStateForSave } from "@/lib/hvac/engine/projectEnginePersistence";
 import type { ProjectAction, ProjectEngineMetadata, ProjectEngineState, ProjectTimelineEventType } from "@/lib/hvac/engine/projectEngineTypes";
-import { WorkflowRail } from "./project/WorkflowRail";
 import { ProjectNextStepBanner } from "./project/ProjectNextStepBanner";
 import { ProjectCommandCenter } from "./project/ProjectCommandCenter";
 import { ProjectIssuesDrawer } from "./project/ProjectIssuesDrawer";
@@ -2260,7 +2259,6 @@ const averageTonnage = (minTon + maxTon) / 2;
           ) : (
             <>
           <ProjectNextStepBanner />
-          {/* WorkflowRail hidden as it's redundant with the 5-step workflow row below */}
           <div style={technicianWorkflowStyle}>
             {technicianWorkflowSteps.map((step, index) => {
               const stepNumber = index + 1;
@@ -4248,6 +4246,7 @@ const calcSubtitleStyle: React.CSSProperties = {
 };
 
 const calcActionButtonStyle: React.CSSProperties = {
+  minHeight: "44px",
   padding: "10px 18px",
   borderRadius: "12px",
   border: "1px solid rgba(212,175,55,0.28)",
@@ -4273,7 +4272,7 @@ const loadViewTabsStyle: React.CSSProperties = {
 };
 
 const loadViewTabStyle: React.CSSProperties = {
-  minHeight: "38px",
+  minHeight: "44px",
   padding: "8px 12px",
   borderRadius: "10px",
   border: "1px solid rgba(255,255,255,0.08)",
@@ -4689,7 +4688,7 @@ const blueprintUploadRowStyle: React.CSSProperties = {
 };
 
 const blueprintUploadButtonStyle: React.CSSProperties = {
-  minHeight: "36px",
+  minHeight: "40px",
   padding: "8px 12px",
   borderRadius: "12px",
   border: "1px solid rgba(212,175,55,0.28)",
@@ -4717,7 +4716,7 @@ const blueprintUploadFileNameStyle: React.CSSProperties = {
 };
 
 const blueprintDetectButtonStyle: React.CSSProperties = {
-  minHeight: "36px",
+  minHeight: "40px",
   padding: "8px 12px",
   borderRadius: "12px",
   border: "1px solid rgba(212,175,55,0.28)",

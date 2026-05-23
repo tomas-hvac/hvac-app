@@ -87,7 +87,7 @@ export function ProjectHealthDashboard({ compact = false }: ProjectHealthDashboa
               display: "flex",
               alignItems: "center",
               gap: "5px",
-              minHeight: compact ? "28px" : undefined,
+              minHeight: compact ? "32px" : undefined,
               padding: compact ? "4px 6px" : "6px 8px",
               borderRadius: "8px",
               background: "rgba(255,255,255,0.015)",

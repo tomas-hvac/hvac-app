@@ -64,6 +64,7 @@ export function WorkflowAutomationPanel({ onRecalculate }: WorkflowAutomationPan
           background: "transparent",
           border: "none",
           padding: 0,
+          minHeight: "40px",
           cursor: "pointer",
           display: "flex",
           justifyContent: "space-between",
@@ -115,7 +116,9 @@ export function WorkflowAutomationPanel({ onRecalculate }: WorkflowAutomationPan
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
-                  color: "#475569"
+                  color: "#475569",
+                  minWidth: "36px",
+                  minHeight: "36px"
                 }}
               >
                 <X size={12} />
@@ -159,6 +162,7 @@ export function WorkflowAutomationPanel({ onRecalculate }: WorkflowAutomationPan
                       onClick={() => handleApply(currentSuggestion)}
                       style={{
                         padding: "6px 12px",
+                        minHeight: "40px",
                         borderRadius: "8px",
                         background: "rgba(212, 175, 55, 0.15)",
                         color: "#fde68a",
@@ -184,6 +188,7 @@ export function WorkflowAutomationPanel({ onRecalculate }: WorkflowAutomationPan
                       onClick={() => handleDismiss(currentSuggestion.ruleId)}
                       style={{
                         padding: "6px 10px",
+                        minHeight: "40px",
                         borderRadius: "8px",
                         background: "rgba(255,255,255,0.02)",
                         border: "1px solid rgba(255,255,255,0.04)",

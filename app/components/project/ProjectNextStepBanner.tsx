@@ -97,8 +97,10 @@ export function ProjectNextStepBanner() {
 
       {isValid && calculationStatus !== "recalculating" && !isDirty && (
         <button 
+          type="button"
           onClick={() => dispatchEngineAction({ type: "SET_STAGE", stage: nextRecommendedStage })}
           style={{
+          minHeight: "40px",
           display: "flex",
           alignItems: "center",
           gap: "6px",

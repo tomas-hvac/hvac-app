@@ -42,6 +42,7 @@ export function ProjectActivityTimeline() {
           background: "transparent",
           border: "none",
           padding: 0,
+          minHeight: "40px",
           cursor: "pointer",
           display: "flex",
           justifyContent: "space-between",
