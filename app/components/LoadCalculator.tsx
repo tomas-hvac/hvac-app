@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2 } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -2720,52 +2720,117 @@ const averageTonnage = (minTon + maxTon) / 2;
                   Detected rooms are preview suggestions only. Use calibrated tracing as the source of truth.
                 </p>
 
+                <div style={blueprintSidebarSectionHeaderStyle}>
+                  <Activity size={12} /> Workflow Status
+                </div>
                 <div style={blueprintWorkflowStyle}>
                   {[
-                    "1. Upload Blueprint",
-                    "2. Review Preview",
-                    "3. Preview Room Suggestions",
-                    "4. Confirm Rooms",
-                    "5. Send to Manual J / Manual D",
-                  ].map((step, index) => (
-                    <button
-                      type="button"
-                      key={step}
-                      style={index === 2 ? blueprintWorkflowStepDisabledStyle : blueprintWorkflowStepStyle}
-                      disabled={index === 2}
-                      onClick={() => handleBlueprintWorkflowStep(index)}
-                    >
-                      {step}
-                    </button>
-                  ))}
+                    { label: "Blueprint Uploaded", status: blueprintFile ? 'done' : 'inactive' },
+                    { label: "Preview Generated", status: blueprintPreviewUrl ? 'done' : 'inactive' },
+                    { label: "Verified Takeoff Complete", status: (tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === 'calibrated') ? 'done' : 'inactive' },
+                    { label: "Sent to Manual J", status: blueprintRoomsForManualD.length > 0 ? 'done' : 'inactive' },
+                    { label: "Sent to Manual D", status: blueprintRoomsForManualD.length > 0 ? 'done' : 'inactive' },
+                  ].map((step) => {
+                    const isDone = step.status === 'done';
+                    const iconColor = isDone ? "#22c55e" : "#475569";
+                    const labelStyle = isDone ? blueprintWorkflowStepIndicatorLabelDoneStyle : blueprintWorkflowStepIndicatorLabelStyle;
+
+                    return (
+                      <div key={step.label} style={isDone ? blueprintWorkflowStepIndicatorDoneStyle : blueprintWorkflowStepIndicatorStyle}>
+                        {isDone ? <CheckCircle2 size={16} color={iconColor} /> : <Circle size={16} color={iconColor} />}
+                        <p style={labelStyle}>{step.label}</p>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div style={blueprintUploadRowStyle}>
-                  <label className="blueprint-upload-button" style={blueprintUploadButtonStyle}>
-                    Upload Blueprint
-                    <input
-                      ref={blueprintFileInputRef}
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                      onChange={handleBlueprintFileChange}
-                      style={blueprintUploadInputStyle}
-                    />
-                  </label>
-                  <p style={blueprintUploadFileNameStyle}>
-                    {blueprintFileName || "No blueprint selected"}
-                  </p>
-                  <button
-                    type="button"
-                    disabled={!blueprintFile}
-                    style={
-                      blueprintFile
-                        ? blueprintDetectButtonStyle
-                        : { ...blueprintDetectButtonStyle, ...blueprintDetectButtonDisabledStyle }
-                    }
-                    onClick={runBlueprintAutoDetectPreview}
-                  >
-                    Run Auto-Detect Preview
-                  </button>
+                <div style={blueprintSidebarSectionHeaderStyle}>
+                  <PlayCircle size={12} /> Available Actions
+                </div>
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {!blueprintFile && (
+                    <label style={blueprintPrimaryActionButtonStyle}>
+                      <UploadCloud size={18} /> Upload Blueprint
+                      <input
+                        ref={blueprintFileInputRef}
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                        onChange={handleBlueprintFileChange}
+                        style={blueprintUploadInputStyle}
+                      />
+                    </label>
+                  )}
+                  
+                  {blueprintFile && blueprintDetectionPipeline.rooms.length === 0 && (
+                    <button type="button" style={blueprintPrimaryActionButtonStyle} onClick={runBlueprintAutoDetectPreview}>
+                      <Zap size={18} /> Run AI Auto Detect
+                    </button>
+                  )}
+
+                  {blueprintPreviewUrl && (
+                    <button type="button" style={blueprintPrimaryActionButtonStyle} onClick={startBlueprintRoomOutlineTrace}>
+                      <MousePointer2 size={18} /> {blueprintRoomTrace.isTracing ? "Continue Verified Trace" : "Start Verified Trace"}
+                    </button>
+                  )}
+
+                  {blueprintDetectionPipeline.rooms.length > 0 && (
+                    <button type="button" style={blueprintActionButtonStyle} onClick={() => {
+                      scrollToTakeoffElement(detectedRoomsRef.current);
+                    }}>
+                      <ClipboardCheck size={18} /> Review AI Suggestions
+                    </button>
+                  )}
+
+                  {tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === 'calibrated' && (
+                    <button type="button" style={blueprintActionButtonStyle} onClick={() => {
+                      setActiveTechnicianSection("room-airflow");
+                    }}>
+                      <Wind size={18} /> Send Verified Takeoff to Manual J
+                    </button>
+                  )}
+
+                  {blueprintFile && (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setBlueprintFile(null);
+                        setBlueprintFileName("");
+                        setBlueprintPreviewUrl("");
+                        setBlueprintDetectionPipeline({ mode: "preview", status: "mock", sourceFileName: "", rooms: [] });
+                      }}
+                      style={{ ...blueprintActionButtonStyle, border: '1px solid rgba(248,113,113,0.2)', background: 'rgba(248,113,113,0.05)', color: '#f87171' }}
+                    >
+                      <X size={18} /> Remove Blueprint
+                    </button>
+                  )}
+                </div>
+
+                <div style={blueprintSidebarSectionHeaderStyle}>
+                  <ShieldCheck size={12} /> Project Summary
+                </div>
+                <div style={blueprintSummaryBlockStyle}>
+                  <div style={blueprintSummaryItemStyle}>
+                    <p style={blueprintSummaryLabelStyle}>Calibration</p>
+                    <p style={{ ...blueprintSummaryValueStyle, color: blueprintCalibration.status === 'calibrated' ? '#22c55e' : '#f87171' }}>
+                      {blueprintCalibration.status === 'calibrated' ? 'Confirmed' : 'Required'}
+                    </p>
+                  </div>
+                  <div style={blueprintSummaryItemStyle}>
+                    <p style={blueprintSummaryLabelStyle}>Verified Rooms</p>
+                    <p style={blueprintSummaryValueStyle}>{tracedRoomsWithSqft.length}</p>
+                  </div>
+                  <div style={blueprintSummaryItemStyle}>
+                    <p style={blueprintSummaryLabelStyle}>Verified Area</p>
+                    <p style={blueprintSummaryValueStyle}>
+                      {Math.round(tracedRoomsWithSqft.reduce((sum, r) => sum + (r.squareFeet || 0), 0)).toLocaleString()} Sqft
+                    </p>
+                  </div>
+                  <div style={blueprintSummaryItemStyle}>
+                    <p style={blueprintSummaryLabelStyle}>Manual J Ready</p>
+                    <p style={{ ...blueprintSummaryValueStyle, color: (blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? '#22c55e' : '#64748b' }}>
+                      {(blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? 'Ready' : 'Pending Verification'}
+                    </p>
+                  </div>
                 </div>
 
               </aside>
@@ -4335,7 +4400,10 @@ const technicianAccordionStyle: React.CSSProperties = {
 const technicianAccordionButtonStyle: React.CSSProperties = {
   width: "100%",
   minHeight: "36px",
-  padding: "8px 14px",
+  paddingTop: "8px",
+  paddingBottom: "8px",
+  paddingLeft: "14px",
+  paddingRight: "14px",
   borderRadius: "10px",
   border: "1px solid rgba(255,255,255,0.05)",
   background: "rgba(15, 23, 42, 0.45)",
@@ -4652,7 +4720,129 @@ const blueprintTakeoffNoteStyle: React.CSSProperties = {
 const blueprintWorkflowStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr",
+  gap: "10px",
+  margin: "20px 0",
+};
+
+const blueprintWorkflowStepIndicatorStyle: React.CSSProperties = {
+  width: "100%",
+  minHeight: "44px",
+  padding: "10px 14px",
+  borderRadius: "14px",
+  border: "1px solid rgba(255,255,255,0.06)",
+  background: "rgba(255,255,255,0.02)",
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  transition: "all 0.3s ease",
+};
+
+const blueprintWorkflowStepIndicatorActiveStyle: React.CSSProperties = {
+  ...blueprintWorkflowStepIndicatorStyle,
+  background: "rgba(212,175,55,0.05)",
+  border: "1px solid rgba(212,175,55,0.15)",
+};
+
+const blueprintWorkflowStepIndicatorDoneStyle: React.CSSProperties = {
+  ...blueprintWorkflowStepIndicatorStyle,
+  background: "rgba(34,197,94,0.05)",
+  border: "1px solid rgba(34,197,94,0.12)",
+};
+
+const blueprintWorkflowStepIndicatorLabelStyle: React.CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "#94a3b8",
+  margin: 0,
+};
+
+const blueprintWorkflowStepIndicatorLabelActiveStyle: React.CSSProperties = {
+  ...blueprintWorkflowStepIndicatorLabelStyle,
+  color: "#f8fafc",
+};
+
+const blueprintWorkflowStepIndicatorLabelDoneStyle: React.CSSProperties = {
+  ...blueprintWorkflowStepIndicatorLabelStyle,
+  color: "#22c55e",
+};
+
+const blueprintSidebarSectionHeaderStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "#64748b",
+  marginTop: "24px",
+  marginBottom: "12px",
+  display: "flex",
+  alignItems: "center",
   gap: "8px",
+};
+
+const blueprintSummaryBlockStyle: React.CSSProperties = {
+  padding: "16px",
+  borderRadius: "16px",
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.06)",
+  display: "grid",
+  gap: "12px",
+};
+
+const blueprintSummaryItemStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+};
+
+const blueprintSummaryLabelStyle: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#94a3b8",
+  margin: 0,
+};
+
+const blueprintSummaryValueStyle: React.CSSProperties = {
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "#f1f5f9",
+  margin: 0,
+};
+
+const blueprintActionButtonStyle: React.CSSProperties = {
+  width: "100%",
+  minHeight: "40px",
+  padding: "8px 16px",
+  borderRadius: "12px",
+  border: "1px solid rgba(212,175,55,0.25)",
+  background: "rgba(212,175,55,0.1)",
+  color: "#f8fafc",
+  fontSize: "13px",
+  fontWeight: 800,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  transition: "all 0.2s ease",
+};
+
+const blueprintPrimaryActionButtonStyle: React.CSSProperties = {
+  width: "100%",
+  minHeight: "48px",
+  padding: "12px 20px",
+  borderRadius: "14px",
+  background: "linear-gradient(135deg, #d4af37 0%, #b8962e 100%)",
+  color: "#0f172a",
+  fontSize: "14px",
+  fontWeight: 900,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "10px",
+  border: "none",
+  cursor: "pointer",
+  boxShadow: "0 8px 20px rgba(212,175,55,0.25)",
+  marginTop: "16px",
+  transition: "all 0.2s ease",
 };
 
 const blueprintWorkflowStepStyle: React.CSSProperties = {
