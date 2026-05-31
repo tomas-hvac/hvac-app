@@ -52,6 +52,8 @@ import {
 } from "@/lib/hvac/blueprintExteriorLoad";
 import {
   BlueprintProject,
+  BlueprintEnvelopeSuggestions,
+  EnvelopeSuggestion,
   createBlueprintProjectSnapshot,
   updateBlueprintProjectSnapshot,
 } from "@/lib/hvac/blueprintProject";
@@ -438,6 +440,16 @@ const InputField = ({ icon, title, description, children }: InputFieldProps) => 
  * ProjectIssuesBadge:
  * Fixed-position contextual badge for workflow issues.
  */
+const mockEnvelopeSuggestions: BlueprintEnvelopeSuggestions = {
+  atticRValue: { value: 49, confidence: 0.92, sourceNote: "Table 4.1 in blueprint notes" },
+  wallRValue: { value: 21, confidence: 0.85, sourceNote: "Exterior wall section detail" },
+  floorRValue: { value: 30, confidence: 0.88, sourceNote: "Crawlspace insulation specs" },
+  windowUFactor: { value: 0.28, confidence: 0.95, sourceNote: "Window schedule page 3" },
+  windowSHGC: { value: 0.25, confidence: 0.95, sourceNote: "Window schedule page 3" },
+  infiltrationACH50: { value: 3.5, confidence: 0.75, sourceNote: "Construction notes - blower door target" },
+  constructionNotes: ["Advanced framing used", "Low-E coatings specified", "Continuous exterior insulation"],
+};
+
 const ProjectIssuesBadge = ({ onClick }: { onClick: () => void }) => {
   const { engineState, readiness } = useProjectEngine();
   const { blockers, warnings } = readiness;
@@ -521,6 +533,7 @@ export default function LoadCalculator() {
   const [windowUFactor, setWindowUFactor] = useState("0.30");
   const [windowSHGC, setWindowSHGC] = useState("0.30");
   const [infiltrationACH50, setInfiltrationACH50] = useState("5.0");
+  const [envelopeSuggestions, setEnvelopeSuggestions] = useState<BlueprintEnvelopeSuggestions | undefined>(undefined);
   const [windowCount, setWindowCount] = useState("0");
   const [windowArea, setWindowArea] = useState("");
   const [windowEfficiency, setWindowEfficiency] = useState("Standard");
@@ -638,6 +651,7 @@ export default function LoadCalculator() {
           ach50: parseFloat(infiltrationACH50),
         },
       },
+      envelopeSuggestions: envelopeSuggestions,
       manualDProjectState,
     });
 
@@ -878,6 +892,7 @@ export default function LoadCalculator() {
             ach50: parseFloat(infiltrationACH50),
           },
         },
+        envelopeSuggestions: envelopeSuggestions,
         manualDProjectState,
         engineMetadata: preparedEngineSave.metadata,
       };
@@ -987,6 +1002,7 @@ export default function LoadCalculator() {
               ach50: parseFloat(infiltrationACH50),
             },
           },
+          envelopeSuggestions: envelopeSuggestions,
           manualDProjectState,
           engineMetadata: preparedEngineSave.metadata,
         });
@@ -1111,6 +1127,7 @@ export default function LoadCalculator() {
       rooms: [],
     });
     setDetectedRoomActionMessage("Blueprint uploaded. Trace manually or run auto-detect preview.");
+    setEnvelopeSuggestions(selectedFile ? mockEnvelopeSuggestions : undefined);
   };
 
   const runBlueprintAutoDetectPreview = () => {
@@ -1960,6 +1977,7 @@ const averageTonnage = (minTon + maxTon) / 2;
           ach50: parseFloat(infiltrationACH50),
         },
       },
+      envelopeSuggestions: envelopeSuggestions,
       manualDProjectState,
       engineMetadata: loadedEngineMetadata,
     });
@@ -2894,6 +2912,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                   onChange={(e) => setAtticRValue(e.target.value)}
                   style={inputControlStyle}
                 />
+                {envelopeSuggestions?.atticRValue && (
+                  <div style={envelopeSuggestionBadgeStyle}>
+                    <p style={envelopeSuggestionTextStyle}>AI Suggested: R-{envelopeSuggestions.atticRValue.value}</p>
+                    <button 
+                      type="button" 
+                      style={envelopeSuggestionActionStyle}
+                      onClick={() => setAtticRValue(String(envelopeSuggestions.atticRValue!.value))}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
               </InputField>
 
               <InputField
@@ -2908,6 +2938,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                   onChange={(e) => setWallRValue(e.target.value)}
                   style={inputControlStyle}
                 />
+                {envelopeSuggestions?.wallRValue && (
+                  <div style={envelopeSuggestionBadgeStyle}>
+                    <p style={envelopeSuggestionTextStyle}>AI Suggested: R-{envelopeSuggestions.wallRValue.value}</p>
+                    <button 
+                      type="button" 
+                      style={envelopeSuggestionActionStyle}
+                      onClick={() => setWallRValue(String(envelopeSuggestions.wallRValue!.value))}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
               </InputField>
 
               <InputField
@@ -2922,6 +2964,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                   onChange={(e) => setFloorRValue(e.target.value)}
                   style={inputControlStyle}
                 />
+                {envelopeSuggestions?.floorRValue && (
+                  <div style={envelopeSuggestionBadgeStyle}>
+                    <p style={envelopeSuggestionTextStyle}>AI Suggested: R-{envelopeSuggestions.floorRValue.value}</p>
+                    <button 
+                      type="button" 
+                      style={envelopeSuggestionActionStyle}
+                      onClick={() => setFloorRValue(String(envelopeSuggestions.floorRValue!.value))}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
               </InputField>
 
               <InputField
@@ -2937,6 +2991,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                   onChange={(e) => setWindowUFactor(e.target.value)}
                   style={inputControlStyle}
                 />
+                {envelopeSuggestions?.windowUFactor && (
+                  <div style={envelopeSuggestionBadgeStyle}>
+                    <p style={envelopeSuggestionTextStyle}>AI Suggested: {envelopeSuggestions.windowUFactor.value}</p>
+                    <button 
+                      type="button" 
+                      style={envelopeSuggestionActionStyle}
+                      onClick={() => setWindowUFactor(String(envelopeSuggestions.windowUFactor!.value))}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
               </InputField>
 
               <InputField
@@ -2952,6 +3018,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                   onChange={(e) => setWindowSHGC(e.target.value)}
                   style={inputControlStyle}
                 />
+                {envelopeSuggestions?.windowSHGC && (
+                  <div style={envelopeSuggestionBadgeStyle}>
+                    <p style={envelopeSuggestionTextStyle}>AI Suggested: {envelopeSuggestions.windowSHGC.value}</p>
+                    <button 
+                      type="button" 
+                      style={envelopeSuggestionActionStyle}
+                      onClick={() => setWindowSHGC(String(envelopeSuggestions.windowSHGC!.value))}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
               </InputField>
 
               <InputField
@@ -2967,8 +3045,32 @@ const averageTonnage = (minTon + maxTon) / 2;
                   onChange={(e) => setInfiltrationACH50(e.target.value)}
                   style={inputControlStyle}
                 />
+                {envelopeSuggestions?.infiltrationACH50 && (
+                  <div style={envelopeSuggestionBadgeStyle}>
+                    <p style={envelopeSuggestionTextStyle}>AI Suggested: {envelopeSuggestions.infiltrationACH50.value}</p>
+                    <button 
+                      type="button" 
+                      style={envelopeSuggestionActionStyle}
+                      onClick={() => setInfiltrationACH50(String(envelopeSuggestions.infiltrationACH50!.value))}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
               </InputField>
             </div>
+
+            {envelopeSuggestions?.constructionNotes && envelopeSuggestions.constructionNotes.length > 0 && (
+              <div style={constructionNotesListStyle}>
+                <p style={{ ...sectionPanelTitleStyle, fontSize: "11px", marginBottom: "8px" }}>AI Extracted Construction Notes</p>
+                {envelopeSuggestions.constructionNotes.map((note: string, idx: number) => (
+                  <div key={idx} style={constructionNoteItemStyle}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#d4af37" }} />
+                    {note}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ marginTop: "24px", padding: "16px", borderRadius: "16px", background: isEnvelopeVerified ? "rgba(34,197,94,0.08)" : "rgba(212,175,55,0.08)", border: `1px solid ${isEnvelopeVerified ? "rgba(34,197,94,0.2)" : "rgba(212,175,55,0.2)"}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
@@ -5184,6 +5286,54 @@ const persistentSummaryValueStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: "6px",
+};
+
+const envelopeSuggestionBadgeStyle: React.CSSProperties = {
+  marginTop: "8px",
+  padding: "8px 12px",
+  borderRadius: "10px",
+  background: "rgba(212,175,55,0.08)",
+  border: "1px solid rgba(212,175,55,0.2)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "8px",
+};
+
+const envelopeSuggestionTextStyle: React.CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 700,
+  color: "#fde68a",
+  margin: 0,
+};
+
+const envelopeSuggestionActionStyle: React.CSSProperties = {
+  background: "rgba(212,175,55,0.2)",
+  border: "1px solid rgba(212,175,55,0.3)",
+  borderRadius: "6px",
+  color: "#fde68a",
+  fontSize: "10px",
+  fontWeight: 900,
+  padding: "2px 8px",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+};
+
+const constructionNotesListStyle: React.CSSProperties = {
+  marginTop: "20px",
+  padding: "16px",
+  borderRadius: "16px",
+  background: "rgba(255,255,255,0.02)",
+  border: "1px solid rgba(255,255,255,0.05)",
+};
+
+const constructionNoteItemStyle: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#94a3b8",
+  margin: "4px 0",
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
 };
 
 const blueprintWorkflowStepStyle: React.CSSProperties = {

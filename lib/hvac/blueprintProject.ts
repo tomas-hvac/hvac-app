@@ -22,6 +22,22 @@ export type BlueprintProjectEnvelopeSettings = {
   isVerified: boolean;
 };
 
+export type EnvelopeSuggestion = {
+  value: number | string;
+  confidence: number;
+  sourceNote?: string; // Text from blueprint where this was found
+};
+
+export type BlueprintEnvelopeSuggestions = {
+  atticRValue?: EnvelopeSuggestion;
+  wallRValue?: EnvelopeSuggestion;
+  floorRValue?: EnvelopeSuggestion;
+  windowUFactor?: EnvelopeSuggestion;
+  windowSHGC?: EnvelopeSuggestion;
+  infiltrationACH50?: EnvelopeSuggestion;
+  constructionNotes?: string[];
+};
+
 export type BlueprintProject = {
   id: string;
   name: string;
@@ -37,6 +53,7 @@ export type BlueprintProject = {
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
+  envelopeSuggestions?: BlueprintEnvelopeSuggestions;
   manualDProjectState: ManualDProjectState | null;
   engineMetadata?: ProjectEngineMetadata;
   version: string;
@@ -79,6 +96,7 @@ export type BlueprintProjectSnapshotInput = {
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
+  envelopeSuggestions?: BlueprintEnvelopeSuggestions;
   manualDProjectState: ManualDProjectState | null;
   engineMetadata?: ProjectEngineMetadata;
 };
@@ -91,6 +109,7 @@ export function createBlueprintProjectSnapshot(input: BlueprintProjectSnapshotIn
     calibration: input.calibration,
     tracedRooms: input.tracedRooms,
     envelopeSettings: input.envelopeSettings,
+    envelopeSuggestions: input.envelopeSuggestions,
     manualDProjectState: input.manualDProjectState,
     engineMetadata: input.engineMetadata,
   };
