@@ -1583,10 +1583,15 @@ export default function LoadCalculator() {
       existingSystemSize,
       comfortPriority,
       occupancy,
+      // Pass professional overrides if verified
+      ...(isEnvelopeVerified ? {
+        verifiedWindowUFactor: parseFloat(windowUFactor),
+        verifiedWindowSHGC: parseFloat(windowSHGC),
+      } : {})
     };
 
     return calculateManualJLoad(inputs);
-  }, [squareFeet, ceilingHeight, insulationQuality, windowCount, windowArea, windowEfficiency, windowOrientation, climateZone, oregonRegion, numberOfRooms, homeAge, ductLocation, ductCondition, infiltrationTightness, existingSystemSize, comfortPriority, occupancy]);
+  }, [squareFeet, ceilingHeight, insulationQuality, windowCount, windowArea, windowEfficiency, windowOrientation, climateZone, oregonRegion, numberOfRooms, homeAge, ductLocation, ductCondition, infiltrationTightness, existingSystemSize, comfortPriority, occupancy, isEnvelopeVerified, windowUFactor, windowSHGC]);
 
   const [displayedResult, setDisplayedResult] = useState(result);
 
@@ -4430,6 +4435,177 @@ const averageTonnage = (minTon + maxTon) / 2;
               ))}
             </div>
           </div>
+
+          {/* Manual J Engineering Audit Panel */}
+          <div className="manual-j-engineering-audit" style={auditPanelStyle}>
+            <div>
+              <h4 style={auditTitleStyle}>Engineering Audit</h4>
+              <p style={auditSubtitleStyle}>Verified and assumed inputs used for this Manual J result.</p>
+            </div>
+
+            {(() => {
+              // 1. Engineering Confidence Logic
+              const isAreaVerified = tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === "calibrated";
+              const isCeilingVerified = false; // Always assumed for now
+              const isMaterialsVerified = isEnvelopeVerified;
+              const hasWindowData = parseInt(windowCount, 10) > 0;
+              const hasEnvelopeVerification = isEnvelopeVerified;
+
+              const assumedRows = [
+                !isAreaVerified, // Area
+                true, // Ceiling Height
+                !isAreaVerified || !isCeilingVerified, // Volume
+                !isEnvelopeVerified || !atticRValue, // Attic
+                !isEnvelopeVerified || !wallRValue, // Wall
+                !isEnvelopeVerified || !floorRValue, // Floor
+                !isEnvelopeVerified || !windowUFactor, // Window U
+                !isEnvelopeVerified || !windowSHGC, // Window SHGC
+                !isEnvelopeVerified || !infiltrationACH50, // Infiltration
+                true, // Climate Region
+              ].filter(Boolean).length;
+
+              const missingCriticalRows = [
+                parseFloat(squareFeet) <= 0,
+                parseFloat(ceilingHeight) <= 6,
+                parseInt(windowCount, 10) <= 0,
+                !hasEnvelopeVerification,
+              ].filter(Boolean).length;
+
+              const confidenceScore = Math.max(0, Math.min(100, 100 - (assumedRows * 10) - (missingCriticalRows * 20)));
+
+              return (
+                <>
+                  <div style={auditGridStyle}>
+                    <p style={auditSectionTitleStyle}>Engineering Confidence</p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+                      <div style={resultCardStyle}>
+                        <p style={auditSectionTitleStyle}>Confidence</p>
+                        <p style={{ ...resultCardValueStyle, color: confidenceScore > 80 ? "#4ade80" : confidenceScore > 50 ? "#fde68a" : "#f87171" }}>
+                          {confidenceScore}%
+                        </p>
+                      </div>
+                      <div style={resultCardStyle}>
+                        <p style={auditSectionTitleStyle}>Verified</p>
+                        <p style={resultCardValueStyle}>{10 - assumedRows}</p>
+                      </div>
+                      <div style={resultCardStyle}>
+                        <p style={auditSectionTitleStyle}>Assumed</p>
+                        <p style={resultCardValueStyle}>{assumedRows}</p>
+                      </div>
+                      <div style={resultCardStyle}>
+                        <p style={auditSectionTitleStyle}>Missing</p>
+                        <p style={resultCardValueStyle}>{missingCriticalRows}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={auditGridStyle}>
+                    <p style={auditSectionTitleStyle}>Geometry Audit</p>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Conditioned Area</p>
+                      <p style={auditValueStyle}>{squareFeet.toLocaleString()} sqft</p>
+                      <p style={auditSourceStyle}>{tracedRoomsWithSqft.length > 0 ? "Blueprint Takeoff" : "Manual Entry"}</p>
+                      <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {isAreaVerified ? "Verified" : "Assumed"}
+                      </div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Ceiling Height</p>
+                      <p style={auditValueStyle}>{ceilingHeight} ft</p>
+                      <p style={auditSourceStyle}>Manual Entry</p>
+                      <div style={auditBadgeAssumedStyle}>Assumed</div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Calculated Volume</p>
+                      <p style={auditValueStyle}>{(parseFloat(squareFeet) * parseFloat(ceilingHeight)).toLocaleString()} cuft</p>
+                      <p style={auditSourceStyle}>Derived</p>
+                      <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {isAreaVerified ? "Verified" : "Assumed"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={auditGridStyle}>
+                    <p style={auditSectionTitleStyle}>Thermal Envelope Audit</p>
+                    {[
+                      { label: "Attic Insulation", val: isEnvelopeVerified && atticRValue ? `R-${atticRValue}` : insulationQuality, verified: isEnvelopeVerified && !!atticRValue },
+                      { label: "Wall Insulation", val: isEnvelopeVerified && wallRValue ? `R-${wallRValue}` : insulationQuality, verified: isEnvelopeVerified && !!wallRValue },
+                      { label: "Floor Insulation", val: isEnvelopeVerified && floorRValue ? `R-${floorRValue}` : insulationQuality, verified: isEnvelopeVerified && !!floorRValue },
+                      { label: "Window U-Factor", val: isEnvelopeVerified && windowUFactor ? windowUFactor : windowEfficiency, verified: isEnvelopeVerified && !!windowUFactor },
+                      { label: "Window SHGC", val: isEnvelopeVerified && windowSHGC ? windowSHGC : windowEfficiency, verified: isEnvelopeVerified && !!windowSHGC },
+                    ].map((row) => (
+                      <div key={row.label} style={auditRowStyle}>
+                        <p style={auditLabelStyle}>{row.label}</p>
+                        <p style={auditValueStyle}>{row.val}</p>
+                        <p style={auditSourceStyle}>{row.verified ? "Envelope Verification" : "Manual J Assumption"}</p>
+                        <div style={row.verified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                          {row.verified ? "Verified" : "Assumed"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={auditGridStyle}>
+                    <p style={auditSectionTitleStyle}>Air Leakage / Environment Audit</p>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Infiltration</p>
+                      <p style={auditValueStyle}>{isEnvelopeVerified && infiltrationACH50 ? `${infiltrationACH50} ACH50` : infiltrationTightness}</p>
+                      <p style={auditSourceStyle}>{isEnvelopeVerified && infiltrationACH50 ? "Envelope Verification" : "Manual J Assumption"}</p>
+                      <div style={isEnvelopeVerified && infiltrationACH50 ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {isEnvelopeVerified && infiltrationACH50 ? "Verified" : "Assumed"}
+                      </div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Climate Region</p>
+                      <p style={auditValueStyle}>{oregonRegion}</p>
+                      <p style={auditSourceStyle}>Manual Entry</p>
+                      <div style={auditBadgeAssumedStyle}>Assumed</div>
+                    </div>
+                  </div>
+
+                  {(assumedRows > 0 || missingCriticalRows > 0) && (
+                    <div style={auditGridStyle}>
+                      <p style={auditSectionTitleStyle}>Active Engine Assumptions</p>
+                      <div style={constructionNotesListStyle}>
+                        {!isAreaVerified && (
+                          <div style={auditAssumptionItemStyle}>
+                            <AlertTriangle size={12} color="#fde68a" />
+                            Conditioned area is manually entered and not verified by blueprint takeoff.
+                          </div>
+                        )}
+                        {!isCeilingVerified && (
+                          <div style={auditAssumptionItemStyle}>
+                            <AlertTriangle size={12} color="#fde68a" />
+                            Ceiling height is manually entered and not independently verified.
+                          </div>
+                        )}
+                        {!isEnvelopeVerified && (
+                          <>
+                            <div style={auditAssumptionItemStyle}>
+                              <AlertTriangle size={12} color="#fde68a" />
+                              Insulation is using shorthand quality settings.
+                            </div>
+                            <div style={auditAssumptionItemStyle}>
+                              <AlertTriangle size={12} color="#fde68a" />
+                              Infiltration is using shorthand tightness settings.
+                            </div>
+                            <div style={auditAssumptionItemStyle}>
+                              <AlertTriangle size={12} color="#fde68a" />
+                              Window values are using fallback efficiency labels.
+                            </div>
+                          </>
+                        )}
+                        <div style={auditAssumptionItemStyle}>
+                          <AlertTriangle size={12} color="#fde68a" />
+                          Wall exposure is still based on current engine assumptions (70% perimeter).
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
             </>
           )}
         </div>
@@ -6347,4 +6523,107 @@ const verificationNoteStyle: React.CSSProperties = {
   color: "#f8fafc",
   fontSize: "13px",
   lineHeight: 1.5,
+};
+
+const auditPanelStyle: React.CSSProperties = {
+  marginTop: "32px",
+  padding: "24px",
+  borderRadius: "24px",
+  background: "rgba(15, 23, 42, 0.4)",
+  border: "1px solid rgba(255, 255, 255, 0.08)",
+  display: "grid",
+  gap: "24px",
+};
+
+const auditTitleStyle: React.CSSProperties = {
+  fontSize: "18px",
+  fontWeight: 800,
+  color: "#f8fafc",
+  margin: 0,
+};
+
+const auditSubtitleStyle: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#64748b",
+  margin: "4px 0 0 0",
+};
+
+const auditSectionTitleStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "#94a3b8",
+  margin: "0 0 12px 0",
+};
+
+const auditGridStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "8px",
+};
+
+const auditRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 1fr 1fr 100px",
+  padding: "10px 16px",
+  borderRadius: "12px",
+  background: "rgba(255, 255, 255, 0.02)",
+  alignItems: "center",
+  fontSize: "13px",
+};
+
+const auditLabelStyle: React.CSSProperties = {
+  fontWeight: 600,
+  color: "#f1f5f9",
+  margin: 0,
+};
+
+const auditValueStyle: React.CSSProperties = {
+  color: "#cbd5e1",
+  margin: 0,
+};
+
+const auditSourceStyle: React.CSSProperties = {
+  fontSize: "11px",
+  color: "#64748b",
+  margin: 0,
+};
+
+const auditBadgeStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 900,
+  padding: "2px 8px",
+  borderRadius: "6px",
+  textAlign: "center",
+  textTransform: "uppercase",
+};
+
+const auditBadgeVerifiedStyle: React.CSSProperties = {
+  ...auditBadgeStyle,
+  background: "rgba(34, 197, 94, 0.15)",
+  color: "#4ade80",
+  border: "1px solid rgba(34, 197, 94, 0.2)",
+};
+
+const auditBadgeAssumedStyle: React.CSSProperties = {
+  ...auditBadgeStyle,
+  background: "rgba(212, 175, 55, 0.15)",
+  color: "#fde68a",
+  border: "1px solid rgba(212, 175, 55, 0.2)",
+};
+
+const auditBadgeMissingStyle: React.CSSProperties = {
+  ...auditBadgeStyle,
+  background: "rgba(239, 68, 68, 0.15)",
+  color: "#f87171",
+  border: "1px solid rgba(239, 68, 68, 0.2)",
+};
+
+const auditAssumptionItemStyle: React.CSSProperties = {
+  fontSize: "12px",
+  color: "#94a3b8",
+  margin: "4px 0",
+  display: "flex",
+  gap: "8px",
+  alignItems: "baseline",
 };

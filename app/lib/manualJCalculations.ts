@@ -20,6 +20,9 @@ export interface ManualJInputs {
   existingSystemSize: string;
   comfortPriority: string;
   occupancy: string;
+  // Professional Overrides
+  verifiedWindowUFactor?: number;
+  verifiedWindowSHGC?: number;
 }
 
 export interface ManualJResults {
@@ -102,7 +105,7 @@ export function calculateSolarWindowGain(inputs: ManualJInputs): number {
   const totalWindowArea = getEffectiveWindowArea(inputs);
 
   // SHGC (Solar Heat Gain Coefficient) based on window efficiency
-  const shgc = getWindowSHGC(windowEfficiency);
+  const shgc = getWindowSHGC(windowEfficiency, inputs.verifiedWindowSHGC);
 
   // Solar gain factor based on climate and orientation (simplified)
   const solarFactor = getSolarGainFactor(climateZone) * getWindowOrientationFactor(windowOrientation);
@@ -124,7 +127,7 @@ export function calculateWindowConductionGain(inputs: ManualJInputs, loadType: L
   const totalWindowArea = getEffectiveWindowArea(inputs);
 
   // Window U-factor based on efficiency rating
-  const windowUFactor = getWindowUFactor(windowEfficiency);
+  const windowUFactor = getWindowUFactor(windowEfficiency, inputs.verifiedWindowUFactor);
 
   const designTemps = getOregonDesignTemperatures(inputs);
   const deltaT = loadType === "heating" ? designTemps.heatingDeltaT : designTemps.coolingDeltaT;
@@ -295,8 +298,13 @@ export function calculateManualJLoad(inputs: ManualJInputs): ManualJResults {
   const windowAreaText = inputs.windowArea > 0
     ? `${inputs.windowArea.toLocaleString()} sq.ft. of window area`
     : `${inputs.windowCount} windows with estimated glass area`;
+  
+  const verifiedWindowText = (inputs.verifiedWindowUFactor !== undefined && inputs.verifiedWindowSHGC !== undefined)
+    ? " Manual J is using verified window U-factor and SHGC."
+    : "";
+
   const comparisonText = existingSystemComparison ? ` ${existingSystemComparison}` : "";
-  const whyText = `Load calculation based on ${inputs.squareFeet.toLocaleString()} sq.ft. at ${inputs.ceilingHeight}ft ceilings, ${inputs.insulationQuality.toLowerCase()} insulation, ${windowAreaText} (${inputs.windowEfficiency.toLowerCase()}), ${inputs.windowOrientation.toLowerCase()} exposure, ${inputs.ductLocation.toLowerCase()} ducts, ${inputs.ductCondition.toLowerCase()} duct condition, ${inputs.infiltrationTightness.toLowerCase()} home tightness/infiltration, ${inputs.occupancy.toLowerCase()}, and ${inputs.comfortPriority.toLowerCase()} comfort priority in ${inputs.oregonRegion}.${designTemperatureNote}${ductConditionNote}${comfortPriorityNote} Heating load is ${heatingBTU.toLocaleString()} BTU and cooling load is ${coolingBTU.toLocaleString()} BTU, so recommended tonnage uses the larger ${dominantLoadType} load. ${equipmentRecommendation.explanation}${comparisonText}`;
+  const whyText = `Load calculation based on ${inputs.squareFeet.toLocaleString()} sq.ft. at ${inputs.ceilingHeight}ft ceilings, ${inputs.insulationQuality.toLowerCase()} insulation, ${windowAreaText} (${inputs.windowEfficiency.toLowerCase()}), ${inputs.windowOrientation.toLowerCase()} exposure, ${inputs.ductLocation.toLowerCase()} ducts, ${inputs.ductCondition.toLowerCase()} duct condition, ${inputs.infiltrationTightness.toLowerCase()} home tightness/infiltration, ${inputs.occupancy.toLowerCase()}, and ${inputs.comfortPriority.toLowerCase()} comfort priority in ${inputs.oregonRegion}.${designTemperatureNote}${ductConditionNote}${comfortPriorityNote}${verifiedWindowText} Heating load is ${heatingBTU.toLocaleString()} BTU and cooling load is ${coolingBTU.toLocaleString()} BTU, so recommended tonnage uses the larger ${dominantLoadType} load. ${equipmentRecommendation.explanation}${comparisonText}`;
 
   return {
     estimatedBTU: totalBTU,
@@ -357,7 +365,11 @@ function getOregonDesignTemperatures(inputs: ManualJInputs): OregonDesignTempera
   };
 }
 
-function getWindowSHGC(efficiency: string): number {
+function getWindowSHGC(efficiency: string, verifiedSHGC?: number): number {
+  // Use professional override if available
+  if (verifiedSHGC !== undefined && !isNaN(verifiedSHGC)) {
+    return verifiedSHGC;
+  }
   // Solar Heat Gain Coefficient (0-1, higher = more solar gain)
   const shgcValues: { [key: string]: number } = {
     "Passive": 0.25,   // Triple glazed, low-E
@@ -395,7 +407,11 @@ function getEffectiveWindowArea(inputs: ManualJInputs): number {
   return inputs.windowArea > 0 ? inputs.windowArea : inputs.windowCount * 15;
 }
 
-function getWindowUFactor(efficiency: string): number {
+function getWindowUFactor(efficiency: string, verifiedUFactor?: number): number {
+  // Use professional override if available
+  if (verifiedUFactor !== undefined && !isNaN(verifiedUFactor)) {
+    return verifiedUFactor;
+  }
   // Window U-factor (BTU/hr·sq ft·°F)
   const uFactors: { [key: string]: number } = {
     "Passive": 0.15,   // Triple glazed, low-E
