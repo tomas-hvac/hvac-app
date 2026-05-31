@@ -512,7 +512,8 @@ export default function LoadCalculator() {
   const [squareFeet, setSquareFeet] = useState("2200");
   const [ceilingHeight, setCeilingHeight] = useState("9");
   const [insulationQuality, setInsulationQuality] = useState("Average");
-  const [windowCount, setWindowCount] = useState("15");
+  const [isEnvelopeVerified, setIsEnvelopeVerified] = useState(false);
+  const [windowCount, setWindowCount] = useState("0");
   const [windowArea, setWindowArea] = useState("");
   const [windowEfficiency, setWindowEfficiency] = useState("Standard");
   const [windowOrientation, setWindowOrientation] = useState("Mixed / Average Exposure");
@@ -615,6 +616,7 @@ export default function LoadCalculator() {
       envelopeSettings: {
         insulationQuality,
         oregonRegion,
+        isVerified: isEnvelopeVerified,
       },
       manualDProjectState,
     });
@@ -842,6 +844,7 @@ export default function LoadCalculator() {
         envelopeSettings: {
           insulationQuality,
           oregonRegion,
+          isVerified: isEnvelopeVerified,
         },
         manualDProjectState,
         engineMetadata: preparedEngineSave.metadata,
@@ -938,6 +941,7 @@ export default function LoadCalculator() {
           envelopeSettings: {
             insulationQuality,
             oregonRegion,
+            isVerified: isEnvelopeVerified,
           },
           manualDProjectState,
           engineMetadata: preparedEngineSave.metadata,
@@ -1638,6 +1642,57 @@ export default function LoadCalculator() {
   );
   const confirmedBlueprintPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
 
+  const blueprintCalibrationUI = useMemo(() => {
+    if (!blueprintFile) {
+      return {
+        actionText: "Upload Blueprint First",
+        statusText: "Scale not verified",
+        statusColor: "#64748b",
+        canConfirm: false,
+        isDisabled: true
+      };
+    }
+
+    if (blueprintCalibration.status === "uncalibrated" || blueprintCalibration.status === "calibrating") {
+      const isPlacingPoints = blueprintCalibration.startPoint || blueprintCalibration.endPoint;
+      return {
+        actionText: isPlacingPoints ? "Calibrating..." : "Begin Calibration",
+        statusText: isPlacingPoints ? "Select two points and enter known distance" : "Scale not verified",
+        statusColor: isPlacingPoints ? "#fbbf24" : "#64748b",
+        canConfirm: false,
+        isDisabled: false
+      };
+    }
+
+    if (blueprintCalibration.status === "ready") {
+      return {
+        actionText: "Confirm Scale",
+        statusText: "Scale ready for confirmation",
+        statusColor: "#fbbf24",
+        canConfirm: true,
+        isDisabled: false
+      };
+    }
+
+    if (blueprintCalibration.status === "calibrated") {
+      return {
+        actionText: "Verified Scale",
+        statusText: "Scale confirmed and used for sqft calculations",
+        statusColor: "#22c55e",
+        canConfirm: true, // Internal state allows re-confirmation if needed, but UI will handle locking
+        isDisabled: false
+      };
+    }
+
+    return {
+      actionText: "Begin Calibration",
+      statusText: "Scale not verified",
+      statusColor: "#64748b",
+      canConfirm: false,
+      isDisabled: false
+    };
+  }, [blueprintFile, blueprintCalibration.status, blueprintCalibration.startPoint, blueprintCalibration.endPoint]);
+
   const tracedRoomsWithSqft = useMemo(() => {
     return blueprintRoomTrace.roomOutlines.map((outline) => ({
       ...outline,
@@ -1840,6 +1895,7 @@ const averageTonnage = (minTon + maxTon) / 2;
       envelopeSettings: {
         insulationQuality,
         oregonRegion,
+        isVerified: isEnvelopeVerified,
       },
       manualDProjectState,
       engineMetadata: loadedEngineMetadata,
@@ -3238,7 +3294,9 @@ const averageTonnage = (minTon + maxTon) / 2;
 
               <aside className="blueprint-workspace-inspector" style={blueprintWorkspaceInspectorStyle}>
                 <div style={blueprintInspectorCardStyle}>
-                  <p style={blueprintCalibrationStatusStyle}>{blueprintCalibrationStatusText}</p>
+                  <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor }}>
+                    {blueprintCalibrationUI.statusText}
+                  </p>
                   <p style={blueprintCalibrationHelperStyle}>{blueprintCalibrationScaleText}</p>
                   <label style={{ ...blueprintCalibrationInputGroupStyle, marginTop: "10px" }}>
                     <span style={blueprintCalibrationInputLabelStyle}>Known Length</span>
@@ -3262,15 +3320,19 @@ const averageTonnage = (minTon + maxTon) / 2;
                   >
                     Reset Calibration
                   </button>
-                  {canConfirmBlueprintCalibration ? (
-                    <button
-                      type="button"
-                      style={{ ...blueprintCalibrationConfirmButtonStyle, marginTop: "8px" }}
-                      onClick={confirmCurrentBlueprintCalibration}
-                    >
-                      Confirm Calibration
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    disabled={blueprintCalibrationUI.isDisabled || (blueprintCalibrationUI.actionText === "Verified Scale")}
+                    style={{ 
+                      ...(blueprintCalibrationUI.actionText === "Confirm Scale" ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
+                      marginTop: "8px",
+                      ...(blueprintCalibrationUI.actionText === "Verified Scale" ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "default" } : {}),
+                      ...(blueprintCalibrationUI.isDisabled ? { opacity: 0.5, cursor: "not-allowed" } : {})
+                    }}
+                    onClick={blueprintCalibrationUI.canConfirm && blueprintCalibrationUI.actionText !== "Verified Scale" ? confirmCurrentBlueprintCalibration : undefined}
+                  >
+                    {blueprintCalibrationUI.actionText}
+                  </button>
 
                   {/* Verification Section */}
                   {blueprintCalibration.status === "calibrated" && (
@@ -3286,7 +3348,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                           width: "100%",
                         }}
                       >
-                        {isVerificationMode ? "Exit Verification" : "Verify Calibration"}
+                        {isVerificationMode ? "Exit Verification" : "Verify Measurement"}
                       </button>
 
                       {isVerificationMode && (

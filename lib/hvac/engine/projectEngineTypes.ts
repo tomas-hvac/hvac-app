@@ -5,6 +5,7 @@ export type ProjectWorkflowStage =
   | "SETUP"
   | "CALIBRATION"
   | "TAKEOFF"
+  | "ENVELOPE"
   | "LOAD_CALC"
   | "DUCT_DESIGN"
   | "PROPOSAL"

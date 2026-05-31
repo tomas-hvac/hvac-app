@@ -7,6 +7,19 @@ import type { ManualDProjectState } from "../../app/components/ManualDPanel";
 export type BlueprintProjectEnvelopeSettings = {
   insulationQuality: string;
   oregonRegion: string;
+  verifiedInsulation?: {
+    atticRValue?: number;
+    wallRValue?: number;
+    floorRValue?: number;
+  };
+  verifiedWindows?: {
+    uFactor?: number;
+    shgc?: number;
+  };
+  verifiedInfiltration?: {
+    ach50?: number;
+  };
+  isVerified: boolean;
 };
 
 export type BlueprintProject = {
@@ -53,6 +66,7 @@ export function createBlueprintProject(name: string): BlueprintProject {
     envelopeSettings: {
       insulationQuality: "Average",
       oregonRegion: "Portland / Beaverton / West Oregon",
+      isVerified: false,
     },
     manualDProjectState: null,
     version: "3.0",
