@@ -1489,6 +1489,45 @@ export default function LoadCalculator() {
     setDetectedRoomActionMessage(`Added ${tracedRoom.name} to Manual D`);
   };
 
+  const sendAllVerifiedRoomsToManualJ = () => {
+    if (blueprintCalibration.status !== "calibrated") {
+      setDetectedRoomActionMessage("Please confirm calibration before sending to Manual J.");
+      return;
+    }
+
+    if (tracedRoomsWithSqft.length === 0) {
+      setDetectedRoomActionMessage("No verified rooms to send. Please trace rooms first.");
+      return;
+    }
+
+    setBlueprintRoomsForManualD((currentRooms) => {
+      const existingSourceIds = new Set(
+        currentRooms
+          .map((r) => r.sourceBlueprintRoomId)
+          .filter((id): id is string => !!id)
+      );
+
+      const newRooms = tracedRoomsWithSqft
+        .filter((room) => !existingSourceIds.has(room.id))
+        .map((room) =>
+          adaptTracedRoomToManualDBlueprintRoom({
+            tracedRoom: room,
+            outputId: `traced-${room.id}-${Date.now()}`,
+          })
+        );
+
+      if (newRooms.length === 0) {
+        setDetectedRoomActionMessage("All verified rooms are already in Manual J.");
+      } else {
+        setDetectedRoomActionMessage(`Sent ${newRooms.length} new verified room(s) to Manual J.`);
+      }
+
+      return [...currentRooms, ...newRooms];
+    });
+
+    setActiveTechnicianSection("room-airflow");
+  };
+
   const updateBlueprintCalibrationKnownLengthInput = (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -3188,9 +3227,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                   )}
 
                   {tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === 'calibrated' && (
-                    <button type="button" style={blueprintActionButtonStyle} onClick={() => {
-                      setActiveTechnicianSection("room-airflow");
-                    }}>
+                    <button type="button" style={blueprintActionButtonStyle} onClick={sendAllVerifiedRoomsToManualJ}>
                       <Wind size={18} /> Send Verified Takeoff to Manual J
                     </button>
                   )}
