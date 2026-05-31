@@ -97,6 +97,8 @@ const ProjectEngineSync = ({
     const stage = engineState.workflowStage;
     if (stage === "CALIBRATION" || stage === "TAKEOFF" || stage === "SETUP") {
       if (activeTechnicianSection !== "manual-room-takeoff") setActiveTechnicianSection("manual-room-takeoff");
+    } else if (stage === "ENVELOPE") {
+      if (activeTechnicianSection !== "envelope-verification") setActiveTechnicianSection("envelope-verification");
     } else if (stage === "LOAD_CALC") {
       if (activeTechnicianSection !== "room-airflow") setActiveTechnicianSection("room-airflow");
     } else if (stage === "DUCT_DESIGN") {
@@ -178,7 +180,7 @@ const CalculationLifecycleSync = ({ isCalculating }: { isCalculating: boolean })
 };
 
 type LoadCalculatorView = "customer" | "technician";
-type TechnicianSection = ManualDPanelSection | "manual-room-takeoff";
+type TechnicianSection = ManualDPanelSection | "manual-room-takeoff" | "envelope-verification";
 type BlueprintWorkspaceMode = "review-detected" | "manual-trace";
 type DetectedRoomEditableField =
   | "name"
@@ -513,6 +515,12 @@ export default function LoadCalculator() {
   const [ceilingHeight, setCeilingHeight] = useState("9");
   const [insulationQuality, setInsulationQuality] = useState("Average");
   const [isEnvelopeVerified, setIsEnvelopeVerified] = useState(false);
+  const [atticRValue, setAtticRValue] = useState("38");
+  const [wallRValue, setWallRValue] = useState("13");
+  const [floorRValue, setFloorRValue] = useState("19");
+  const [windowUFactor, setWindowUFactor] = useState("0.30");
+  const [windowSHGC, setWindowSHGC] = useState("0.30");
+  const [infiltrationACH50, setInfiltrationACH50] = useState("5.0");
   const [windowCount, setWindowCount] = useState("0");
   const [windowArea, setWindowArea] = useState("");
   const [windowEfficiency, setWindowEfficiency] = useState("Standard");
@@ -617,6 +625,18 @@ export default function LoadCalculator() {
         insulationQuality,
         oregonRegion,
         isVerified: isEnvelopeVerified,
+        verifiedInsulation: {
+          atticRValue: parseFloat(atticRValue),
+          wallRValue: parseFloat(wallRValue),
+          floorRValue: parseFloat(floorRValue),
+        },
+        verifiedWindows: {
+          uFactor: parseFloat(windowUFactor),
+          shgc: parseFloat(windowSHGC),
+        },
+        verifiedInfiltration: {
+          ach50: parseFloat(infiltrationACH50),
+        },
       },
       manualDProjectState,
     });
@@ -845,6 +865,18 @@ export default function LoadCalculator() {
           insulationQuality,
           oregonRegion,
           isVerified: isEnvelopeVerified,
+          verifiedInsulation: {
+            atticRValue: parseFloat(atticRValue),
+            wallRValue: parseFloat(wallRValue),
+            floorRValue: parseFloat(floorRValue),
+          },
+          verifiedWindows: {
+            uFactor: parseFloat(windowUFactor),
+            shgc: parseFloat(windowSHGC),
+          },
+          verifiedInfiltration: {
+            ach50: parseFloat(infiltrationACH50),
+          },
         },
         manualDProjectState,
         engineMetadata: preparedEngineSave.metadata,
@@ -942,6 +974,18 @@ export default function LoadCalculator() {
             insulationQuality,
             oregonRegion,
             isVerified: isEnvelopeVerified,
+            verifiedInsulation: {
+              atticRValue: parseFloat(atticRValue),
+              wallRValue: parseFloat(wallRValue),
+              floorRValue: parseFloat(floorRValue),
+            },
+            verifiedWindows: {
+              uFactor: parseFloat(windowUFactor),
+              shgc: parseFloat(windowSHGC),
+            },
+            verifiedInfiltration: {
+              ach50: parseFloat(infiltrationACH50),
+            },
           },
           manualDProjectState,
           engineMetadata: preparedEngineSave.metadata,
@@ -1838,9 +1882,14 @@ const averageTonnage = (minTon + maxTon) / 2;
     description: string;
   }> = [
     {
-      id: "manual-d",
-      title: "Manual D",
-      description: "System airflow, trunk sizing, and fitting equivalent length.",
+      id: "manual-room-takeoff",
+      title: "Manual Room Takeoff",
+      description: "Measure length and width, then add rooms into Manual D.",
+    },
+    {
+      id: "envelope-verification",
+      title: "Envelope Verification",
+      description: "Verify insulation R-values, window factors, and infiltration.",
     },
     {
       id: "room-airflow",
@@ -1848,14 +1897,14 @@ const averageTonnage = (minTon + maxTon) / 2;
       description: "Room loads, branch ducts, register airflow, and status messages.",
     },
     {
+      id: "manual-d",
+      title: "Manual D",
+      description: "System airflow, trunk sizing, and fitting equivalent length.",
+    },
+    {
       id: "return-air",
       title: "Return Air Design",
       description: "Return paths, grille guidance, and quiet airflow checks.",
-    },
-    {
-      id: "manual-room-takeoff",
-      title: "Manual Room Takeoff",
-      description: "Measure length and width, then add rooms into Manual D.",
     },
     {
       id: "reports",
@@ -1866,19 +1915,21 @@ const averageTonnage = (minTon + maxTon) / 2;
   const activeWorkflowStep =
     activeTechnicianSection === "manual-room-takeoff"
       ? 1
-      : activeTechnicianSection === "room-airflow"
+      : activeTechnicianSection === "envelope-verification"
       ? 2
+      : activeTechnicianSection === "room-airflow"
+      ? 3
       : activeTechnicianSection === "manual-d" || activeTechnicianSection === "return-air"
       ? 4
       : activeTechnicianSection === "reports"
       ? 5
       : 3;
   const technicianWorkflowSteps = [
-    "1. Upload Blueprint",
-    "2. Review Rooms",
-    "3. Run Manual J Estimate",
-    "4. Review Manual D Airflow",
-    "5. Generate Proposal / Reports",
+    "1. Takeoff",
+    "2. Verify Envelope",
+    "3. Manual J",
+    "4. Manual D",
+    "5. Reports",
   ];
 
   const projectSnapshot = useMemo(() => {
@@ -1896,6 +1947,18 @@ const averageTonnage = (minTon + maxTon) / 2;
         insulationQuality,
         oregonRegion,
         isVerified: isEnvelopeVerified,
+        verifiedInsulation: {
+          atticRValue: parseFloat(atticRValue),
+          wallRValue: parseFloat(wallRValue),
+          floorRValue: parseFloat(floorRValue),
+        },
+        verifiedWindows: {
+          uFactor: parseFloat(windowUFactor),
+          shgc: parseFloat(windowSHGC),
+        },
+        verifiedInfiltration: {
+          ach50: parseFloat(infiltrationACH50),
+        },
       },
       manualDProjectState,
       engineMetadata: loadedEngineMetadata,
@@ -2332,6 +2395,16 @@ const averageTonnage = (minTon + maxTon) / 2;
               <p style={persistentSummaryValueStyle}>
                 <Layers size={14} color="#d4af37" />
                 {tracedRoomsWithSqft.length} Rooms · {Math.round(tracedRoomsWithSqft.reduce((sum, r) => sum + (r.squareFeet || 0), 0)).toLocaleString()} Sqft
+              </p>
+            </div>
+            <div style={persistentSummaryItemStyle}>
+              <p style={persistentSummaryLabelStyle}>Envelope</p>
+              <p style={persistentSummaryValueStyle}>
+                {isEnvelopeVerified ? (
+                  <><CheckCircle2 size={14} color="#22c55e" /> Verified</>
+                ) : (
+                  <><Circle size={14} color="#fbbf24" /> Review Required</>
+                )}
               </p>
             </div>
             <div style={persistentSummaryItemStyle}>
@@ -2788,6 +2861,138 @@ const averageTonnage = (minTon + maxTon) / 2;
                   ))}
                 </select>
               </InputField>
+            </div>
+          </div>
+
+          <div
+            className="load-section-panel"
+            style={{
+              ...sectionPanelStyle,
+              display: activeTechnicianSection === "envelope-verification" ? "grid" : "none",
+            }}
+          >
+            <div style={sectionPanelHeaderStyle}>
+              <div style={sectionPanelIconStyle}>
+                <ShieldCheck size={18} strokeWidth={1.8} />
+              </div>
+              <div>
+                <p style={sectionPanelTitleStyle}>Envelope Verification</p>
+                <p style={sectionPanelDescriptionStyle}>Professional verification of building thermal properties.</p>
+              </div>
+            </div>
+
+            <div style={inputGridStyle}>
+              <InputField
+                icon={<Home size={18} strokeWidth={1.8} />}
+                title="Attic R-value"
+                description="Ceiling insulation level"
+              >
+                <input
+                  className="load-input"
+                  type="number"
+                  value={atticRValue}
+                  onChange={(e) => setAtticRValue(e.target.value)}
+                  style={inputControlStyle}
+                />
+              </InputField>
+
+              <InputField
+                icon={<Home size={18} strokeWidth={1.8} />}
+                title="Wall R-value"
+                description="Exterior wall insulation"
+              >
+                <input
+                  className="load-input"
+                  type="number"
+                  value={wallRValue}
+                  onChange={(e) => setWallRValue(e.target.value)}
+                  style={inputControlStyle}
+                />
+              </InputField>
+
+              <InputField
+                icon={<Home size={18} strokeWidth={1.8} />}
+                title="Floor R-value"
+                description="Foundation/floor insulation"
+              >
+                <input
+                  className="load-input"
+                  type="number"
+                  value={floorRValue}
+                  onChange={(e) => setFloorRValue(e.target.value)}
+                  style={inputControlStyle}
+                />
+              </InputField>
+
+              <InputField
+                icon={<Sparkles size={18} strokeWidth={1.8} />}
+                title="Window U-factor"
+                description="Thermal transmittance"
+              >
+                <input
+                  className="load-input"
+                  type="number"
+                  step="0.01"
+                  value={windowUFactor}
+                  onChange={(e) => setWindowUFactor(e.target.value)}
+                  style={inputControlStyle}
+                />
+              </InputField>
+
+              <InputField
+                icon={<SunMedium size={18} strokeWidth={1.8} />}
+                title="Window SHGC"
+                description="Solar Heat Gain Coefficient"
+              >
+                <input
+                  className="load-input"
+                  type="number"
+                  step="0.01"
+                  value={windowSHGC}
+                  onChange={(e) => setWindowSHGC(e.target.value)}
+                  style={inputControlStyle}
+                />
+              </InputField>
+
+              <InputField
+                icon={<Wind size={18} strokeWidth={1.8} />}
+                title="Infiltration ACH50"
+                description="Blower door test result"
+              >
+                <input
+                  className="load-input"
+                  type="number"
+                  step="0.1"
+                  value={infiltrationACH50}
+                  onChange={(e) => setInfiltrationACH50(e.target.value)}
+                  style={inputControlStyle}
+                />
+              </InputField>
+            </div>
+
+            <div style={{ marginTop: "24px", padding: "16px", borderRadius: "16px", background: isEnvelopeVerified ? "rgba(34,197,94,0.08)" : "rgba(212,175,55,0.08)", border: `1px solid ${isEnvelopeVerified ? "rgba(34,197,94,0.2)" : "rgba(212,175,55,0.2)"}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ ...sectionPanelTitleStyle, fontSize: "14px", margin: 0 }}>
+                  Status: {isEnvelopeVerified ? "Verified Envelope" : (tracedRoomsWithSqft.length > 0 ? "Needs Review" : "Not Verified")}
+                </p>
+                <p style={{ ...sectionPanelDescriptionStyle, margin: 0 }}>
+                  {isEnvelopeVerified ? "Verified data will be used for Manual J." : "Confirm material properties to proceed."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="calc-action-button"
+                style={{ 
+                  marginTop: 0, 
+                  width: "auto", 
+                  background: isEnvelopeVerified ? "rgba(34,197,94,0.2)" : "rgba(212,175,55,0.2)",
+                  color: isEnvelopeVerified ? "#4ade80" : "#fde68a",
+                  border: `1px solid ${isEnvelopeVerified ? "rgba(34,197,94,0.4)" : "rgba(212,175,55,0.4)"}`
+                }}
+                onClick={() => setIsEnvelopeVerified(!isEnvelopeVerified)}
+              >
+                {isEnvelopeVerified ? "Reset Verification" : "Mark Envelope Verified"}
+              </button>
             </div>
           </div>
 
@@ -3893,7 +4098,7 @@ const averageTonnage = (minTon + maxTon) / 2;
             savedProjectState={loadedManualDProjectState}
             onProjectStateChange={setManualDProjectState}
             activeSection={
-              activeTechnicianSection === "manual-room-takeoff"
+              activeTechnicianSection === "manual-room-takeoff" || activeTechnicianSection === "envelope-verification"
                 ? "hidden"
                 : activeTechnicianSection
             }
