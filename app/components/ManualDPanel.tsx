@@ -298,11 +298,7 @@ export default function ManualDPanel({
   const [manualDFloorCount, setManualDFloorCount] = useState("2");
   const [manualDSupplyBranches, setManualDSupplyBranches] = useState("8");
   const [manualDReturnBranches, setManualDReturnBranches] = useState("2");
-  const [rooms, setRooms] = useState<ManualDRoom[]>([
-    createDefaultRoom("manual-d-room-1", "Living Room", 420),
-    createDefaultRoom("manual-d-room-2", "Kitchen", 220),
-    createDefaultRoom("manual-d-room-3", "Primary Bedroom", 180),
-  ]);
+  const [rooms, setRooms] = useState<ManualDRoom[]>([]);
 
   const systemTonsValue = Math.max(0, parseFloat(manualDSystemTons) || 0);
   const totalSystemCfm = systemTonsValue * 400;
