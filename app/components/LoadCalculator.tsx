@@ -2259,6 +2259,44 @@ const averageTonnage = (minTon + maxTon) / 2;
           ) : (
             <>
           <ProjectNextStepBanner />
+
+          <div style={persistentSummaryCardStyle}>
+            <div style={persistentSummaryItemStyle}>
+              <p style={persistentSummaryLabelStyle}>Calibration</p>
+              <p style={persistentSummaryValueStyle}>
+                {blueprintCalibration.status === 'calibrated' ? (
+                  <><CheckCircle2 size={14} color="#22c55e" /> Confirmed</>
+                ) : (
+                  <><Circle size={14} color="#f87171" /> Required</>
+                )}
+              </p>
+            </div>
+            <div style={persistentSummaryItemStyle}>
+              <p style={persistentSummaryLabelStyle}>Verified Takeoff</p>
+              <p style={persistentSummaryValueStyle}>
+                <Layers size={14} color="#d4af37" />
+                {tracedRoomsWithSqft.length} Rooms · {Math.round(tracedRoomsWithSqft.reduce((sum, r) => sum + (r.squareFeet || 0), 0)).toLocaleString()} Sqft
+              </p>
+            </div>
+            <div style={persistentSummaryItemStyle}>
+              <p style={persistentSummaryLabelStyle}>Data Source</p>
+              <p style={persistentSummaryValueStyle}>
+                <FileText size={14} color="#94a3b8" />
+                {blueprintFile ? 'Blueprint' : 'Manual Entry'}
+              </p>
+            </div>
+            <div style={persistentSummaryItemStyle}>
+              <p style={persistentSummaryLabelStyle}>Manual J Ready</p>
+              <p style={{ ...persistentSummaryValueStyle, color: (blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? '#22c55e' : (blueprintFile ? '#64748b' : '#fde68a') }}>
+                {(blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? (
+                  <><ShieldCheck size={14} color="#22c55e" /> Ready</>
+                ) : (
+                  blueprintFile ? 'Pending Verification' : 'Manual Mode'
+                )}
+              </p>
+            </div>
+          </div>
+
           <div style={technicianWorkflowStyle}>
             {technicianWorkflowSteps.map((step, index) => {
               const stepNumber = index + 1;
@@ -4843,6 +4881,42 @@ const blueprintPrimaryActionButtonStyle: React.CSSProperties = {
   boxShadow: "0 8px 20px rgba(212,175,55,0.25)",
   marginTop: "16px",
   transition: "all 0.2s ease",
+};
+
+const persistentSummaryCardStyle: React.CSSProperties = {
+  padding: "20px",
+  borderRadius: "24px",
+  background: "rgba(15, 23, 42, 0.4)",
+  border: "1px solid rgba(255, 255, 255, 0.08)",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: "16px",
+  marginBottom: "20px",
+  backdropFilter: "blur(12px)",
+};
+
+const persistentSummaryItemStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+};
+
+const persistentSummaryLabelStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  color: "#64748b",
+  margin: 0,
+};
+
+const persistentSummaryValueStyle: React.CSSProperties = {
+  fontSize: "14px",
+  fontWeight: 800,
+  color: "#f8fafc",
+  margin: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
 };
 
 const blueprintWorkflowStepStyle: React.CSSProperties = {
