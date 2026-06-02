@@ -523,7 +523,7 @@ export default function LoadCalculator() {
   const suppressNextBlueprintOverlayClickRef = useRef(false);
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
   const [activeTechnicianSection, setActiveTechnicianSection] = useState<TechnicianSection>("manual-d");
-  const [squareFeet, setSquareFeet] = useState("2200");
+  const [squareFeet, setSquareFeet] = useState("0");
   const [ceilingHeight, setCeilingHeight] = useState("9");
   const [insulationQuality, setInsulationQuality] = useState("Average");
   const [isEnvelopeVerified, setIsEnvelopeVerified] = useState(false);

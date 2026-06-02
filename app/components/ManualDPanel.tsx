@@ -286,8 +286,8 @@ export default function ManualDPanel({
   const roomIdCounter = useRef(4);
   const processedBlueprintRoomIds = useRef<Set<string>>(new Set());
   const blueprintRoomsRef = useRef(blueprintRooms);
-  const [manualDSystemTons, setManualDSystemTons] = useState("3");
-  const [manualDTotalCfm, setManualDTotalCfm] = useState("1200");
+  const [manualDSystemTons, setManualDSystemTons] = useState("0");
+  const [manualDTotalCfm, setManualDTotalCfm] = useState("0");
   const [manualDAvailableStatic, setManualDAvailableStatic] = useState("0.50");
   const [manualDLongestRun, setManualDLongestRun] = useState("100");
   const [manualDRadiusElbows, setManualDRadiusElbows] = useState("4");
