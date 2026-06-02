@@ -3954,18 +3954,6 @@ const averageTonnage = (minTon + maxTon) / 2;
                         </button>
                         <button
                           type="button"
-                          style={detectedRoomButtonStyle}
-                          onClick={() => sendDetectedRoomToManualD(room)}
-                          onPointerUp={(event) => {
-                            if (event.pointerType === "mouse") return;
-                            event.preventDefault();
-                            sendDetectedRoomToManualD(room);
-                          }}
-                        >
-                          Send to Manual D
-                        </button>
-                        <button
-                          type="button"
                           style={detectedRoomRemoveButtonStyle}
                           onClick={() => removeDetectedRoom(room.id)}
                           onPointerUp={(event) => {
