@@ -522,6 +522,10 @@ export default function ManualDPanel({
   };
 
   const removeRoom = (roomId: string) => {
+    const roomToRemove = rooms.find((r) => r.id === roomId);
+    if (roomToRemove && !window.confirm(`Are you sure you want to remove "${roomToRemove.name || "this room"}" from Manual J?`)) {
+      return;
+    }
     setRooms((currentRooms) => currentRooms.filter((room) => room.id !== roomId));
   };
 
