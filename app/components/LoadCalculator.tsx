@@ -1420,6 +1420,15 @@ export default function LoadCalculator() {
   };
 
   const recalibrateBlueprintScale = () => {
+    const roomCount = blueprintRoomTrace.roomOutlines.length;
+    const warningMessage = roomCount > 0
+      ? `Are you sure you want to reset the blueprint scale? This will clear the calculated square footage for all ${roomCount} traced rooms. The room outlines and names will be preserved, but you must complete a new calibration to restore their areas.`
+      : "Are you sure you want to reset the blueprint scale?";
+
+    if (!window.confirm(warningMessage)) {
+      return;
+    }
+
     setBlueprintCalibration(createDefaultBlueprintCalibrationState());
     setIsVerificationMode(false);
     setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
