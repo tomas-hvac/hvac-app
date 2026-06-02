@@ -1122,6 +1122,17 @@ export default function LoadCalculator() {
   };
 
   const handleBlueprintFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const hasWork = blueprintCalibration.status !== "uncalibrated" || blueprintRoomTrace.roomOutlines.length > 0;
+    if (
+      hasWork &&
+      !window.confirm(
+        "Uploading a new blueprint will clear the current calibration and all verified room traces for this project. Do you want to continue?"
+      )
+    ) {
+      event.target.value = "";
+      return;
+    }
+
     const selectedFile = event.target.files?.[0];
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
