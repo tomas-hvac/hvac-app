@@ -1086,6 +1086,17 @@ export default function LoadCalculator() {
   };
 
   const handleDeleteProject = (projectId: string) => {
+    const projectToDelete = savedProjects.find((p) => p.id === projectId);
+    const projectName = projectToDelete?.name || "this project";
+
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete project "${projectName}"? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
     setSavedProjects((currentProjects) => {
       const nextProjects = currentProjects.filter((project) => project.id !== projectId);
       window.localStorage.setItem(SAVED_PROJECTS_STORAGE_KEY, JSON.stringify(nextProjects));
