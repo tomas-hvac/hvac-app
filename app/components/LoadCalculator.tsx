@@ -1479,14 +1479,20 @@ export default function LoadCalculator() {
       return;
     }
 
-    setBlueprintRoomsForManualD((currentRooms) => [
-      ...currentRooms,
-      adaptTracedRoomToManualDBlueprintRoom({
-        tracedRoom,
-        outputId: `traced-${tracedRoom.id}-${Date.now()}`,
-      }),
-    ]);
-    setDetectedRoomActionMessage(`Added ${tracedRoom.name} to Manual D`);
+    setBlueprintRoomsForManualD((currentRooms) => {
+      if (currentRooms.some((r) => r.sourceBlueprintRoomId === outlineId)) {
+        setTimeout(() => setDetectedRoomActionMessage(`${tracedRoom.name} is already in Manual D`), 0);
+        return currentRooms;
+      }
+      setTimeout(() => setDetectedRoomActionMessage(`Added ${tracedRoom.name} to Manual D`), 0);
+      return [
+        ...currentRooms,
+        adaptTracedRoomToManualDBlueprintRoom({
+          tracedRoom,
+          outputId: `traced-${tracedRoom.id}-${Date.now()}`,
+        }),
+      ];
+    });
   };
 
   const sendAllVerifiedRoomsToManualJ = () => {
