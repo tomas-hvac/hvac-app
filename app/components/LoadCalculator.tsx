@@ -3291,10 +3291,23 @@ const averageTonnage = (minTon + maxTon) / 2;
                     <button 
                       type="button"
                       onClick={() => {
-                        setBlueprintFile(null);
-                        setBlueprintFileName("");
-                        setBlueprintPreviewUrl("");
-                        setBlueprintDetectionPipeline({ mode: "preview", status: "mock", sourceFileName: "", rooms: [] });
+                        if (
+                          window.confirm(
+                            "Removing this blueprint will clear the current calibration and traced room outlines. Rooms already sent to Manual J will remain. Continue?"
+                          )
+                        ) {
+                          setBlueprintFile(null);
+                          setBlueprintFileName("");
+                          setBlueprintPreviewUrl("");
+                          setBlueprintCalibration(createDefaultBlueprintCalibrationState());
+                          setBlueprintRoomTrace(createDefaultBlueprintRoomTraceState());
+                          setBlueprintDetectionPipeline({
+                            mode: "preview",
+                            status: "mock",
+                            sourceFileName: "",
+                            rooms: [],
+                          });
+                        }
                       }}
                       style={{ ...blueprintActionButtonStyle, border: '1px solid rgba(248,113,113,0.2)', background: 'rgba(248,113,113,0.05)', color: '#f87171' }}
                     >
