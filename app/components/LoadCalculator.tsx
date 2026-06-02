@@ -1446,6 +1446,17 @@ export default function LoadCalculator() {
   };
 
   const removeTracedRoom = (outlineId: string) => {
+    const roomToRemove = tracedRoomsWithSqft.find((r) => r.id === outlineId);
+    if (
+      roomToRemove &&
+      !window.confirm(
+        `Are you sure you want to delete the verified trace for "${
+          roomToRemove.name || "this room"
+        }"?`
+      )
+    ) {
+      return;
+    }
     setSelectedBlueprintBoundaryEdge((currentEdge) =>
       currentEdge?.outlineId === outlineId ? null : currentEdge
     );
