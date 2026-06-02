@@ -1507,28 +1507,35 @@ export default function LoadCalculator() {
     }
 
     setBlueprintRoomsForManualD((currentRooms) => {
-      const existingSourceIds = new Set(
-        currentRooms
-          .map((r) => r.sourceBlueprintRoomId)
-          .filter((id): id is string => !!id)
-      );
+      const takeoffLookup = new Map(tracedRoomsWithSqft.map(tr => [tr.id, tr]));
 
+      let updatedCount = 0;
+      const updatedExisting = currentRooms.map((manualRoom) => {
+        const latestTakeoff = manualRoom.sourceBlueprintRoomId ? takeoffLookup.get(manualRoom.sourceBlueprintRoomId) : null;
+        if (!latestTakeoff) return manualRoom;
+
+        updatedCount++;
+        return adaptTracedRoomToManualDBlueprintRoom({
+          tracedRoom: latestTakeoff,
+          outputId: manualRoom.id
+        });
+      });
+
+      const existingSourceIds = new Set(currentRooms.map(r => r.sourceBlueprintRoomId).filter(Boolean));
       const newRooms = tracedRoomsWithSqft
-        .filter((room) => !existingSourceIds.has(room.id))
-        .map((room) =>
-          adaptTracedRoomToManualDBlueprintRoom({
-            tracedRoom: room,
-            outputId: `traced-${room.id}-${Date.now()}`,
-          })
-        );
+        .filter(tr => !existingSourceIds.has(tr.id))
+        .map(tr => adaptTracedRoomToManualDBlueprintRoom({
+          tracedRoom: tr,
+          outputId: `traced-${tr.id}-${Date.now()}`
+        }));
 
-      if (newRooms.length === 0) {
-        setDetectedRoomActionMessage("All verified rooms are already in Manual J.");
+      if (newRooms.length === 0 && updatedCount === 0) {
+        setTimeout(() => setDetectedRoomActionMessage("All verified rooms are up to date in Manual J."), 0);
       } else {
-        setDetectedRoomActionMessage(`Sent ${newRooms.length} new verified room(s) to Manual J.`);
+        setTimeout(() => setDetectedRoomActionMessage(`Synced verified rooms to Manual J (${newRooms.length} new, ${updatedCount} updated).`), 0);
       }
 
-      return [...currentRooms, ...newRooms];
+      return [...updatedExisting, ...newRooms];
     });
 
     setActiveTechnicianSection("room-airflow");
