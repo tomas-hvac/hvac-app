@@ -38,6 +38,30 @@ export type BlueprintEnvelopeSuggestions = {
   constructionNotes?: string[];
 };
 
+export type BlueprintPageImage = {
+  name: string;
+  mimeType?: string;
+  dataUrl?: string;
+  thumbnailDataUrl?: string;
+};
+
+export type BlueprintPage = {
+  id: string;
+  pageNumber: number;
+  label: string;
+  sheetType?: "floor-plan" | "site-plan" | "elevation" | "roof-plan" | "schedule" | "detail" | "unknown";
+  image?: BlueprintPageImage;
+  calibration?: BlueprintCalibrationState | null;
+  tracedRooms?: BlueprintRoomOutline[];
+};
+
+export type BlueprintDocument = {
+  id: string;
+  name: string;
+  pages: BlueprintPage[];
+  activePageId?: string | null;
+};
+
 export type BlueprintProject = {
   id: string;
   name: string;
@@ -50,6 +74,7 @@ export type BlueprintProject = {
     lastModified: number;
     dataUrl?: string; // Optional, for local persistence if needed
   } | null;
+  blueprintDocument?: BlueprintDocument | null;
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
