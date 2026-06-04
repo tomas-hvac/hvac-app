@@ -171,6 +171,46 @@ export function deserializeBlueprintProject(json: string): BlueprintProject {
   return data as BlueprintProject;
 }
 
+/**
+ * Promotes existing single-page blueprint data into the BlueprintDocument shape.
+ * This is non-destructive and does not duplicate high-res image dataUrl.
+ */
+export function ensureBlueprintDocument(project: BlueprintProject): BlueprintProject {
+  // 1. If already has a document with pages, return as-is
+  if (project.blueprintDocument && project.blueprintDocument.pages.length > 0) {
+    return project;
+  }
+
+  // 2. Create a "Legacy Page" from existing root-level data
+  const legacyPage: BlueprintPage = {
+    id: `page-${project.id}-1`,
+    pageNumber: 1,
+    label: "Sheet 1",
+    sheetType: "floor-plan",
+    // Copy lightweight metadata only, NO high-res dataUrl duplication
+    image: project.blueprintImage
+      ? {
+          name: project.blueprintImage.name,
+          mimeType: project.blueprintImage.type,
+        }
+      : undefined,
+    // Copy references to existing engineering work
+    calibration: project.calibration,
+    tracedRooms: [...project.tracedRooms],
+  };
+
+  // 3. Attach the new document model
+  return {
+    ...project,
+    blueprintDocument: {
+      id: `doc-${project.id}`,
+      name: project.name,
+      pages: [legacyPage],
+      activePageId: legacyPage.id,
+    },
+  };
+}
+
 export function exportBlueprintProjectToFileData(
   project: BlueprintProject,
   engineState?: ProjectEngineState
