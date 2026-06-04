@@ -199,6 +199,7 @@ const BLUEPRINT_BOUNDARY_TYPE_OPTIONS: Array<{ label: string; value: BlueprintRo
   { label: "Unknown", value: "unknown" },
   { label: "Exterior", value: "exterior" },
   { label: "Interior", value: "interior" },
+  { label: "Adjacent / Conditioned", value: "adjacent" },
   { label: "Garage", value: "garage" },
   { label: "Attic", value: "attic" },
   { label: "Crawlspace", value: "crawlspace" },
@@ -2577,11 +2578,13 @@ const averageTonnage = (minTon + maxTon) / 2;
             })}
           </div>
 
-          <div className="load-section-panel" style={{ ...projectSavePanelStyle, background: "rgba(30, 41, 59, 0.4)" }}>
+
+
+          <div className="load-section-panel" style={projectSavePanelStyle}>
             <div style={projectSaveHeaderStyle}>
               <div style={{ flex: 1 }}>
-                <p style={sectionPanelTitleStyle}>Blueprint AI Project Persistence</p>
-                <p style={sectionPanelDescriptionStyle}>Capture full engine state including rooms and calibration.</p>
+                <p style={sectionPanelTitleStyle}>Project Management</p>
+                <p style={sectionPanelDescriptionStyle}>Save and reload local engineering designs.</p>
                 <div style={{ display: "flex", gap: "10px", marginTop: "12px", alignItems: "center" }}>
                   <input
                     type="text"
@@ -2594,112 +2597,44 @@ const averageTonnage = (minTon + maxTon) / 2;
                   <button
                     type="button"
                     className="calc-action-button"
-                    style={{ ...calcActionButtonStyle, marginTop: 0, width: "auto", minWidth: "120px" }}
+                    style={{ ...calcActionButtonStyle, marginTop: 0, width: "auto" }}
                     onClick={handleV3SaveProject}
                   >
                     Save Project
                   </button>
-                  <button
-                    type="button"
-                    className="calc-action-button"
-                    style={{ ...calcActionButtonStyle, marginTop: 0, width: "auto", minWidth: "140px", background: "rgba(212,175,55,0.15)", color: "#fde68a", border: "1px solid rgba(212,175,55,0.2)" }}
-                    onClick={handlePreviewV3Report}
-                  >
-                    <FileText size={14} style={{ marginRight: '6px' }} />
-                    Preview Report
-                  </button>
                   {v3SaveStatus ? (
                     <p style={{ ...projectActionMessageStyle, margin: 0, color: "#4ade80" }}>{v3SaveStatus}</p>
+                  ) : projectActionMessage ? (
+                    <p style={projectActionMessageStyle}>{projectActionMessage}</p>
                   ) : null}
                 </div>
-                {v3RecentProjects.length > 0 && (
-                  <div style={{ marginTop: "16px", display: "grid", gap: "8px" }}>
-                    <p style={{ ...sectionPanelDescriptionStyle, fontWeight: 800, color: "#cbd5e1" }}>Recent Blueprint Projects</p>
-                    <div style={{ display: "grid", gap: "6px" }}>
-                      {v3RecentProjects.slice(0, 5).map((project) => (
-                        <div key={project.id} style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "8px 12px",
-                          borderRadius: "12px",
-                          background: "rgba(255,255,255,0.03)",
-                          border: "1px solid rgba(255,255,255,0.06)"
-                        }}>
-                          <div>
-                            <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#f8fafc" }}>{project.name}</p>
-                            <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8" }}>Updated {new Date(project.updatedAt).toLocaleString()}</p>
-                          </div>
-                          <button
-                            type="button"
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: "8px",
-                              fontSize: "11px",
-                              fontWeight: 800,
-                              background: "rgba(212,175,55,0.15)",
-                              color: "#fde68a",
-                              border: "1px solid rgba(212,175,55,0.2)",
-                              cursor: "pointer"
-                            }}
-                            onClick={() => handleLoadV3Project(project.id)}
-                          >
-                            Load
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
 
-          <div className="load-section-panel" style={projectSavePanelStyle}>
-            <div style={projectSaveHeaderStyle}>
-              <div>
-                <p style={sectionPanelTitleStyle}>Saved Projects</p>
-                <p style={sectionPanelDescriptionStyle}>Save and reload local project snapshots.</p>
-                {projectActionMessage ? (
-                  <p style={projectActionMessageStyle}>{projectActionMessage}</p>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                className="calc-action-button"
-                style={calcActionButtonStyle}
-                onClick={handleSaveProject}
-                onPointerUp={(event) => {
-                  if (event.pointerType === "mouse") return;
-                  event.preventDefault();
-                  handleSaveProject();
-                }}
-              >
-                Save Project
-              </button>
-            </div>
-
-            {savedProjects.length > 0 ? (
+            {v3RecentProjects.length > 0 ? (
               <div style={projectListStyle}>
-                {savedProjects.map((project) => (
+                {v3RecentProjects.map((project) => (
                   <div key={project.id} style={projectListItemStyle}>
                     <div>
                       <p style={projectListTitleStyle}>{project.name}</p>
                       <p style={projectListMetaStyle}>
-                        Saved {new Date(project.savedAt).toLocaleString()}
+                        Updated {new Date(project.updatedAt).toLocaleString()}
                       </p>
                     </div>
                     <div style={projectListActionsStyle}>
                       <button
                         type="button"
                         className="calc-action-button"
-                        style={projectLoadButtonStyle}
-                        onClick={() => handleLoadProject(project)}
-                        onPointerUp={(event) => {
-                          if (event.pointerType === "mouse") return;
-                          event.preventDefault();
-                          handleLoadProject(project);
+                        style={{
+                          ...calcActionButtonStyle,
+                          marginTop: 0,
+                          width: "auto",
+                          padding: "6px 12px",
+                          background: "rgba(212,175,55,0.15)",
+                          color: "#fde68a",
+                          border: "1px solid rgba(212,175,55,0.2)",
                         }}
+                        onClick={() => handleLoadV3Project(project.id)}
                       >
                         Load Project
                       </button>
@@ -4107,25 +4042,29 @@ const averageTonnage = (minTon + maxTon) / 2;
                           </span>
                         </div>
                         {selectedCardEdge ? (
-                          <label style={detectedRoomEditFieldStyle}>
+                          <div style={{ ...detectedRoomEditFieldStyle, flexDirection: "column", alignItems: "flex-start" }}>
                             <span style={detectedRoomEditLabelStyle}>
-                              Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Boundary
+                              Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Exposure Verification
                             </span>
-                            <select
-                              className="load-input blueprint-takeoff-control"
-                              value={selectedCardEdge.boundaryType}
-                              onChange={(event) =>
-                                updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
-                              }
-                              style={detectedRoomCompactInputStyle}
-                            >
-                              {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
+                            <div style={edgeTypeSelectorStyle}>
+                              {[
+                                { label: "Exterior", value: "exterior" },
+                                { label: "Interior", value: "interior" },
+                                { label: "Adjacent", value: "adjacent" },
+                                { label: "Garage", value: "garage" },
+                                { label: "Unknown", value: "unknown" },
+                              ].map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  style={selectedCardEdge.boundaryType === option.value ? edgeTypeButtonActiveStyle : edgeTypeButtonStyle}
+                                  onClick={() => updateSelectedBoundaryType(option.value as BlueprintRoomBoundaryType)}
+                                >
                                   {option.label}
-                                </option>
+                                </button>
                               ))}
-                            </select>
-                          </label>
+                            </div>
+                          </div>
                         ) : null}
                         <div style={tracedRoomEnvelopeInsightStyle}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -4698,6 +4637,14 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <AlertTriangle size={12} color="#fde68a" />
                           Wall exposure is still based on current engine assumptions (70% perimeter).
                         </div>
+                        {tracedRoomsWithSqft.some(outline => 
+                          (outline.boundaryEdges ?? []).some(edge => edge.boundaryType === "unknown")
+                        ) && (
+                          <div style={auditAssumptionItemStyle}>
+                            <AlertTriangle size={12} color="#fde68a" />
+                            Some traced rooms have unclassified wall exposures (Unknown).
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -6376,9 +6323,38 @@ const detectedRoomCompactInputStyle: React.CSSProperties = {
   height: "32px",
   minHeight: "32px",
   maxHeight: "32px",
-  padding: "6px 8px",
-  fontSize: "12px",
+  padding: "2px 8px",
+  fontSize: "11px",
 };
+
+const edgeTypeSelectorStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(80px, 1fr))",
+  gap: "4px",
+  marginTop: "8px",
+};
+
+const edgeTypeButtonStyle: React.CSSProperties = {
+  padding: "6px 4px",
+  borderRadius: "8px",
+  fontSize: "9px",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  cursor: "pointer",
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(15,23,42,0.4)",
+  color: "#94a3b8",
+  transition: "all 0.2s ease",
+  textAlign: "center",
+};
+
+const edgeTypeButtonActiveStyle: React.CSSProperties = {
+  ...edgeTypeButtonStyle,
+  background: "rgba(212,175,55,0.15)",
+  color: "#fde68a",
+  border: "1px solid rgba(212,175,55,0.4)",
+};
+
 
 const detectedRoomActionsStyle: React.CSSProperties = {
   display: "flex",

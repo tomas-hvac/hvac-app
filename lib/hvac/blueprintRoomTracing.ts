@@ -4,6 +4,7 @@ export type BlueprintRoomBoundaryType =
   | "exterior"
   | "interior"
   | "garage"
+  | "adjacent"
   | "attic"
   | "crawlspace"
   | "unknown";
