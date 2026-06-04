@@ -4790,6 +4790,44 @@ const averageTonnage = (minTon + maxTon) / 2;
                   </div>
 
                   <div style={auditGridStyle}>
+                    <p style={auditSectionTitleStyle}>Takeoff Verification Audit</p>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Wall Exposure Verification</p>
+                      <p style={auditValueStyle}>{verifiedOpeningsMetrics.allEdgesClassified ? "Complete" : "Incomplete"}</p>
+                      <p style={auditSourceStyle}>Verified Takeoff</p>
+                      <div style={verifiedOpeningsMetrics.allEdgesClassified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {verifiedOpeningsMetrics.allEdgesClassified ? "Verified" : "Pending"}
+                      </div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Opening Verification</p>
+                      <p style={auditValueStyle}>
+                        {!hasVerifiedOpenings && !hasUnverifiedOpenings ? "Not Documented" : (hasUnverifiedOpenings ? "Incomplete" : "Complete")}
+                      </p>
+                      <p style={auditSourceStyle}>Verified Takeoff</p>
+                      <div style={hasVerifiedOpenings && !hasUnverifiedOpenings ? auditBadgeVerifiedStyle : (hasUnverifiedOpenings ? auditBadgeAssumedStyle : auditBadgeMissingStyle)}>
+                        {hasVerifiedOpenings && !hasUnverifiedOpenings ? "Verified" : (hasUnverifiedOpenings ? "Partial" : "Missing")}
+                      </div>
+                    </div>
+                    {verifiedOpeningsMetrics.windowCount > 0 && (
+                      <div style={auditRowStyle}>
+                        <p style={auditLabelStyle}>Verified Window Data</p>
+                        <p style={auditValueStyle}>{verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)</p>
+                        <p style={auditSourceStyle}>Takeoff Openings</p>
+                        <div style={auditBadgeVerifiedStyle}>Verified</div>
+                      </div>
+                    )}
+                    {verifiedOpeningsMetrics.doorCount > 0 && (
+                      <div style={auditRowStyle}>
+                        <p style={auditLabelStyle}>Verified Door Data</p>
+                        <p style={auditValueStyle}>{verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)</p>
+                        <p style={auditSourceStyle}>Takeoff Openings</p>
+                        <div style={auditBadgeVerifiedStyle}>Verified</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={auditGridStyle}>
                     <p style={auditSectionTitleStyle}>Air Leakage / Environment Audit</p>
                     <div style={auditRowStyle}>
                       <p style={auditLabelStyle}>Infiltration</p>

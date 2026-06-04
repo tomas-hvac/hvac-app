@@ -867,11 +867,21 @@ export function calculateBlueprintRoomEnvelopeConfidence(
 
   // 4. Window Data Check
   const windows = input.windows ?? [];
+  const exteriorEdgesWithOpenings = (input.room.boundaryEdges ?? []).filter(
+    (e) => e.boundaryType === "exterior" && e.openings && e.openings.length > 0
+  );
+  const hasUnverifiedOpenings = exteriorEdgesWithOpenings.some((e) =>
+    (e.openings ?? []).some((op) => !op.isVerified)
+  );
 
-  if (completeness.exteriorEdges > 0 && windows.length === 0) {
+  if (completeness.exteriorEdges > 0 && windows.length === 0 && exteriorEdgesWithOpenings.length === 0) {
     if (score === "high") score = "medium";
     assumptionsUsed.push("No windows model; assuming 0% window-to-wall ratio");
     warnings.push("No windows have been placed on exterior walls.");
+  } else if (hasUnverifiedOpenings) {
+    if (score === "high") score = "medium";
+    assumptionsUsed.push("Unverified opening dimensions / types");
+    warnings.push("Some window or door openings are unverified.");
   }
 
   // 5. Insulation Check
