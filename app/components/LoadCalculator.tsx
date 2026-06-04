@@ -1718,13 +1718,76 @@ export default function LoadCalculator() {
     setBlueprintZoom((currentZoom) => Math.max(0.5, Number((currentZoom - 0.25).toFixed(2))));
   };
 
+  const confirmedBlueprintPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
+
+  const tracedRoomsWithSqft = useMemo(() => {
+    return blueprintRoomTrace.roomOutlines.map((outline) => ({
+      ...outline,
+      squareFeet: calculateBlueprintPolygonSquareFeet(
+        outline.points,
+        confirmedBlueprintPixelsPerFoot,
+        blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
+      ),
+    }));
+  }, [blueprintRoomTrace.roomOutlines, confirmedBlueprintPixelsPerFoot, blueprintOverlaySize]);
+
+  const verifiedOpeningsMetrics = useMemo(() => {
+    let windowCount = 0;
+    let windowArea = 0;
+    let doorCount = 0;
+    let doorArea = 0;
+    let allEdgesClassified = tracedRoomsWithSqft.length > 0;
+
+    tracedRoomsWithSqft.forEach((room) => {
+      const edges =
+        room.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(room.points);
+      if (edges.length === 0) allEdgesClassified = false;
+
+      edges.forEach((edge) => {
+        if (edge.boundaryType === "unknown") {
+          allEdgesClassified = false;
+        }
+
+        if (edge.boundaryType === "exterior") {
+          (edge.openings ?? []).forEach((opening) => {
+            if (opening.isVerified) {
+              const area = opening.widthFeet * opening.heightFeet;
+              if (opening.type === "window") {
+                windowCount++;
+                windowArea += area;
+              } else if (opening.type === "door") {
+                doorCount++;
+                doorArea += area;
+              }
+            }
+          });
+        }
+      });
+    });
+
+    return {
+      windowCount,
+      windowArea,
+      doorCount,
+      doorArea,
+      allEdgesClassified,
+    };
+  }, [tracedRoomsWithSqft]);
+
   const result = useMemo(() => {
+    // Use verified window data if takeoff is complete (all edges classified)
+    const useVerifiedWindows = verifiedOpeningsMetrics.allEdgesClassified;
+
     const inputs: ManualJInputs = {
       squareFeet: Math.max(0, parseInt(squareFeet, 10) || 0),
       ceilingHeight: Math.max(6, parseInt(ceilingHeight, 10) || 6),
       insulationQuality,
-      windowCount: Math.max(0, parseInt(windowCount, 10) || 0),
-      windowArea: Math.max(0, parseFloat(windowArea) || 0),
+      windowCount: useVerifiedWindows
+        ? verifiedOpeningsMetrics.windowCount
+        : Math.max(0, parseInt(windowCount, 10) || 0),
+      windowArea: useVerifiedWindows
+        ? verifiedOpeningsMetrics.windowArea
+        : Math.max(0, parseFloat(windowArea) || 0),
       windowEfficiency,
       windowOrientation,
       climateZone,
@@ -1745,7 +1808,30 @@ export default function LoadCalculator() {
     };
 
     return calculateManualJLoad(inputs);
-  }, [squareFeet, ceilingHeight, insulationQuality, windowCount, windowArea, windowEfficiency, windowOrientation, climateZone, oregonRegion, numberOfRooms, homeAge, ductLocation, ductCondition, infiltrationTightness, existingSystemSize, comfortPriority, occupancy, isEnvelopeVerified, windowUFactor, windowSHGC]);
+  }, [
+    squareFeet, 
+    ceilingHeight, 
+    insulationQuality, 
+    windowCount, 
+    windowArea, 
+    windowEfficiency, 
+    windowOrientation, 
+    climateZone, 
+    oregonRegion, 
+    numberOfRooms, 
+    homeAge, 
+    ductLocation, 
+    ductCondition, 
+    infiltrationTightness, 
+    existingSystemSize, 
+    comfortPriority, 
+    occupancy, 
+    isEnvelopeVerified, 
+    windowUFactor, 
+    windowSHGC,
+    verifiedOpeningsMetrics
+  ]);
+
 
   const [displayedResult, setDisplayedResult] = useState(result);
 
@@ -1860,8 +1946,6 @@ export default function LoadCalculator() {
     activePixelsDistance,
     activePixelsPerFoot
   );
-  const confirmedBlueprintPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
-
   const blueprintCalibrationUI = useMemo(() => {
     if (!blueprintFile) {
       return {
@@ -1912,17 +1996,6 @@ export default function LoadCalculator() {
       isDisabled: false
     };
   }, [blueprintFile, blueprintCalibration.status, blueprintCalibration.startPoint, blueprintCalibration.endPoint]);
-
-  const tracedRoomsWithSqft = useMemo(() => {
-    return blueprintRoomTrace.roomOutlines.map((outline) => ({
-      ...outline,
-      squareFeet: calculateBlueprintPolygonSquareFeet(
-        outline.points,
-        confirmedBlueprintPixelsPerFoot,
-        blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
-      ),
-    }));
-  }, [blueprintRoomTrace.roomOutlines, confirmedBlueprintPixelsPerFoot, blueprintOverlaySize]);
 
   const selectedTracedRoom = useMemo(
     () => tracedRoomsWithSqft.find((outline) => outline.id === selectedDetectedRoomId) ?? null,
@@ -4794,6 +4867,23 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <div style={auditAssumptionItemStyle}>
                             <AlertTriangle size={12} color="#fde68a" />
                             Some window or door openings are unverified.
+                          </div>
+                        )}
+                        {verifiedOpeningsMetrics.allEdgesClassified && (
+                          <div style={{ ...auditAssumptionItemStyle, color: "#4ade80" }}>
+                            <CheckCircle2 size={12} color="#22c55e" />
+                            Verified Window Area: {verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)
+                          </div>
+                        )}
+                        {verifiedOpeningsMetrics.allEdgesClassified && verifiedOpeningsMetrics.doorCount > 0 && (
+                          <div style={{ ...auditAssumptionItemStyle, color: "#4ade80" }}>
+                            <CheckCircle2 size={12} color="#22c55e" />
+                            Verified Door Area: {verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)
+                          </div>
+                        )}
+                        {verifiedOpeningsMetrics.allEdgesClassified && (
+                          <div style={{ ...auditAssumptionItemStyle, color: "#4ade80", fontSize: "10px", marginLeft: "20px" }}>
+                            Source: Verified Takeoff
                           </div>
                         )}
                       </div>
