@@ -4610,6 +4610,18 @@ const averageTonnage = (minTon + maxTon) / 2;
               const hasWindowData = parseInt(windowCount, 10) > 0;
               const hasEnvelopeVerification = isEnvelopeVerified;
 
+              // Opening Verification Logic for Audit
+              const hasExteriorWalls = tracedRoomsWithSqft.some(outline => 
+                (outline.boundaryEdges ?? []).some(edge => edge.boundaryType === "exterior")
+              );
+              const exteriorOpenings = tracedRoomsWithSqft.flatMap(outline => 
+                (outline.boundaryEdges ?? [])
+                  .filter(edge => edge.boundaryType === "exterior")
+                  .flatMap(edge => edge.openings ?? [])
+              );
+              const hasVerifiedOpenings = exteriorOpenings.some(op => op.isVerified);
+              const hasUnverifiedOpenings = exteriorOpenings.some(op => !op.isVerified);
+
               const assumedRows = [
                 !isAreaVerified, // Area
                 true, // Ceiling Height
@@ -4770,6 +4782,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <div style={auditAssumptionItemStyle}>
                             <AlertTriangle size={12} color="#fde68a" />
                             Some traced rooms have unclassified wall exposures (Unknown).
+                          </div>
+                        )}
+                        {hasExteriorWalls && !hasVerifiedOpenings && (
+                          <div style={auditAssumptionItemStyle}>
+                            <AlertTriangle size={12} color="#fde68a" />
+                            Exterior walls verified, but no window or door openings are documented. Calculations currently assume 0% opening area.
+                          </div>
+                        )}
+                        {hasUnverifiedOpenings && (
+                          <div style={auditAssumptionItemStyle}>
+                            <AlertTriangle size={12} color="#fde68a" />
+                            Some window or door openings are unverified.
                           </div>
                         )}
                       </div>
