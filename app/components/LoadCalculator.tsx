@@ -4666,6 +4666,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                             Conditioned area is manually entered and not verified by blueprint takeoff.
                           </div>
                         )}
+                        {!blueprintFile && blueprintRoomsForManualD.some((room) => !!room.sourceBlueprintRoomId) && (
+                          <div style={auditAssumptionItemStyle}>
+                            <AlertTriangle size={12} color="#fde68a" />
+                            Manual J contains rooms from a removed blueprint. Calculations are using legacy takeoff data.
+                          </div>
+                        )}
                         {!isCeilingVerified && (
                           <div style={auditAssumptionItemStyle}>
                             <AlertTriangle size={12} color="#fde68a" />
