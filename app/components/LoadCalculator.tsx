@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2 } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2 } from "lucide-react";
 import { calculateManualJLoad } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -39,6 +39,8 @@ import {
   updateBlueprintRoomTracePoint,
   type BlueprintRoomBoundaryType,
   type BlueprintRoomOutline,
+  type BlueprintOpeningType,
+  type BlueprintWallOpening,
 } from "@/lib/hvac/blueprintRoomTracing";
 import {
   adaptDetectedRoomToManualDBlueprintRoom,
@@ -1500,6 +1502,63 @@ export default function LoadCalculator() {
         boundaryType
       )
     );
+  };
+
+  const addOpeningToSelectedEdge = (type: BlueprintOpeningType) => {
+    if (!selectedBlueprintBoundaryEdge) return;
+    const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
+
+    setBlueprintRoomTrace((currentTrace) => ({
+      ...currentTrace,
+      roomOutlines: currentTrace.roomOutlines.map((outline) => {
+        if (outline.id !== outlineId) return outline;
+        const boundaryEdges = outline.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(outline.points);
+        return {
+          ...outline,
+          boundaryEdges: boundaryEdges.map((edge, idx) => {
+            if (idx !== edgeIndex) return edge;
+            const newOpening: BlueprintWallOpening = {
+              id: `opening-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              type,
+              widthFeet: 3,
+              heightFeet: type === "window" ? 4 : 6.67,
+              isVerified: true,
+            };
+            return {
+              ...edge,
+              openings: [...(edge.openings ?? []), newOpening],
+            };
+          }),
+        };
+      }),
+    }));
+  };
+
+  const removeOpeningFromSelectedEdge = (openingId: string) => {
+    if (!selectedBlueprintBoundaryEdge) return;
+    const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
+
+    if (!window.confirm("Are you sure you want to remove this opening?")) return;
+
+    setBlueprintRoomTrace((currentTrace) => ({
+      ...currentTrace,
+      roomOutlines: currentTrace.roomOutlines.map((outline) => {
+        if (outline.id !== outlineId) return outline;
+        const boundaryEdges = outline.boundaryEdges;
+        if (!boundaryEdges) return outline;
+
+        return {
+          ...outline,
+          boundaryEdges: boundaryEdges.map((edge, idx) => {
+            if (idx !== edgeIndex) return edge;
+            return {
+              ...edge,
+              openings: edge.openings?.filter((op) => op.id !== openingId),
+            };
+          }),
+        };
+      }),
+    }));
   };
 
   const sendTracedRoomToManualD = (outlineId: string) => {
@@ -4042,28 +4101,96 @@ const averageTonnage = (minTon + maxTon) / 2;
                           </span>
                         </div>
                         {selectedCardEdge ? (
-                          <div style={{ ...detectedRoomEditFieldStyle, flexDirection: "column", alignItems: "flex-start" }}>
-                            <span style={detectedRoomEditLabelStyle}>
-                              Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Exposure Verification
-                            </span>
-                            <div style={edgeTypeSelectorStyle}>
-                              {[
-                                { label: "Exterior", value: "exterior" },
-                                { label: "Interior", value: "interior" },
-                                { label: "Adjacent", value: "adjacent" },
-                                { label: "Garage", value: "garage" },
-                                { label: "Unknown", value: "unknown" },
-                              ].map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  style={selectedCardEdge.boundaryType === option.value ? edgeTypeButtonActiveStyle : edgeTypeButtonStyle}
-                                  onClick={() => updateSelectedBoundaryType(option.value as BlueprintRoomBoundaryType)}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
+                          <div style={{ ...detectedRoomEditFieldStyle, flexDirection: "column", alignItems: "flex-start", gap: "12px" }}>
+                            <div>
+                              <span style={{ ...detectedRoomEditLabelStyle, marginBottom: "8px", display: "block" }}>
+                                Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Exposure Verification
+                              </span>
+                              <div style={edgeTypeSelectorStyle}>
+                                {[
+                                  { label: "Exterior", value: "exterior" },
+                                  { label: "Interior", value: "interior" },
+                                  { label: "Adjacent", value: "adjacent" },
+                                  { label: "Garage", value: "garage" },
+                                  { label: "Unknown", value: "unknown" },
+                                ].map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    style={selectedCardEdge.boundaryType === option.value ? edgeTypeButtonActiveStyle : edgeTypeButtonStyle}
+                                    onClick={() => updateSelectedBoundaryType(option.value as BlueprintRoomBoundaryType)}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
+
+                            {selectedCardEdge.boundaryType === "exterior" ? (
+                              <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                  <span style={detectedRoomEditLabelStyle}>Opening Verification</span>
+                                  <div style={{ display: "flex", gap: "6px" }}>
+                                    <button 
+                                      type="button" 
+                                      style={openingAddButtonStyle}
+                                      onClick={() => addOpeningToSelectedEdge("window")}
+                                    >
+                                      <Plus size={12} /> Window
+                                    </button>
+                                    <button 
+                                      type="button" 
+                                      style={openingAddButtonStyle}
+                                      onClick={() => addOpeningToSelectedEdge("door")}
+                                    >
+                                      <Plus size={12} /> Door
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {selectedCardEdge.openings && selectedCardEdge.openings.length > 0 ? (
+                                  <div style={openingListStyle}>
+                                    {selectedCardEdge.openings.map((opening) => (
+                                      <div key={opening.id} style={openingItemStyle}>
+                                        <div style={openingInfoStyle}>
+                                          <p style={openingTitleStyle}>
+                                            {opening.isVerified ? <CheckCircle2 size={10} color="#22c55e" style={{ marginRight: '4px', display: 'inline' }} /> : null}
+                                            {opening.type}
+                                          </p>
+                                          <p style={openingMetaStyle}>{opening.widthFeet}&apos; x {opening.heightFeet}&apos;</p>
+                                        </div>
+                                        <button 
+                                          type="button" 
+                                          style={openingDeleteButtonStyle}
+                                          onClick={() => removeOpeningFromSelectedEdge(opening.id)}
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p style={{ ...openingMetaStyle, fontStyle: "italic", opacity: 0.6 }}>No verified openings on this wall.</p>
+                                )}
+                              </div>
+                            ) : (selectedCardEdge.openings && selectedCardEdge.openings.length > 0) ? (
+                              <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                                <div style={{ 
+                                  padding: "8px 12px", 
+                                  borderRadius: "10px", 
+                                  background: "rgba(248,113,113,0.05)", 
+                                  border: "1px solid rgba(248,113,113,0.15)",
+                                  display: "flex",
+                                  gap: "8px",
+                                  alignItems: "center"
+                                }}>
+                                  <AlertTriangle size={14} color="#f87171" />
+                                  <p style={{ ...openingMetaStyle, color: "#fca5a5", fontSize: "9px" }}>
+                                    Openings only affect calculations when wall is Exterior.
+                                  </p>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         <div style={tracedRoomEnvelopeInsightStyle}>
@@ -6353,6 +6480,68 @@ const edgeTypeButtonActiveStyle: React.CSSProperties = {
   background: "rgba(212,175,55,0.15)",
   color: "#fde68a",
   border: "1px solid rgba(212,175,55,0.4)",
+};
+
+const openingListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "6px",
+  marginTop: "12px",
+  width: "100%",
+};
+
+const openingItemStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "8px 12px",
+  borderRadius: "10px",
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.06)",
+};
+
+const openingInfoStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "2px",
+};
+
+const openingTitleStyle: React.CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 800,
+  color: "#f1f5f9",
+  margin: 0,
+  textTransform: "uppercase",
+};
+
+const openingMetaStyle: React.CSSProperties = {
+  fontSize: "10px",
+  color: "#94a3b8",
+  margin: 0,
+};
+
+const openingDeleteButtonStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#f87171",
+  fontSize: "10px",
+  fontWeight: 800,
+  cursor: "pointer",
+  padding: "4px",
+};
+
+const openingAddButtonStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: "8px",
+  fontSize: "10px",
+  fontWeight: 900,
+  textTransform: "uppercase",
+  cursor: "pointer",
+  background: "rgba(212,175,55,0.1)",
+  color: "#fde68a",
+  border: "1px solid rgba(212,175,55,0.2)",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
 };
 
 
