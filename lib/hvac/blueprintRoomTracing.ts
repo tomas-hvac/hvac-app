@@ -9,10 +9,23 @@ export type BlueprintRoomBoundaryType =
   | "crawlspace"
   | "unknown";
 
+export type BlueprintOpeningType = "window" | "door";
+
+export type BlueprintWallOpening = {
+  id: string;
+  type: BlueprintOpeningType;
+  widthFeet: number;
+  heightFeet: number;
+  isVerified: boolean;
+  uFactor?: number;
+  shgc?: number;
+};
+
 export type BlueprintRoomBoundaryEdge = {
   startPointIndex: number;
   endPointIndex: number;
   boundaryType: BlueprintRoomBoundaryType;
+  openings?: BlueprintWallOpening[];
 };
 
 export type BlueprintRoomOutline = {
