@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ShieldCheck } from "lucide-react";
 
 type Props = {
   tons: number;
@@ -10,6 +11,7 @@ type Props = {
   premiumPrice: number;
   elitePrice: number;
   formatMoney: (value: number) => string;
+  recommendationSummary?: string[];
 };
 
 type ProposalPrintMode = "proposal" | "combined";
@@ -51,6 +53,7 @@ export default function CustomerProposal({
   premiumPrice,
   elitePrice,
   formatMoney,
+  recommendationSummary,
 }: Props) {
   const hasLoadedSavedProposal = useRef(false);
   const [selectedOption, setSelectedOption] = useState<ProposalOption | null>(null);
@@ -101,16 +104,38 @@ export default function CustomerProposal({
   );
 
   const getRecommendationReason = () => {
+    if (recommendationSummary && recommendationSummary.length > 0) {
+      return recommendationSummary;
+    }
+
     if (homeType === "new") {
-      return "Tight home + inverter system means better comfort and efficiency at lower capacity.";
+      return [
+        "Based on verified home measurements",
+        "Sized using professional load calculation results",
+        "Matched to the home construction type",
+        "Designed to improve comfort without oversizing",
+        "Supported by the project engineering audit"
+      ];
     }
 
     if (homeType === "modern") {
-      return "Balanced sizing for comfort, efficiency, and peak performance.";
+      return [
+        "Balanced sizing for comfort, efficiency, and peak performance",
+        "Designed using professional engineering standards",
+        "Properly sized to match your home's unique footprint",
+        "Improved airflow management for consistent temperatures"
+      ];
     }
 
-    return "Extra capacity helps handle heat loss and peak demand in older homes.";
+    return [
+      "Optimized for reliable heating and cooling in older construction",
+      "Sized to handle peak summer and winter demand",
+      "Calculated to overcome historical comfort gaps",
+      "Professional capacity matching for long-term reliability"
+    ];
   };
+
+  const recommendationReasons = getRecommendationReason();
 
   const handleSelect = (option: ProposalOption) => {
     setSelectedOption(option);
@@ -211,6 +236,45 @@ export default function CustomerProposal({
         <p style={subTextStyle}>
           Clear system options built around comfort, efficiency, and long-term reliability.
         </p>
+
+        <div style={{
+          marginTop: "16px",
+          padding: "20px",
+          borderRadius: "20px",
+          background: "rgba(212,175,55,0.05)",
+          border: "1px solid rgba(212,175,55,0.15)",
+          display: "grid",
+          gap: "12px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ 
+              width: "32px", 
+              height: "32px", 
+              borderRadius: "50%", 
+              background: "#d4af37", 
+              display: "grid", 
+              placeItems: "center",
+              color: "#fff"
+            }}>
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <p style={{ ...smallLabelStyle, color: "#92400e" }}>Why This System Was Recommended</p>
+              <p style={{ margin: 0, fontSize: "14px", fontWeight: 800, color: "#0f172a" }}>
+                Recommended Capacity: {tons} Tons
+              </p>
+            </div>
+          </div>
+          
+          <div style={{ display: "grid", gap: "6px", marginLeft: "42px" }}>
+            {recommendationReasons.map((reason, idx) => (
+              <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "baseline" }}>
+                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#d4af37", flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: "13px", fontWeight: 600, color: "#334155" }}>{reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <div className="customer-proposal-info-grid" style={infoGridStyle}>
           <input
@@ -592,8 +656,25 @@ export default function CustomerProposal({
         </section>
 
         <section style={printSectionStyle}>
+          <p style={printSectionTitleStyle}>Why This System Was Recommended</p>
+          <div style={{ marginBottom: "12px" }}>
+            <p style={{ ...printBodyTextStyle, fontWeight: 800, marginBottom: "8px" }}>
+              Recommended Capacity: {tons} Tons
+            </p>
+            <div style={{ display: "grid", gap: "4px" }}>
+              {recommendationReasons.map((reason, idx) => (
+                <div key={`print-reason-${idx}`} style={{ display: "flex", gap: "10px", alignItems: "baseline" }}>
+                  <span style={{ color: "#d4af37" }}>✓</span>
+                  <p style={printBodyTextStyle}>{reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section style={printSectionStyle}>
           <p style={printSectionTitleStyle}>Recommendation Notes</p>
-          <p style={printBodyTextStyle}>{getRecommendationReason()}</p>
+          <p style={printBodyTextStyle}>This system recommendation is based on professional load calculations designed to provide optimal comfort and efficiency for your home.</p>
         </section>
 
         <section style={printSignatureGridStyle}>
