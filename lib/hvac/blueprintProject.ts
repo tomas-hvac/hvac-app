@@ -172,8 +172,36 @@ export function deserializeBlueprintProject(json: string): BlueprintProject {
 }
 
 /**
- * Promotes existing single-page blueprint data into the BlueprintDocument shape.
- * This is non-destructive and does not duplicate high-res image dataUrl.
+ * ARCHITECTURE DECISION: Multi-Page PDF Workspace (Deferred Activation)
+ *
+ * Stage 1A: PDF Upload Guard - Complete
+ * Stage 1B: Multi-Page Types - Complete
+ * Stage 1C: Passive Promotion Helper - Complete
+ * Stage 1D: Activation - Deferred
+ *
+ * Current Source of Truth:
+ * - blueprintImage
+ * - calibration
+ * - tracedRooms
+ *
+ * The UI and engineering engine currently read and write
+ * root-level blueprint state directly.
+ *
+ * DO NOT invoke ensureBlueprintDocument during normal
+ * load/deserialize flows yet.
+ *
+ * Activating promotion now will create a blueprintDocument
+ * that can drift out of sync with technician edits because
+ * the UI does not yet read/write blueprintDocument.pages.
+ *
+ * Activation must wait until:
+ * 1. Page-based UI exists.
+ * 2. Page switching exists.
+ * 3. Calibration is page-specific.
+ * 4. Traced rooms are page-specific.
+ * 5. blueprintDocument.pages becomes the primary source of truth.
+ *
+ * Until then, this helper remains a passive migration bridge only.
  */
 export function ensureBlueprintDocument(project: BlueprintProject): BlueprintProject {
   // 1. If already has a document with pages, return as-is
