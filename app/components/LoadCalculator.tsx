@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2 } from "lucide-react";
-import { calculateManualJLoad } from "../lib/manualJCalculations";
+import { calculateManualJLoad, type ManualJResults } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
   calculateBlueprintMeasuredFeet,
@@ -516,7 +516,7 @@ const ProjectIssuesBadge = ({ onClick }: { onClick: () => void }) => {
   );
 };
 
-export default function LoadCalculator() {
+export default function LoadCalculator({ onResultChange }: { onResultChange?: (result: ManualJResults) => void }) {
   const blueprintFileInputRef = useRef<HTMLInputElement | null>(null);
   const blueprintPreviewRef = useRef<HTMLDivElement | null>(null);
   const blueprintOverlayRef = useRef<HTMLDivElement | null>(null);
@@ -1125,6 +1125,17 @@ export default function LoadCalculator() {
   };
 
   const handleBlueprintFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+
+    // Stage 1A: PDF Upload Guard
+    // Detect PDF and prevent it from clearing existing work or breaking the UI
+    if (selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith(".pdf")) {
+      window.alert("PDF plan sets are detected, but multi-page PDF rendering is not enabled yet. For now, upload a PNG or JPG screenshot of the floor plan page.");
+      event.target.value = "";
+      return;
+    }
+
     const hasWork = blueprintCalibration.status !== "uncalibrated" || blueprintRoomTrace.roomOutlines.length > 0;
     if (
       hasWork &&
@@ -1136,7 +1147,6 @@ export default function LoadCalculator() {
       return;
     }
 
-    const selectedFile = event.target.files?.[0];
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
     setBlueprintZoom(1);
@@ -1832,6 +1842,13 @@ export default function LoadCalculator() {
     verifiedOpeningsMetrics
   ]);
 
+
+  // Sync professional result to parent
+  useEffect(() => {
+    if (onResultChange) {
+      onResultChange(result);
+    }
+  }, [result, onResultChange]);
 
   const [displayedResult, setDisplayedResult] = useState(result);
 
