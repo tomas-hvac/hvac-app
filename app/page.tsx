@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Bell, BookOpen, Briefcase, Calculator, Cpu, Crown, DollarSign, FileText, Home, Layers, Mail, Percent, PlusCircle, Settings, Shield, Thermometer, TrendingUp, Users, Zap } from "lucide-react";
 import CustomerProposal from "./components/CustomerProposal";
 import LoadCalculator from "./components/LoadCalculator";
+import { type ManualJResults } from "./lib/manualJCalculations";
 import {
   calculateAvailableStaticPressure,
   calculateFrictionRate,
@@ -153,6 +154,7 @@ export default function HVACAppPage() {
   const [homeType, setHomeType] = useState("modern");
   const [zipCode, setZipCode] = useState("97201");
   const [activeScreen, setActiveScreen] = useState<ActiveScreen>("dashboard");
+  const [professionalManualJResult, setProfessionalManualJResult] = useState<ManualJResults | null>(null);
 
   const [rooms, setRooms] = useState<Room[]>([
     { name: "Living Room", squareFeet: 420 },
@@ -188,10 +190,16 @@ export default function HVACAppPage() {
   const coolingBtu = squareFeet * btuPerSqFt;
   const baseTons = coolingBtu / 12000;
 
-const tonsLow = Math.round((baseTons * 0.9) * 10) / 10;
-const tonsHigh = Math.round((baseTons * 1.1) * 10) / 10;
+  // Use professional tonnage if available
+  const professionalTons = professionalManualJResult 
+    ? parseFloat(professionalManualJResult.recommendedTonnage.split(" ")[0]) 
+    : null;
 
-const tons = Math.round(baseTons * 10) / 10;
+  const tons = professionalTons ?? Math.round(baseTons * 10) / 10;
+  
+  const tonsLow = Math.round((tons * 0.9) * 10) / 10;
+  const tonsHigh = Math.round((tons * 1.1) * 10) / 10;
+
   // UI
   const [equipmentCost, setEquipmentCost] = useState(4200);
 const [laborHours, setLaborHours] = useState(36);
@@ -1186,14 +1194,15 @@ const handlePrintManualDReport = () => {
                 premiumPrice={premiumPrice}
                 elitePrice={elitePrice}
                 formatMoney={formatMoney}
+                recommendationSummary={professionalManualJResult?.homeownerRecommendationSummary}
               />
             </div>
           </>
         )}
 
-        {activeScreen === "load" && (
-          <LoadCalculator />
-        )}
+        <div style={{ display: activeScreen === "load" ? "block" : "none" }}>
+          <LoadCalculator onResultChange={setProfessionalManualJResult} />
+        </div>
 
         {activeScreen !== "dashboard" && activeScreen !== "proposal" && activeScreen !== "load" && (
           <div style={sectionCardStyle}>
