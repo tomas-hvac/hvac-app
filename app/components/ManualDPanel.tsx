@@ -286,6 +286,7 @@ export default function ManualDPanel({
   const roomIdCounter = useRef(4);
   const processedBlueprintRoomIds = useRef<Set<string>>(new Set());
   const blueprintRoomsRef = useRef(blueprintRooms);
+  const systemTonsInputRef = useRef<HTMLInputElement>(null);
   const [manualDSystemTons, setManualDSystemTons] = useState("0");
   const [manualDTotalCfm, setManualDTotalCfm] = useState("0");
   const [manualDAvailableStatic, setManualDAvailableStatic] = useState("0.50");
@@ -527,6 +528,13 @@ export default function ManualDPanel({
       return;
     }
     setRooms((currentRooms) => currentRooms.filter((room) => room.id !== roomId));
+  };
+
+  const scrollToSystemTons = () => {
+    systemTonsInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      systemTonsInputRef.current?.focus();
+    }, 500);
   };
 
   const manualDResult = useMemo(() => {
@@ -929,6 +937,7 @@ export default function ManualDPanel({
           description="Equipment size for airflow planning"
         >
           <input
+            ref={systemTonsInputRef}
             className="load-input"
             type="number"
             step="0.5"
@@ -1124,7 +1133,11 @@ export default function ManualDPanel({
         <div className="manual-d-output-grid" style={manualDOutputGridStyle}>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Total System CFM</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.totalSystemCfm.toLocaleString()} CFM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.totalSystemCfm.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Trunk / Zone Count</p>
@@ -1132,19 +1145,33 @@ export default function ManualDPanel({
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>CFM Per Trunk</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.trunkCfm.toLocaleString()} CFM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.trunkCfm.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Round Size Per Trunk</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.estimatedSupplyTrunkSize}</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? manualDResult.estimatedSupplyTrunkSize
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Trunk Velocity</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.supplyTrunkVelocityFpm.toLocaleString()} FPM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.supplyTrunkVelocityFpm.toLocaleString()} FPM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Trunk Status</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.supplyTrunkStatus.toUpperCase()}</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.supplyTrunkStatus.toUpperCase() : "---"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Straight Length</p>
@@ -1164,7 +1191,9 @@ export default function ManualDPanel({
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Estimated Return Trunk</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.estimatedReturnTrunkSize}</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.estimatedReturnTrunkSize : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Floors / Levels</p>
@@ -1176,7 +1205,11 @@ export default function ManualDPanel({
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return CFM Per Level</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.returnCfmPerLevel.toLocaleString()} CFM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnCfmPerLevel.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return Grilles / Level</p>
@@ -1184,11 +1217,17 @@ export default function ManualDPanel({
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return CFM / Grille</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.returnCfmPerGrille.toLocaleString()} CFM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnCfmPerGrille.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return Grille Size</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.returnGrilleSizeGuidance}</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.returnGrilleSizeGuidance : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Total Return Grilles</p>
@@ -1196,23 +1235,39 @@ export default function ManualDPanel({
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return CFM Per Return</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.returnCfmPerReturn.toLocaleString()} CFM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnCfmPerReturn.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return Velocity</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.returnVelocityFpm.toLocaleString()} FPM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnVelocityFpm.toLocaleString()} FPM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Return Airflow Status</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.returnAirflowStatus.toUpperCase()}</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.returnAirflowStatus.toUpperCase() : "---"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Average Branch CFM</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.averageBranchCfm.toLocaleString()} CFM</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.averageBranchCfm.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Suggested Branch Size</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.suggestedBranchDuctSize}</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.suggestedBranchDuctSize : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>Friction Rate Estimate</p>
@@ -1220,7 +1275,11 @@ export default function ManualDPanel({
           </div>
           <div style={manualDOutputItemStyle}>
             <p style={manualDOutputLabelStyle}>CFM Per Ton</p>
-            <p style={manualDOutputValueStyle}>{manualDResult.cfmPerTon.toLocaleString()} CFM/ton</p>
+            <p style={manualDOutputValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.cfmPerTon.toLocaleString()} CFM/ton`
+                : "Pending: enter system tons"}
+            </p>
           </div>
         </div>
 
@@ -1339,6 +1398,16 @@ export default function ManualDPanel({
           display: showRoomAirflowSection ? "grid" : "none",
         }}
       >
+        {systemTonsValue === 0 && rooms.length > 0 && (
+          <div style={workflowClarityBannerStyle}>
+            <p style={workflowClarityBannerTextStyle}>
+              System capacity required: enter total system tons to calculate room CFM and duct recommendations.
+            </p>
+            <button type="button" style={workflowClarityButtonStyle} onClick={scrollToSystemTons}>
+              Go to Manual D Settings
+            </button>
+          </div>
+        )}
         <div style={roomSizingHeaderStyle}>
           <div>
             <p style={resultCardLabelStyle}>Room-by-Room Branch Ducts</p>
@@ -1415,129 +1484,161 @@ export default function ManualDPanel({
               </div>
 
               <div style={roomCardSectionStyle}>
-                <p style={roomCardSectionTitleStyle}>Load Factors</p>
+                <p style={roomCardSectionTitleStyle}>Room Load Inputs</p>
                 <div style={roomManualJInputGridStyle}>
-                  <input
-                    className="load-input"
-                    type="number"
-                    min="0"
-                    aria-label={`${room.name} windows count`}
-                    placeholder="Windows"
-                    value={room.windowsCountInput}
-                    onChange={(event) => updateRoom(room.id, "windowsCount", event.target.value)}
-                    style={inputControlStyle}
-                  />
-                  <input
-                    className="load-input"
-                    type="number"
-                    min="0"
-                    aria-label={`${room.name} exterior walls count`}
-                    placeholder="Exterior walls"
-                    value={room.exteriorWallsCountInput}
-                    onChange={(event) =>
-                      updateRoom(room.id, "exteriorWallsCount", event.target.value)
-                    }
-                    style={inputControlStyle}
-                  />
-                  <input
-                    className="load-input"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    aria-label={`${room.name} ceiling height`}
-                    placeholder="Ceiling height"
-                    value={room.ceilingHeightInput}
-                    onChange={(event) => updateRoom(room.id, "ceilingHeight", event.target.value)}
-                    style={inputControlStyle}
-                  />
-                  <select
-                    className="load-select"
-                    aria-label={`${room.name} insulation level`}
-                    value={room.insulationLevel}
-                    onChange={(event) =>
-                      updateRoom(room.id, "insulationLevel", event.target.value)
-                    }
-                    style={inputControlStyle}
-                  >
-                    <option value="poor">Poor insulation</option>
-                    <option value="average">Average insulation</option>
-                    <option value="good">Good insulation</option>
-                  </select>
-                  <select
-                    className="load-select"
-                    aria-label={`${room.name} sun exposure`}
-                    value={room.sunExposure}
-                    onChange={(event) => updateRoom(room.id, "sunExposure", event.target.value)}
-                    style={inputControlStyle}
-                  >
-                    <option value="low">Low sun</option>
-                    <option value="medium">Medium sun</option>
-                    <option value="high">High sun</option>
-                  </select>
+                  <label style={roomCardInputWrapperStyle}>
+                    <span style={roomCardInputLabelStyle}>Window Count</span>
+                    <input
+                      className="load-input"
+                      type="number"
+                      min="0"
+                      aria-label={`${room.name} windows count`}
+                      placeholder="Windows"
+                      value={room.windowsCountInput}
+                      onChange={(event) => updateRoom(room.id, "windowsCount", event.target.value)}
+                      style={inputControlStyle}
+                    />
+                  </label>
+                  <label style={roomCardInputWrapperStyle}>
+                    <span style={roomCardInputLabelStyle}>Exterior Wall Count</span>
+                    <input
+                      className="load-input"
+                      type="number"
+                      min="0"
+                      aria-label={`${room.name} exterior walls count`}
+                      placeholder="Exterior walls"
+                      value={room.exteriorWallsCountInput}
+                      onChange={(event) =>
+                        updateRoom(room.id, "exteriorWallsCount", event.target.value)
+                      }
+                      style={inputControlStyle}
+                    />
+                  </label>
+                  <label style={roomCardInputWrapperStyle}>
+                    <span style={roomCardInputLabelStyle}>Ceiling Height (ft)</span>
+                    <input
+                      className="load-input"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      aria-label={`${room.name} ceiling height`}
+                      placeholder="Ceiling height"
+                      value={room.ceilingHeightInput}
+                      onChange={(event) => updateRoom(room.id, "ceilingHeight", event.target.value)}
+                      style={inputControlStyle}
+                    />
+                  </label>
+                  <label style={roomCardInputWrapperStyle}>
+                    <span style={roomCardInputLabelStyle}>Insulation Quality</span>
+                    <select
+                      className="load-select"
+                      aria-label={`${room.name} insulation level`}
+                      value={room.insulationLevel}
+                      onChange={(event) =>
+                        updateRoom(room.id, "insulationLevel", event.target.value)
+                      }
+                      style={inputControlStyle}
+                    >
+                      <option value="poor">Poor insulation</option>
+                      <option value="average">Average insulation</option>
+                      <option value="good">Good insulation</option>
+                    </select>
+                  </label>
+                  <label style={roomCardInputWrapperStyle}>
+                    <span style={roomCardInputLabelStyle}>Sun Exposure</span>
+                    <select
+                      className="load-select"
+                      aria-label={`${room.name} sun exposure`}
+                      value={room.sunExposure}
+                      onChange={(event) => updateRoom(room.id, "sunExposure", event.target.value)}
+                      style={inputControlStyle}
+                    >
+                      <option value="low">Low sun</option>
+                      <option value="medium">Medium sun</option>
+                      <option value="high">High sun</option>
+                    </select>
+                  </label>
                 </div>
               </div>
 
               <div style={roomCardSectionStyle}>
                 <p style={roomCardSectionTitleStyle}>Airflow Results</p>
+                {Math.round(estimatedRoomBtu) === 0 && room.squareFeet > 0 && (
+                  <div style={auditMessageStyle}>
+                    Engineering Audit: Square feet detected, but airflow cannot be calculated until Manual D system tons is entered.
+                  </div>
+                )}
                 <div style={roomOutputGridStyle}>
                   <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Room BTU</p>
+                    <p style={manualDOutputLabelStyle}>Distributed Room BTU</p>
                     <p style={manualDOutputValueStyle}>
-                      {Math.round(estimatedRoomBtu).toLocaleString()} BTU
+                      {Math.round(estimatedRoomBtu) > 0
+                        ? `${Math.round(estimatedRoomBtu).toLocaleString()} BTU`
+                        : "Pending: enter system tons"}
                     </p>
                   </div>
                   <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Room CFM</p>
-                    <p style={manualDOutputValueStyle}>{Math.round(roomCfm).toLocaleString()} CFM</p>
+                    <p style={manualDOutputLabelStyle}>Distributed Room CFM</p>
+                    <p style={manualDOutputValueStyle}>
+                      {Math.round(roomCfm) > 0
+                        ? `${Math.round(roomCfm).toLocaleString()} CFM`
+                        : "Pending: enter system tons"}
+                    </p>
                   </div>
                   <div style={roomOutputItemStyle}>
                     <p style={manualDOutputLabelStyle}>Load Multiplier</p>
                     <p style={manualDOutputValueStyle}>{roomLoadFactor.toFixed(2)}x</p>
                   </div>
-                  <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>CFM / Register</p>
-                    <p style={manualDOutputValueStyle}>
-                      {Math.round(airflowPerRegister).toLocaleString()} CFM
-                    </p>
-                  </div>
-                  <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Register Status</p>
-                    <p style={roomStatusValueStyle}>{registerAirflowStatus.toUpperCase()}</p>
-                  </div>
-                  <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Register Size</p>
-                    <p style={roomStatusValueStyle}>{registerSizeGuidance}</p>
-                  </div>
-                  <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Round Duct</p>
-                    <p style={manualDOutputValueStyle}>{ductRecommendation.diameterInches}&quot;</p>
-                  </div>
-                  <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Velocity</p>
-                    <p style={manualDOutputValueStyle}>
-                      {Math.round(ductRecommendation.velocityFpm).toLocaleString()} FPM
-                    </p>
-                  </div>
-                  <div style={roomOutputItemStyle}>
-                    <p style={manualDOutputLabelStyle}>Status</p>
-                    <p style={roomStatusValueStyle}>{ductRecommendation.status.toUpperCase()}</p>
-                  </div>
+                  {Math.round(roomCfm) > 0 && (
+                    <>
+                      <div style={roomOutputItemStyle}>
+                        <p style={manualDOutputLabelStyle}>CFM / Register</p>
+                        <p style={manualDOutputValueStyle}>
+                          {Math.round(airflowPerRegister).toLocaleString()} CFM
+                        </p>
+                      </div>
+                      <div style={roomOutputItemStyle}>
+                        <p style={manualDOutputLabelStyle}>Register Status</p>
+                        <p style={roomStatusValueStyle}>{registerAirflowStatus.toUpperCase()}</p>
+                      </div>
+                      <div style={roomOutputItemStyle}>
+                        <p style={manualDOutputLabelStyle}>Register Size</p>
+                        <p style={roomStatusValueStyle}>{registerSizeGuidance}</p>
+                      </div>
+                      <div style={roomOutputItemStyle}>
+                        <p style={manualDOutputLabelStyle}>Round Duct</p>
+                        <p style={manualDOutputValueStyle}>{ductRecommendation.diameterInches}&quot;</p>
+                      </div>
+                      <div style={roomOutputItemStyle}>
+                        <p style={manualDOutputLabelStyle}>Velocity</p>
+                        <p style={manualDOutputValueStyle}>
+                          {Math.round(ductRecommendation.velocityFpm).toLocaleString()} FPM
+                        </p>
+                      </div>
+                      <div style={roomOutputItemStyle}>
+                        <p style={manualDOutputLabelStyle}>Status</p>
+                        <p style={roomStatusValueStyle}>{ductRecommendation.status.toUpperCase()}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <p
-                style={{
-                  ...roomStatusMessageStyle,
-                  color:
-                    ductRecommendation.status === "high"
-                      ? "#fecaca"
-                      : ductRecommendation.status === "low"
-                      ? "#bfdbfe"
-                      : "#bbf7d0",
-                }}
-              >
-                {ductRecommendation.status.toUpperCase()}: {ductRecommendation.message}
-              </p>
+              {Math.round(roomCfm) > 0 && (
+                <p
+                  style={{
+                    ...roomStatusMessageStyle,
+                    color:
+                      ductRecommendation.status === "high"
+                        ? "#fecaca"
+                        : ductRecommendation.status === "low"
+                        ? "#bfdbfe"
+                        : "#bbf7d0",
+                  }}
+                >
+                  {ductRecommendation.status.toUpperCase()}: {ductRecommendation.message}
+                </p>
+              )}
               </div>
             );
           })}
@@ -1575,7 +1676,11 @@ export default function ManualDPanel({
         <div style={manualDPrintSummaryGridStyle}>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Total System CFM</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.totalSystemCfm.toLocaleString()} CFM</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.totalSystemCfm.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Trunk / Zone Count</p>
@@ -1583,21 +1688,33 @@ export default function ManualDPanel({
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>CFM Per Trunk</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.trunkCfm.toLocaleString()} CFM</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.trunkCfm.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Size Per Trunk</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.estimatedSupplyTrunkSize}</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? manualDResult.estimatedSupplyTrunkSize
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Trunk Velocity</p>
             <p style={manualDPrintSummaryValueStyle}>
-              {manualDResult.supplyTrunkVelocityFpm.toLocaleString()} FPM
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.supplyTrunkVelocityFpm.toLocaleString()} FPM`
+                : "Pending: enter system tons"}
             </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Trunk Status</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.supplyTrunkStatus.toUpperCase()}</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.supplyTrunkStatus.toUpperCase() : "---"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Straight Length</p>
@@ -1630,13 +1747,17 @@ export default function ManualDPanel({
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return CFM / Return</p>
             <p style={manualDPrintSummaryValueStyle}>
-              {manualDResult.returnCfmPerReturn.toLocaleString()} CFM
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnCfmPerReturn.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
             </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return CFM / Level</p>
             <p style={manualDPrintSummaryValueStyle}>
-              {manualDResult.returnCfmPerLevel.toLocaleString()} CFM
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnCfmPerLevel.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
             </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
@@ -1648,13 +1769,15 @@ export default function ManualDPanel({
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return CFM / Grille</p>
             <p style={manualDPrintSummaryValueStyle}>
-              {manualDResult.returnCfmPerGrille.toLocaleString()} CFM
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnCfmPerGrille.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
             </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return Grille Size</p>
             <p style={manualDPrintSummaryValueStyle}>
-              {manualDResult.returnGrilleSizeGuidance}
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.returnGrilleSizeGuidance : "Pending: enter system tons"}
             </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
@@ -1669,23 +1792,37 @@ export default function ManualDPanel({
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Main Trunk</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.estimatedSupplyTrunkSize}</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.estimatedSupplyTrunkSize : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return Trunk</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.estimatedReturnTrunkSize}</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.estimatedReturnTrunkSize : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return Velocity</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.returnVelocityFpm.toLocaleString()} FPM</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.returnVelocityFpm.toLocaleString()} FPM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Return Airflow</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.returnAirflowStatus.toUpperCase()}</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0 ? manualDResult.returnAirflowStatus.toUpperCase() : "---"}
+            </p>
           </div>
           <div style={manualDPrintSummaryCardStyle}>
             <p style={manualDPrintSummaryLabelStyle}>Average Branch</p>
-            <p style={manualDPrintSummaryValueStyle}>{manualDResult.averageBranchCfm.toLocaleString()} CFM</p>
+            <p style={manualDPrintSummaryValueStyle}>
+              {manualDResult.totalSystemCfm > 0
+                ? `${manualDResult.averageBranchCfm.toLocaleString()} CFM`
+                : "Pending: enter system tons"}
+            </p>
           </div>
         </div>
 
@@ -1719,7 +1856,7 @@ export default function ManualDPanel({
             <tr>
               <th style={manualDPrintThStyle}>Room</th>
               <th style={manualDPrintThStyle}>Sq. Ft.</th>
-              <th style={manualDPrintThStyle}>Room CFM</th>
+              <th style={manualDPrintThStyle}>Distributed Room CFM</th>
               <th style={manualDPrintThStyle}>Duct Size</th>
               <th style={manualDPrintThStyle}>Velocity</th>
               <th style={manualDPrintThStyle}>Status</th>
@@ -1731,13 +1868,21 @@ export default function ManualDPanel({
               <tr className="manual-d-print-room-row" key={`manual-d-print-${room.id}`}>
                 <td style={manualDPrintTdStyle}>{room.name || `Room ${index + 1}`}</td>
                 <td style={manualDPrintTdStyle}>{Math.round(room.squareFeet).toLocaleString()}</td>
-                <td style={manualDPrintTdStyle}>{Math.round(roomCfm).toLocaleString()} CFM</td>
-                <td style={manualDPrintTdStyle}>{ductRecommendation.diameterInches}&quot; round</td>
                 <td style={manualDPrintTdStyle}>
-                  {Math.round(ductRecommendation.velocityFpm).toLocaleString()} FPM
+                  {Math.round(roomCfm) > 0 ? `${Math.round(roomCfm).toLocaleString()} CFM` : "Pending: enter system tons"}
                 </td>
-                <td style={manualDPrintTdStyle}>{ductRecommendation.status.toUpperCase()}</td>
-                <td style={manualDPrintMessageTdStyle}>{ductRecommendation.message}</td>
+                <td style={manualDPrintTdStyle}>
+                  {Math.round(roomCfm) > 0 ? `${ductRecommendation.diameterInches}" round` : "Pending: enter system tons"}
+                </td>
+                <td style={manualDPrintTdStyle}>
+                  {Math.round(roomCfm) > 0 ? `${Math.round(ductRecommendation.velocityFpm).toLocaleString()} FPM` : "Pending: enter system tons"}
+                </td>
+                <td style={manualDPrintTdStyle}>
+                  {Math.round(roomCfm) > 0 ? ductRecommendation.status.toUpperCase() : "---"}
+                </td>
+                <td style={manualDPrintMessageTdStyle}>
+                  {Math.round(roomCfm) > 0 ? ductRecommendation.message : "Calculation pending system tonnage."}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -2080,6 +2225,19 @@ const roomCardSectionTitleStyle: React.CSSProperties = {
   textTransform: "uppercase",
 };
 
+const roomCardInputWrapperStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "6px",
+};
+
+const roomCardInputLabelStyle: React.CSSProperties = {
+  color: "#94a3b8",
+  fontSize: "10px",
+  fontWeight: 800,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
+};
+
 const roomRemoveButtonStyle: React.CSSProperties = {
   minHeight: "40px",
   padding: "10px 14px",
@@ -2135,6 +2293,50 @@ const roomStatusMessageStyle: React.CSSProperties = {
   fontSize: "12px",
   fontWeight: 800,
   lineHeight: 1.5,
+};
+
+const auditMessageStyle: React.CSSProperties = {
+  margin: "0 0 10px",
+  padding: "8px 12px",
+  borderRadius: "10px",
+  background: "rgba(248, 113, 113, 0.1)",
+  border: "1px solid rgba(248, 113, 113, 0.2)",
+  color: "#fca5a5",
+  fontSize: "11px",
+  fontWeight: 800,
+  lineHeight: 1.4,
+};
+
+const workflowClarityBannerStyle: React.CSSProperties = {
+  margin: "0 0 16px",
+  padding: "16px",
+  borderRadius: "16px",
+  background: "rgba(212, 175, 55, 0.1)",
+  border: "1px solid rgba(212, 175, 55, 0.25)",
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+  alignItems: "flex-start",
+};
+
+const workflowClarityBannerTextStyle: React.CSSProperties = {
+  margin: 0,
+  color: "#fde68a",
+  fontSize: "13px",
+  fontWeight: 700,
+  lineHeight: 1.5,
+};
+
+const workflowClarityButtonStyle: React.CSSProperties = {
+  padding: "8px 16px",
+  borderRadius: "8px",
+  background: "#d4af37",
+  color: "#1e293b",
+  border: "none",
+  fontSize: "12px",
+  fontWeight: 800,
+  cursor: "pointer",
+  boxShadow: "0 4px 12px rgba(212, 175, 55, 0.2)",
 };
 
 const manualDPrintStyles = `
