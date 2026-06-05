@@ -73,30 +73,30 @@ export default function CustomerProposal({
         name: "Basic Comfort",
         priceValue: basicPrice,
         features: [
-          "Properly sized system",
-          "Standard efficiency equipment",
-          "Professional installation",
+          "Reliable heating and cooling performance",
+          "Standard energy savings",
+          "Professional quality installation",
         ],
       },
       {
         name: "Better Comfort",
         priceValue: premiumPrice,
         features: [
-          "Properly sized system",
-          "High efficiency equipment",
-          "Enhanced airflow balance",
-          "Professional installation",
+          "Extra monthly energy savings",
+          "Even temperatures throughout the home",
+          "Quieter system operation for a more peaceful home",
+          "Professional quality installation",
         ],
       },
       {
         name: "Elite Comfort",
         priceValue: elitePrice,
         features: [
-          "Properly sized system",
-          "Premium high-efficiency system",
-          "Advanced airflow design",
-          "Maximum comfort performance",
-          "Priority installation",
+          "Lowest possible monthly utility bills",
+          "Precision comfort and humidity control",
+          "Virtually silent \"whisper-mode\" performance",
+          "Best-in-class reliability and long-term value",
+          "Professional quality installation",
         ],
       },
     ],
@@ -463,10 +463,10 @@ export default function CustomerProposal({
                     Homeowner Confidence
                   </p>
                   <div style={{ ...homeownerConfidenceGridStyle, color: cardTextColor }}>
-                    <span>Properly sized system</span>
-                    <span>Airflow-balanced design</span>
-                    <span>Comfort-focused installation</span>
-                    <span>Long-term efficiency focus</span>
+                    <span>Verified Engineering Standards</span>
+                    <span>Professional Installation Team</span>
+                    <span>Balanced Airflow for Every Room</span>
+                    <span>Long-Term Performance Focus</span>
                   </div>
                 </div>
 
