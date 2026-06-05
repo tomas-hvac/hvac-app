@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2 } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { calculateManualJLoad, type ManualJResults } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -594,6 +594,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [v3ReportPreview, setV3ReportPreview] = useState<BlueprintTechnicianReport | null>(null);
   const [reportExportCount, setReportExportCount] = useState(0);
   const [isIssuesDrawerOpen, setIsIssuesDrawerOpen] = useState(false);
+  const [isLeftPanelExpanded, setIsLeftPanelExpanded] = useState(false);
+  const [isRightPanelExpanded, setIsRightPanelExpanded] = useState(false);
   const [loadedEngineMetadata, setLoadedEngineMetadata] = useState<ProjectEngineMetadata | undefined>(undefined);
   const [pendingEngineEvent, setPendingEngineEvent] = useState<ProjectAction | null>(null);
   const projectEngineStateRef = useRef<ProjectEngineState | null>(null);
@@ -2137,7 +2139,6 @@ const averageTonnage = (minTon + maxTon) / 2;
   };
 
   const handlePointerCalculate = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === "mouse") return;
     event.preventDefault();
     handleCalculate();
   };
@@ -2271,12 +2272,10 @@ const averageTonnage = (minTon + maxTon) / 2;
           type="button"
           className="calc-action-button"
           style={calcActionButtonStyle}
-          onClick={handleCalculate}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            handleCalculate();
-          }}
           onPointerUp={handlePointerCalculate}
+          onClick={(e) => {
+            if (e.detail === 0) handleCalculate();
+          }}
         >
           {isCalculating ? "Calculating..." : "Calculate Load"}
         </button>
@@ -2312,7 +2311,12 @@ const averageTonnage = (minTon + maxTon) / 2;
             transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
           }
 
+          .tablet-only-toggle {
+            display: none !important;
+          }
+
           .calc-action-button:hover {
+
             transform: translateY(-2px);
             box-shadow: 0 18px 35px rgba(212,175,55,0.18);
             background: rgba(212,175,55,0.2);
@@ -2449,12 +2453,32 @@ const averageTonnage = (minTon + maxTon) / 2;
 
             .blueprint-workspace-sidebar:hover,
             .blueprint-workspace-sidebar:focus-within,
+            .blueprint-workspace-sidebar.expanded,
             .blueprint-workspace-inspector:hover,
-            .blueprint-workspace-inspector:focus-within {
+            .blueprint-workspace-inspector:focus-within,
+            .blueprint-workspace-inspector.expanded {
               width: 320px !important;
               z-index: 50 !important;
               box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
               overflow-y: auto !important;
+            }
+
+            button, input, select, .calc-action-button, .blueprint-takeoff-button {
+              min-height: 44px !important;
+              min-width: 44px !important;
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+            }
+
+            .tablet-only-toggle {
+              display: flex !important;
+            }
+
+            /* Ensure square buttons are also large enough */
+            [style*="width: 34px"], [style*="height: 34px"], [style*="minHeight: 30px"] {
+              min-width: 44px !important;
+              min-height: 44px !important;
             }
           }
 
@@ -2477,6 +2501,10 @@ const averageTonnage = (minTon + maxTon) / 2;
 
             button, input, select, .calc-action-button, .blueprint-takeoff-button {
               min-height: 44px !important;
+              min-width: 44px !important;
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
             }
 
             .technician-accordion {
@@ -3380,7 +3408,20 @@ const averageTonnage = (minTon + maxTon) / 2;
             }}
           >
             <div className="blueprint-drafting-workspace" style={blueprintDraftingWorkspaceStyle}>
-              <aside className="blueprint-workspace-sidebar" style={blueprintWorkspaceSidebarStyle}>
+              <aside 
+                className={`blueprint-workspace-sidebar ${isLeftPanelExpanded ? 'expanded' : ''}`} 
+                style={blueprintWorkspaceSidebarStyle}
+              >
+                <button 
+                  type="button" 
+                  className="tablet-only-toggle"
+                  onClick={() => setIsLeftPanelExpanded(!isLeftPanelExpanded)}
+                  style={tabletToggleButtonStyle}
+                  title={isLeftPanelExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+                >
+                  {isLeftPanelExpanded ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
+                </button>
+
                 <div style={sectionPanelHeaderStyle}>
                   <div style={sectionPanelIconStyle}>
                     <Layers size={18} strokeWidth={1.8} />
@@ -3884,7 +3925,20 @@ const averageTonnage = (minTon + maxTon) / 2;
                 )}
               </section>
 
-              <aside className="blueprint-workspace-inspector" style={blueprintWorkspaceInspectorStyle}>
+              <aside 
+                className={`blueprint-workspace-inspector ${isRightPanelExpanded ? 'expanded' : ''}`} 
+                style={blueprintWorkspaceInspectorStyle}
+              >
+                <button 
+                  type="button" 
+                  className="tablet-only-toggle"
+                  onClick={() => setIsRightPanelExpanded(!isRightPanelExpanded)}
+                  style={tabletToggleButtonStyle}
+                  title={isRightPanelExpanded ? "Collapse Inspector" : "Expand Inspector"}
+                >
+                  {isRightPanelExpanded ? <PanelRightClose size={20} /> : <PanelRightOpen size={20} />}
+                </button>
+
                 <div style={blueprintInspectorCardStyle}>
                   <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor }}>
                     {blueprintCalibrationUI.statusText}
@@ -5683,6 +5737,21 @@ const blueprintDraftingWorkspaceStyle: React.CSSProperties = {
   minWidth: 0,
   maxWidth: "100%",
   overflow: "hidden",
+};
+
+const tabletToggleButtonStyle: React.CSSProperties = {
+  width: "100%",
+  height: "48px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "rgba(255,255,255,0.05)",
+  border: "none",
+  borderBottom: "1px solid rgba(255,255,255,0.1)",
+  color: "#94a3b8",
+  cursor: "pointer",
+  padding: 0,
+  touchAction: "manipulation",
 };
 
 const blueprintWorkspaceSidebarStyle: React.CSSProperties = {

@@ -182,7 +182,6 @@ export default function CustomerProposal({
   }, [customerName, jobAddress, phone, proposalConfirmed, selectedOption, systemType]);
 
   const handlePointerSelect = (option: ProposalOption) => (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === "mouse") return;
     event.preventDefault();
     handleSelect(option);
   };
@@ -192,7 +191,6 @@ export default function CustomerProposal({
   };
 
   const handlePointerConfirm = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === "mouse") return;
     event.preventDefault();
     handleConfirmProposal();
   };
@@ -208,13 +206,11 @@ export default function CustomerProposal({
   };
 
   const handlePointerGeneratePdf = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === "mouse") return;
     event.preventDefault();
     handleGeneratePdf();
   };
 
   const handlePointerGenerateCombinedReport = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (event.pointerType === "mouse") return;
     event.preventDefault();
     handleGenerateCombinedReport();
   };
@@ -382,12 +378,10 @@ export default function CustomerProposal({
                 type="button"
                 key={option.name}
                 className="customer-proposal-option-card"
-                onClick={() => handleSelect(option)}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  handleSelect(option);
-                }}
                 onPointerUp={handlePointerSelect(option)}
+                onClick={(e) => {
+                  if (e.detail === 0) handleSelect(option);
+                }}
                 style={{
                   ...optionCardStyle,
                   border: isSelected ? `2px solid ${packageVisual.border}` : `1px solid ${packageVisual.border}`,
@@ -509,12 +503,10 @@ export default function CustomerProposal({
 
             <button
               type="button"
-              onClick={handleConfirmProposal}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                handleConfirmProposal();
-              }}
               onPointerUp={handlePointerConfirm}
+              onClick={(e) => {
+                if (e.detail === 0) handleConfirmProposal();
+              }}
               style={confirmButtonStyle}
             >
               Confirm Proposal
@@ -541,12 +533,10 @@ export default function CustomerProposal({
             opacity: proposalConfirmed ? 1 : 0.5,
             cursor: proposalConfirmed ? "pointer" : "not-allowed",
           }}
-          onClick={handleGeneratePdf}
-          onTouchEnd={(e) => {
-            e.preventDefault();
-            handleGeneratePdf();
-          }}
           onPointerUp={handlePointerGeneratePdf}
+          onClick={(e) => {
+            if (e.detail === 0) handleGeneratePdf();
+          }}
         >
           Generate Proposal PDF
         </button>
@@ -560,12 +550,10 @@ export default function CustomerProposal({
               cursor: proposalConfirmed ? "pointer" : "not-allowed",
               background: "linear-gradient(90deg, #0f172a, #d4af37)",
             }}
-            onClick={handleGenerateCombinedReport}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              handleGenerateCombinedReport();
-            }}
             onPointerUp={handlePointerGenerateCombinedReport}
+            onClick={(e) => {
+              if (e.detail === 0) handleGenerateCombinedReport();
+            }}
           >
             Combined Report
           </button>
