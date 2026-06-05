@@ -143,12 +143,17 @@ export function adaptTracedRoomToManualDBlueprintRoom({
     (edge) => edge.boundaryType === "exterior"
   ).length ?? 0;
 
+  const windowsCount = tracedRoom.boundaryEdges?.reduce((count, edge) => {
+    return count + (edge.openings?.filter((op) => op.type === "window").length ?? 0);
+  }, 0) ?? 0;
+
   return {
     id: outputId,
     name: unifiedRoom.name,
     squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
     ceilingHeight: unifiedRoom.ceilingHeight,
     floorLevel: unifiedRoom.floorLevel,
+    windowsCount: String(windowsCount),
     exteriorWallsCount: String(exteriorWallsCount),
     sourceBlueprintRoomId: tracedRoom.id,
   };
