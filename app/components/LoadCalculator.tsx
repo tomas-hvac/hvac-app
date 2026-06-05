@@ -2412,16 +2412,58 @@ const averageTonnage = (minTon + maxTon) / 2;
             }
 
             .blueprint-drafting-workspace {
-              grid-template-columns: 1fr !important;
+              display: flex !important;
+              position: relative !important;
+              min-height: 60vh !important;
+              overflow: hidden !important;
+              border-radius: 22px !important;
+            }
+
+            .blueprint-workspace-main {
+              flex: 1 !important;
+              width: 100% !important;
             }
 
             .blueprint-workspace-sidebar,
             .blueprint-workspace-inspector {
-              position: static !important;
+              position: absolute !important;
+              top: 0 !important;
+              height: 100% !important;
+              z-index: 40 !important;
+              width: 60px !important;
+              overflow: hidden !important;
+              transition: width 0.3s ease !important;
+              background: rgba(15, 23, 42, 0.95) !important;
+              backdrop-filter: blur(8px) !important;
+              border: 1px solid rgba(255,255,255,0.1) !important;
+              border-radius: 12px !important;
+            }
+
+            .blueprint-workspace-sidebar {
+              left: 0 !important;
+            }
+
+            .blueprint-workspace-inspector {
+              right: 0 !important;
+            }
+
+            .blueprint-workspace-sidebar:hover,
+            .blueprint-workspace-sidebar:focus-within,
+            .blueprint-workspace-inspector:hover,
+            .blueprint-workspace-inspector:focus-within {
+              width: 320px !important;
+              z-index: 50 !important;
+              box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+              overflow-y: auto !important;
             }
           }
 
           @media (max-width: 640px) {
+            html, body {
+              overflow-x: hidden !important;
+              max-width: 100vw !important;
+            }
+
             .load-calculator-page {
               gap: 14px !important;
               width: 100% !important;
@@ -2430,6 +2472,55 @@ const averageTonnage = (minTon + maxTon) / 2;
               position: relative !important;
               z-index: 10 !important;
               pointer-events: auto !important;
+              padding-bottom: 90px !important;
+            }
+
+            button, input, select, .calc-action-button, .blueprint-takeoff-button {
+              min-height: 44px !important;
+            }
+
+            .technician-accordion {
+              position: fixed !important;
+              bottom: 0 !important;
+              left: 0 !important;
+              right: 0 !important;
+              background: rgba(15, 23, 42, 0.98) !important;
+              backdrop-filter: blur(10px) !important;
+              z-index: 100 !important;
+              display: flex !important;
+              flex-wrap: nowrap !important;
+              overflow-x: auto !important;
+              padding: 10px !important;
+              border-top: 1px solid rgba(255,255,255,0.1) !important;
+              border-radius: 0 !important;
+              gap: 8px !important;
+            }
+
+            .technician-accordion > button {
+              flex: 0 0 auto !important;
+              width: auto !important;
+              flex-direction: column !important;
+              justify-content: center !important;
+              padding: 8px 12px !important;
+              height: auto !important;
+              min-height: 50px !important;
+            }
+
+            .technician-accordion > button span:last-child {
+              display: none !important;
+            }
+
+            .blueprint-drafting-workspace {
+              display: grid !important;
+              grid-template-columns: 1fr !important;
+            }
+
+            .blueprint-workspace-sidebar,
+            .blueprint-workspace-inspector {
+              position: static !important;
+              width: 100% !important;
+              height: auto !important;
+              opacity: 1 !important;
             }
 
             .load-calculator-header {
@@ -2709,7 +2800,7 @@ const averageTonnage = (minTon + maxTon) / 2;
             })}
           </div>
 
-          <div style={technicianAccordionStyle}>
+          <div className="technician-accordion" style={technicianAccordionStyle}>
             {technicianSections.map((section) => {              const isActive = activeTechnicianSection === section.id;
 
               return (
