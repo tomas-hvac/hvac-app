@@ -1414,6 +1414,10 @@ export default function ManualDPanel({
             <p style={verificationNotesSubtitleStyle}>
               Uses {Math.round(totalSystemCfm).toLocaleString()} CFM from {systemTonsValue.toLocaleString()} tons.
             </p>
+            <p style={airflowSourceLabelStyle}>Airflow Source: System Tons Distribution</p>
+            <p style={airflowSourceHelperStyle}>
+              Room CFM is distributed from total system capacity using room size and load factors. Future Manual J room-load sync can replace this source.
+            </p>
             <p style={verificationNotesSubtitleStyle}>
               Preliminary field estimates only; not a certified Manual J room load calculation.
             </p>
@@ -2023,6 +2027,22 @@ const verificationNotesSubtitleStyle: React.CSSProperties = {
   margin: "6px 0 0",
   color: "#cbd5e1",
   fontSize: "13px",
+};
+
+const airflowSourceLabelStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  fontSize: "11px",
+  fontWeight: 800,
+  color: "#d4af37",
+  letterSpacing: "0.02em",
+  textTransform: "uppercase",
+};
+
+const airflowSourceHelperStyle: React.CSSProperties = {
+  margin: "2px 0 0",
+  fontSize: "11px",
+  color: "#94a3b8",
+  lineHeight: 1.4,
 };
 
 const resultCardDetailStyle: React.CSSProperties = {
