@@ -118,6 +118,7 @@ export function createBlueprintProject(name: string): BlueprintProject {
 export type BlueprintProjectSnapshotInput = {
   name: string;
   blueprintImage: BlueprintProject["blueprintImage"];
+  blueprintDocument?: BlueprintDocument | null;
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;

@@ -58,6 +58,9 @@ import {
   EnvelopeSuggestion,
   createBlueprintProjectSnapshot,
   updateBlueprintProjectSnapshot,
+  ensureBlueprintDocument,
+  type BlueprintDocument,
+  type BlueprintPage,
 } from "@/lib/hvac/blueprintProject";
 import {
   saveBlueprintProjectToLocalStorage,
@@ -560,6 +563,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [blueprintFloorLevel, setBlueprintFloorLevel] = useState("1");
   const [blueprintFileName, setBlueprintFileName] = useState("");
   const [blueprintFile, setBlueprintFile] = useState<File | null>(null);
+  const [blueprintDocument, setBlueprintDocument] = useState<BlueprintDocument | null>(null);
   const [blueprintPreviewUrl, setBlueprintPreviewUrl] = useState("");
   const [blueprintZoom, setBlueprintZoom] = useState(1);
   const [blueprintOverlaySize, setBlueprintOverlaySize] = useState({ widthPx: 0, heightPx: 0 });
@@ -867,6 +871,20 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const handleV3SaveProject = () => {
     try {
       const preparedEngineSave = prepareCurrentEngineMetadataForSave("PROJECT_SAVED");
+      
+      // Sync current active root-level state into the multi-page document container
+      let updatedDocument = blueprintDocument;
+      if (updatedDocument && updatedDocument.activePageId) {
+        updatedDocument = {
+          ...updatedDocument,
+          pages: updatedDocument.pages.map(page => 
+            page.id === updatedDocument?.activePageId 
+              ? { ...page, calibration: blueprintCalibration, tracedRooms: blueprintRoomTrace.roomOutlines }
+              : page
+          )
+        };
+      }
+
       const input = {
         name: v3ProjectName,
         blueprintImage: blueprintFile
@@ -878,6 +896,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
               dataUrl: blueprintPreviewUrl,
             }
           : null,
+        blueprintDocument: updatedDocument,
         calibration: blueprintCalibration,
         tracedRooms: blueprintRoomTrace.roomOutlines,
         envelopeSettings: {
@@ -929,26 +948,36 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const handleLoadV3Project = (projectId: string) => {
     try {
-      const project = loadBlueprintProjectFromLocalStorage(projectId);
+      let project = loadBlueprintProjectFromLocalStorage(projectId);
       if (!project) {
         setV3SaveStatus("Project not found");
         return;
       }
 
+      // Promote legacy projects to BlueprintDocument model
+      project = ensureBlueprintDocument(project);
+
       setActiveV3ProjectId(project.id);
       setLoadedEngineMetadata(project.engineMetadata);
       setV3ProjectName(project.name);
-      setBlueprintCalibration(project.calibration);
+      
+      // Load document container
+      setBlueprintDocument(project.blueprintDocument || null);
+      
+      // Hydrate root-level active state from the active page (or fall back to root)
+      const activePage = project.blueprintDocument?.pages.find(p => p.id === project.blueprintDocument?.activePageId);
+      
+      setBlueprintCalibration(activePage?.calibration || project.calibration);
       
       if (project.blueprintImage?.dataUrl) {
         setIsBlueprintRestoring(true);
-        setPendingV3Rooms(project.tracedRooms);
+        setPendingV3Rooms(activePage?.tracedRooms || project.tracedRooms);
         setBlueprintPreviewUrl(project.blueprintImage.dataUrl);
         setBlueprintFileName(project.blueprintImage.name);
       } else {
         setBlueprintRoomTrace((currentTrace) => ({
           ...currentTrace,
-          roomOutlines: project.tracedRooms,
+          roomOutlines: activePage?.tracedRooms || project.tracedRooms,
         }));
       }
 
@@ -977,6 +1006,19 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
         if (!existing) return;
         const preparedEngineSave = prepareCurrentEngineMetadataForSave("AUTOSAVE_COMPLETED");
 
+        // Sync current active root-level state into the multi-page document container
+        let updatedDocument = blueprintDocument;
+        if (updatedDocument && updatedDocument.activePageId) {
+          updatedDocument = {
+            ...updatedDocument,
+            pages: updatedDocument.pages.map(page => 
+              page.id === updatedDocument?.activePageId 
+                ? { ...page, calibration: blueprintCalibration, tracedRooms: blueprintRoomTrace.roomOutlines }
+                : page
+            )
+          };
+        }
+
         const snapshot = updateBlueprintProjectSnapshot(existing, {
           name: v3ProjectName,
           blueprintImage: blueprintFile
@@ -988,6 +1030,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
                 dataUrl: blueprintPreviewUrl,
               }
             : null,
+          blueprintDocument: updatedDocument,
           calibration: blueprintCalibration,
           tracedRooms: blueprintRoomTrace.roomOutlines,
           envelopeSettings: {
@@ -1151,6 +1194,32 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
+    
+    // Initialize one-page BlueprintDocument for single-image uploads
+    if (selectedFile) {
+      const newPage: BlueprintPage = {
+        id: `page-${Date.now()}-0`,
+        pageNumber: 1,
+        label: "Sheet 1",
+        sheetType: "floor-plan",
+        image: {
+          name: selectedFile.name,
+          mimeType: selectedFile.type,
+        },
+        calibration: createDefaultBlueprintCalibrationState(),
+        tracedRooms: [],
+      };
+
+      setBlueprintDocument({
+        id: `doc-${Date.now()}`,
+        name: selectedFile.name,
+        pages: [newPage],
+        activePageId: newPage.id,
+      });
+    } else {
+      setBlueprintDocument(null);
+    }
+
     setBlueprintZoom(1);
     setBlueprintCalibration(createDefaultBlueprintCalibrationState());
     setBlueprintRoomTrace(createDefaultBlueprintRoomTraceState());
@@ -4945,6 +5014,19 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <p style={auditSourceStyle}>Diagnostic</p>
                       <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
                         {isAreaVerified ? "Active" : "Bypassed"}
+                      </div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Blueprint Set</p>
+                      <p style={auditValueStyle}>
+                        {blueprintDocument ? `${blueprintDocument.pages.length} page${blueprintDocument.pages.length === 1 ? "" : "s"} active` : "No blueprint"}
+                        {blueprintDocument && blueprintDocument.pages.length > 0 && (
+                          ` (page ${blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of ${blueprintDocument.pages.length})`
+                        )}
+                      </p>
+                      <p style={auditSourceStyle}>Document Container</p>
+                      <div style={blueprintDocument ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {blueprintDocument ? "Verified" : "Missing"}
                       </div>
                     </div>
                   </div>
