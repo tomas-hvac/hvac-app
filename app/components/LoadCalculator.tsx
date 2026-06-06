@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight } from "lucide-react";
 import { calculateManualJLoad, type ManualJResults } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -1367,6 +1367,55 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     document
       .getElementById(`detected-room-card-${roomId}`)
       ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
+  const handlePageSwitch = (targetPageIndex: number) => {
+    if (!blueprintDocument) return;
+    if (targetPageIndex < 0 || targetPageIndex >= blueprintDocument.pages.length) return;
+
+    const currentPageId = blueprintDocument.activePageId;
+    const targetPage = blueprintDocument.pages[targetPageIndex];
+
+    // 1. Flush current active root state into the active page in the document container
+    setBlueprintDocument((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        pages: prev.pages.map((page) =>
+          page.id === currentPageId
+            ? {
+                ...page,
+                calibration: blueprintCalibration,
+                tracedRooms: blueprintRoomTrace.roomOutlines,
+              }
+            : page
+        ),
+        activePageId: targetPage.id,
+      };
+    });
+
+    // 2. Hydrate root-level state from the target page
+    setBlueprintCalibration(targetPage.calibration || createDefaultBlueprintCalibrationState());
+    setBlueprintRoomTrace((prev) => ({
+      ...prev,
+      roomOutlines: targetPage.tracedRooms || [],
+      isTracing: false,
+      draftPoints: [],
+    }));
+
+    setDetectedRoomActionMessage(`Switched to ${targetPage.label}`);
+  };
+
+  const handlePrevPage = () => {
+    if (!blueprintDocument) return;
+    const currentIndex = blueprintDocument.pages.findIndex((p) => p.id === blueprintDocument.activePageId);
+    handlePageSwitch(currentIndex - 1);
+  };
+
+  const handleNextPage = () => {
+    if (!blueprintDocument) return;
+    const currentIndex = blueprintDocument.pages.findIndex((p) => p.id === blueprintDocument.activePageId);
+    handlePageSwitch(currentIndex + 1);
   };
 
   const getCurrentBlueprintTraceFinishOptions = (
@@ -3653,6 +3702,43 @@ const averageTonnage = (minTon + maxTon) / 2;
                       {blueprintCalibrationStatusText} · {blueprintTraceCalibrationStatusText}
                     </p>
                   </div>
+
+                  {blueprintDocument && (
+                    <div style={blueprintNavigationContainerStyle}>
+                      <button
+                        type="button"
+                        style={{
+                          ...blueprintNavigationButtonStyle,
+                          opacity: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0 ? 0.4 : 1,
+                          cursor: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0 ? "not-allowed" : "pointer"
+                        }}
+                        disabled={blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0}
+                        onClick={handlePrevPage}
+                        title="Previous Page"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      
+                      <span style={blueprintNavigationPageLabelStyle}>
+                        Page {blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of {blueprintDocument.pages.length}
+                      </span>
+
+                      <button
+                        type="button"
+                        style={{
+                          ...blueprintNavigationButtonStyle,
+                          opacity: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1 ? 0.4 : 1,
+                          cursor: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1 ? "not-allowed" : "pointer"
+                        }}
+                        disabled={blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1}
+                        onClick={handleNextPage}
+                        title="Next Page"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  )}
+
                   <div style={blueprintTraceInlineStyle}>
                     <div>
                       <p style={blueprintCalibrationStatusStyle}>
@@ -6221,6 +6307,41 @@ const blueprintWorkspaceToolbarStyle: React.CSSProperties = {
   justifyContent: "space-between",
   gap: "12px",
   flexWrap: "wrap",
+};
+
+const blueprintNavigationContainerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "4px 8px",
+  background: "rgba(255,255,255,0.04)",
+  borderRadius: "10px",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const blueprintNavigationButtonStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "28px",
+  height: "28px",
+  borderRadius: "6px",
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(15,23,42,0.6)",
+  color: "#f8fafc",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+  padding: 0,
+};
+
+const blueprintNavigationPageLabelStyle: React.CSSProperties = {
+  fontSize: "11px",
+  fontWeight: 800,
+  color: "#94a3b8",
+  minWidth: "70px",
+  textAlign: "center",
+  textTransform: "uppercase",
+  letterSpacing: "0.02em",
 };
 
 const blueprintWorkspaceLabelStyle: React.CSSProperties = {
