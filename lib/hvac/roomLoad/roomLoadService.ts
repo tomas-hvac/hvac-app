@@ -1,3 +1,11 @@
+import { 
+  getOregonDesignTemperatures, 
+  getInsulationUFactor, 
+  getWindowUFactor, 
+  INDOOR_HEATING_TARGET,
+  INDOOR_COOLING_TARGET
+} from "../loadUtils";
+
 /**
  * Inputs required for a professional room-level Manual J load calculation.
  * Merges room-specific geometry with global project envelope settings.
@@ -60,7 +68,7 @@ export function calculateRoomLoad(input: RoomLoadInput): RoomLoadResult {
   const roomVolume = squareFeet * activeCeilingHeight;
 
   // 2. Design Temperatures (Scoped to Oregon region)
-  const designData = getOregonDesignTemps(globalSettings.oregonRegion);
+  const designData = getOregonDesignTemperatures(globalSettings.oregonRegion);
   const heatingDeltaT = designData.heatingDeltaT;
   const coolingDeltaT = designData.coolingDeltaT;
 
@@ -73,7 +81,7 @@ export function calculateRoomLoad(input: RoomLoadInput): RoomLoadResult {
     assumptions.push(`Estimated ${Math.round(linearExteriorFeet)} linear feet of exterior wall based on room area and wall count.`);
   }
 
-  const wallUFactor = getWallUFactor(insulationQuality);
+  const wallUFactor = getInsulationUFactor(insulationQuality);
   const wallHeatingLoad = exteriorWallArea * wallUFactor * heatingDeltaT;
   const wallCoolingLoad = exteriorWallArea * wallUFactor * coolingDeltaT;
 
@@ -83,7 +91,7 @@ export function calculateRoomLoad(input: RoomLoadInput): RoomLoadResult {
     assumptions.push("Assumed average window size of 15 sqft per unit.");
   }
   
-  const windowUFactor = 0.35; // Standard double-pane
+  const windowUFactor = getWindowUFactor("standard"); 
   const windowHeatingLoad = windowArea * windowUFactor * heatingDeltaT;
   
   // Solar gain adjusted by qualitative exposure
@@ -128,39 +136,4 @@ export function calculateRoomLoad(input: RoomLoadInput): RoomLoadResult {
     assumptions,
     warnings
   };
-}
-
-/**
- * HELPER: Regional design temperatures for Oregon
- */
-function getOregonDesignTemps(region: string) {
-  const indoorHeatingTarget = 70;
-  const indoorCoolingTarget = 75;
-  
-  const designByRegion: Record<string, { heatingOutdoor: number; coolingOutdoor: number }> = {
-    "Portland / Beaverton / West Oregon": { heatingOutdoor: 28, coolingOutdoor: 88 },
-    "Coast / Marine": { heatingOutdoor: 32, coolingOutdoor: 80 },
-    "Central Oregon": { heatingOutdoor: 15, coolingOutdoor: 93 },
-    "Eastern Oregon": { heatingOutdoor: 8, coolingOutdoor: 96 },
-    "Southern Oregon": { heatingOutdoor: 25, coolingOutdoor: 95 },
-  };
-
-  const design = designByRegion[region] || designByRegion["Portland / Beaverton / West Oregon"];
-  
-  return {
-    heatingDeltaT: Math.max(0, indoorHeatingTarget - design.heatingOutdoor),
-    coolingDeltaT: Math.max(0, design.coolingOutdoor - indoorCoolingTarget),
-  };
-}
-
-/**
- * HELPER: Wall U-Factors based on insulation quality
- */
-function getWallUFactor(quality: "poor" | "average" | "good"): number {
-  const map = {
-    poor: 0.22,    // No/low insulation
-    average: 0.12, // R-11/R-13
-    good: 0.06     // R-21+ with sealing
-  };
-  return map[quality] || map.average;
 }

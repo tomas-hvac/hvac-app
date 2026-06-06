@@ -2,6 +2,16 @@
 // Based on ACCA Manual J residential load calculation methodology
 // Formulas organized by calculation type for modularity and future expansion
 
+import { 
+  getOregonDesignTemperatures, 
+  getInsulationUFactor, 
+  getWindowUFactor, 
+  getWindowSHGC, 
+  getSolarGainFactor, 
+  getWindowOrientationFactor,
+  OregonDesignTemperatures
+} from "@/lib/hvac/loadUtils";
+
 export interface ManualJInputs {
   squareFeet: number;
   ceilingHeight: number;
@@ -60,13 +70,9 @@ export interface ManualJResults {
 
 type LoadType = "heating" | "cooling";
 
-type OregonDesignTemperatures = {
-  region: string;
-  heatingOutdoor: number;
-  coolingOutdoor: number;
-  heatingDeltaT: number;
-  coolingDeltaT: number;
-};
+function getEffectiveWindowArea(inputs: ManualJInputs): number {
+  return inputs.windowArea > 0 ? inputs.windowArea : inputs.windowCount * 15;
+}
 
 /**
  * 1. CONDUCTION LOAD CALCULATION
@@ -85,7 +91,7 @@ export function calculateConductionLoad(inputs: ManualJInputs, loadType: LoadTyp
   const ceilingArea = squareFeet;
   const totalArea = floorArea + wallArea + ceilingArea;
 
-  const designTemps = getOregonDesignTemperatures(inputs);
+  const designTemps = getOregonDesignTemperatures(inputs.oregonRegion);
   const deltaT = loadType === "heating" ? designTemps.heatingDeltaT : designTemps.coolingDeltaT;
 
   // Q = U × A × ΔT
@@ -129,7 +135,7 @@ export function calculateWindowConductionGain(inputs: ManualJInputs, loadType: L
   // Window U-factor based on efficiency rating
   const windowUFactor = getWindowUFactor(windowEfficiency, inputs.verifiedWindowUFactor);
 
-  const designTemps = getOregonDesignTemperatures(inputs);
+  const designTemps = getOregonDesignTemperatures(inputs.oregonRegion);
   const deltaT = loadType === "heating" ? designTemps.heatingDeltaT : designTemps.coolingDeltaT;
 
   // Q = Area × U × ΔT
@@ -149,7 +155,7 @@ export function calculateInfiltrationLoad(inputs: ManualJInputs, loadType: LoadT
   // Calculate infiltration rate (CFM) based on home age and size
   const cfm = calculateInfiltrationCFM(squareFeet, homeAge, infiltrationTightness);
 
-  const designTemps = getOregonDesignTemperatures(inputs);
+  const designTemps = getOregonDesignTemperatures(inputs.oregonRegion);
   const deltaT = loadType === "heating" ? designTemps.heatingDeltaT : designTemps.coolingDeltaT;
 
   // Q = CFM × ΔT × 1.08 (1.08 converts to BTU/hr)
@@ -279,7 +285,7 @@ export function calculateManualJLoad(inputs: ManualJInputs): ManualJResults {
   const existingSystemComparison = getExistingSystemComparison(inputs.existingSystemSize, tonnage.recommendedRange);
   const systemVerificationNotes = getSystemVerificationNotes(inputs, tonnage.recommendedRange);
   const loadBalanceExplanation = ` Heating load is ${heatingBTU.toLocaleString()} BTU, cooling load is ${coolingBTU.toLocaleString()} BTU, and tonnage is based on the larger ${dominantLoadType} load.`;
-  const designTemps = getOregonDesignTemperatures(inputs);
+  const designTemps = getOregonDesignTemperatures(inputs.oregonRegion);
   const designTemperatureNote = ` Oregon ${designTemps.region} design defaults use ${designTemps.heatingOutdoor}°F heating outdoor design and ${designTemps.coolingOutdoor}°F cooling outdoor design, with indoor targets of 70°F heating and 75°F cooling.`;
   const ductConditionNote = getDuctConditionNote(inputs.ductCondition);
   const comfortPriorityNote = getComfortPriorityNote(inputs.comfortPriority);
@@ -334,93 +340,6 @@ export function calculateManualJLoad(inputs: ManualJInputs): ManualJResults {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
-
-function getInsulationUFactor(quality: string): number {
-  // U-factor (BTU/hr·sq ft·°F) - lower is better insulation
-  const uFactors: { [key: string]: number } = {
-    "Excellent": 0.035, // R-28 equivalent
-    "Good": 0.045,      // R-22 equivalent
-    "Average": 0.055,   // R-18 equivalent
-    "Poor": 0.075,      // R-13 equivalent
-  };
-  return uFactors[quality] || 0.055;
-}
-
-function getOregonDesignTemperatures(inputs: ManualJInputs): OregonDesignTemperatures {
-  const indoorHeatingTarget = 70;
-  const indoorCoolingTarget = 75;
-  const designByRegion: { [key: string]: { region: string; heatingOutdoor: number; coolingOutdoor: number } } = {
-    "Portland / Beaverton / West Oregon": { region: "Portland / Beaverton / West Oregon", heatingOutdoor: 28, coolingOutdoor: 88 },
-    "Coast / Marine": { region: "Coast / Marine", heatingOutdoor: 32, coolingOutdoor: 80 },
-    "Central Oregon": { region: "Central Oregon", heatingOutdoor: 15, coolingOutdoor: 93 },
-    "Eastern Oregon": { region: "Eastern Oregon", heatingOutdoor: 8, coolingOutdoor: 96 },
-    "Southern Oregon": { region: "Southern Oregon", heatingOutdoor: 25, coolingOutdoor: 95 },
-  };
-  const design = designByRegion[inputs.oregonRegion] || designByRegion["Portland / Beaverton / West Oregon"];
-
-  return {
-    ...design,
-    heatingDeltaT: indoorHeatingTarget - design.heatingOutdoor,
-    coolingDeltaT: design.coolingOutdoor - indoorCoolingTarget,
-  };
-}
-
-function getWindowSHGC(efficiency: string, verifiedSHGC?: number): number {
-  // Use professional override if available
-  if (verifiedSHGC !== undefined && !isNaN(verifiedSHGC)) {
-    return verifiedSHGC;
-  }
-  // Solar Heat Gain Coefficient (0-1, higher = more solar gain)
-  const shgcValues: { [key: string]: number } = {
-    "Passive": 0.25,   // Triple glazed, low-E
-    "Low-E": 0.40,     // Double glazed, low-E
-    "Standard": 0.65,  // Double glazed, clear
-    "Drafty": 0.80,    // Single glazed or poor
-  };
-  return shgcValues[efficiency] || 0.65;
-}
-
-function getSolarGainFactor(zone: string): number {
-  // Solar gain factor accounting for latitude and orientation
-  const factors: { [key: string]: number } = {
-    "Zone 1": 180,  // High solar gain areas
-    "Zone 2": 160,
-    "Zone 3": 140,  // Moderate
-    "Zone 4": 120,
-    "Zone 5": 100,  // Lower solar gain
-  };
-  return factors[zone] || 140;
-}
-
-function getWindowOrientationFactor(orientation: string): number {
-  const factors: { [key: string]: number } = {
-    "North / Low Solar Gain": 0.9,
-    "East / Morning Sun": 1.03,
-    "South / Moderate Solar Gain": 1.08,
-    "West / High Afternoon Sun": 1.18,
-    "Mixed / Average Exposure": 1.0,
-  };
-  return factors[orientation] || 1.0;
-}
-
-function getEffectiveWindowArea(inputs: ManualJInputs): number {
-  return inputs.windowArea > 0 ? inputs.windowArea : inputs.windowCount * 15;
-}
-
-function getWindowUFactor(efficiency: string, verifiedUFactor?: number): number {
-  // Use professional override if available
-  if (verifiedUFactor !== undefined && !isNaN(verifiedUFactor)) {
-    return verifiedUFactor;
-  }
-  // Window U-factor (BTU/hr·sq ft·°F)
-  const uFactors: { [key: string]: number } = {
-    "Passive": 0.15,   // Triple glazed, low-E
-    "Low-E": 0.25,     // Double glazed, low-E
-    "Standard": 0.35,  // Double glazed, clear
-    "Drafty": 0.50,    // Single glazed
-  };
-  return uFactors[efficiency] || 0.35;
-}
 
 function calculateInfiltrationCFM(squareFeet: number, homeAge: string, infiltrationTightness: string): number {
   // Base infiltration rate (CFM) per square foot
