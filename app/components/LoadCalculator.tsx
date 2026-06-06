@@ -1786,12 +1786,22 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     };
   }, [tracedRoomsWithSqft]);
 
+  const totalTracedSqft = useMemo(() => {
+    return tracedRoomsWithSqft.reduce((sum, room) => sum + (room.squareFeet || 0), 0);
+  }, [tracedRoomsWithSqft]);
+
+  const isAreaVerified = tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === "calibrated";
+
+  const activeConditionedArea = useMemo(() => {
+    return isAreaVerified ? totalTracedSqft : (parseFloat(squareFeet) || 0);
+  }, [isAreaVerified, totalTracedSqft, squareFeet]);
+
   const result = useMemo(() => {
     // Use verified window data if takeoff is complete (all edges classified)
     const useVerifiedWindows = verifiedOpeningsMetrics.allEdgesClassified;
 
     const inputs: ManualJInputs = {
-      squareFeet: Math.max(0, parseInt(squareFeet, 10) || 0),
+      squareFeet: Math.max(0, Math.round(activeConditionedArea)),
       ceilingHeight: Math.max(6, parseInt(ceilingHeight, 10) || 6),
       insulationQuality,
       windowCount: useVerifiedWindows
@@ -2033,7 +2043,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     : `${tracedRoomsWithSqft.length} outline${tracedRoomsWithSqft.length === 1 ? "" : "s"} saved`;
 
   const snapshotSummary = useMemo(() => {
-    const sqft = Math.max(0, parseInt(squareFeet, 10) || 0);
+    const sqft = Math.max(0, Math.round(activeConditionedArea));
     const windows = Math.max(0, parseInt(windowCount, 10) || 0);
     const glassArea = Math.max(0, parseFloat(windowArea) || 0);
     const [minTon, maxTon] = result.recommendedTonnage
@@ -2780,7 +2790,7 @@ const averageTonnage = (minTon + maxTon) / 2;
               <p style={persistentSummaryLabelStyle}>Verified Takeoff</p>
               <p style={persistentSummaryValueStyle}>
                 <Layers size={14} color="#d4af37" />
-                {tracedRoomsWithSqft.length} Rooms · {Math.round(tracedRoomsWithSqft.reduce((sum, r) => sum + (r.squareFeet || 0), 0)).toLocaleString()} Sqft
+                {tracedRoomsWithSqft.length} Rooms · {Math.round(totalTracedSqft).toLocaleString()} Sqft
               </p>
             </div>
             <div style={persistentSummaryItemStyle}>
@@ -3547,11 +3557,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                     <p style={blueprintSummaryValueStyle}>{tracedRoomsWithSqft.length}</p>
                   </div>
                   <div style={blueprintSummaryItemStyle}>
-                    <p style={blueprintSummaryLabelStyle}>Verified Area</p>
-                    <p style={blueprintSummaryValueStyle}>
-                      {Math.round(tracedRoomsWithSqft.reduce((sum, r) => sum + (r.squareFeet || 0), 0)).toLocaleString()} Sqft
-                    </p>
+                   <p style={blueprintSummaryLabelStyle}>Verified Area</p>
+                   <p style={blueprintSummaryValueStyle}>
+                     {Math.round(totalTracedSqft).toLocaleString()} Sqft
+                   </p>
                   </div>
+
                   <div style={blueprintSummaryItemStyle}>
                     <p style={blueprintSummaryLabelStyle}>Manual J Ready</p>
                     <p style={{ ...blueprintSummaryValueStyle, color: (blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? '#22c55e' : '#64748b' }}>
@@ -4592,7 +4603,7 @@ const averageTonnage = (minTon + maxTon) / 2;
           </div>
 
           <ManualDPanel
-            squareFeet={squareFeet}
+            squareFeet={String(Math.round(activeConditionedArea))}
             blueprintRooms={blueprintRoomsForManualD}
             selectedBlueprintRoomId={selectedDetectedRoomId}
             onBlueprintRoomSelect={setSelectedDetectedRoomId}
@@ -4839,7 +4850,6 @@ const averageTonnage = (minTon + maxTon) / 2;
 
             {(() => {
               // 1. Engineering Confidence Logic
-              const isAreaVerified = tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === "calibrated";
               const isCeilingVerified = false; // Always assumed for now
               const isMaterialsVerified = isEnvelopeVerified;
               const hasWindowData = parseInt(windowCount, 10) > 0;
@@ -4871,7 +4881,7 @@ const averageTonnage = (minTon + maxTon) / 2;
               ].filter(Boolean).length;
 
               const missingCriticalRows = [
-                parseFloat(squareFeet) <= 0,
+                activeConditionedArea <= 0,
                 parseFloat(ceilingHeight) <= 6,
                 parseInt(windowCount, 10) <= 0,
                 !hasEnvelopeVerification,
@@ -4909,8 +4919,8 @@ const averageTonnage = (minTon + maxTon) / 2;
                     <p style={auditSectionTitleStyle}>Geometry Audit</p>
                     <div style={auditRowStyle}>
                       <p style={auditLabelStyle}>Conditioned Area</p>
-                      <p style={auditValueStyle}>{squareFeet.toLocaleString()} sqft</p>
-                      <p style={auditSourceStyle}>{tracedRoomsWithSqft.length > 0 ? "Blueprint Takeoff" : "Manual Entry"}</p>
+                      <p style={auditValueStyle}>{Math.round(activeConditionedArea).toLocaleString()} sqft</p>
+                      <p style={auditSourceStyle}>{isAreaVerified ? "Blueprint Takeoff" : "Manual Entry"}</p>
                       <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
                         {isAreaVerified ? "Verified" : "Assumed"}
                       </div>
@@ -4923,10 +4933,18 @@ const averageTonnage = (minTon + maxTon) / 2;
                     </div>
                     <div style={auditRowStyle}>
                       <p style={auditLabelStyle}>Calculated Volume</p>
-                      <p style={auditValueStyle}>{(parseFloat(squareFeet) * parseFloat(ceilingHeight)).toLocaleString()} cuft</p>
+                      <p style={auditValueStyle}>{(Math.round(activeConditionedArea) * parseFloat(ceilingHeight)).toLocaleString()} cuft</p>
                       <p style={auditSourceStyle}>Derived</p>
                       <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
                         {isAreaVerified ? "Verified" : "Assumed"}
+                      </div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Verified traced area source</p>
+                      <p style={auditValueStyle}>{Math.round(totalTracedSqft).toLocaleString()} sqft from {tracedRoomsWithSqft.length} rooms</p>
+                      <p style={auditSourceStyle}>Diagnostic</p>
+                      <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {isAreaVerified ? "Active" : "Bypassed"}
                       </div>
                     </div>
                   </div>

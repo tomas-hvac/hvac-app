@@ -43,7 +43,7 @@ export function getProjectHealthItems(state: ProjectEngineState): HealthItem[] {
   });
 
   // 4. Geometry
-  const missingArea = project.tracedRooms.some(r => !r.squareFeet);
+  const missingArea = project.tracedRooms.some(r => r.squareFeet === null);
   items.push({
     id: "geometry",
     label: "Geometry Integrity",
