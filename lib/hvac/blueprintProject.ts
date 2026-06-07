@@ -75,6 +75,7 @@ export type BlueprintProject = {
     dataUrl?: string; // Optional, for local persistence if needed
   } | null;
   blueprintDocument?: BlueprintDocument | null;
+  blueprintOverlaySize?: { widthPx: number; heightPx: number };
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
@@ -119,6 +120,7 @@ export type BlueprintProjectSnapshotInput = {
   name: string;
   blueprintImage: BlueprintProject["blueprintImage"];
   blueprintDocument?: BlueprintDocument | null;
+  blueprintOverlaySize?: { widthPx: number; heightPx: number };
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
@@ -132,6 +134,8 @@ export function createBlueprintProjectSnapshot(input: BlueprintProjectSnapshotIn
   return {
     ...project,
     blueprintImage: input.blueprintImage,
+    blueprintDocument: input.blueprintDocument,
+    blueprintOverlaySize: input.blueprintOverlaySize,
     calibration: input.calibration,
     tracedRooms: input.tracedRooms,
     envelopeSettings: input.envelopeSettings,

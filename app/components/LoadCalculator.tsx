@@ -897,6 +897,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
             }
           : null,
         blueprintDocument: updatedDocument,
+        blueprintOverlaySize: blueprintOverlaySize,
         calibration: blueprintCalibration,
         tracedRooms: blueprintRoomTrace.roomOutlines,
         envelopeSettings: {
@@ -963,6 +964,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       
       // Load document container
       setBlueprintDocument(project.blueprintDocument || null);
+      
+      // Hydrate overlay size for area calculation stability
+      if (project.blueprintOverlaySize) {
+        setBlueprintOverlaySize(project.blueprintOverlaySize);
+      }
       
       // Hydrate root-level active state from the active page (or fall back to root)
       const activePage = project.blueprintDocument?.pages.find(p => p.id === project.blueprintDocument?.activePageId);
@@ -1031,6 +1037,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
               }
             : null,
           blueprintDocument: updatedDocument,
+          blueprintOverlaySize: blueprintOverlaySize,
           calibration: blueprintCalibration,
           tracedRooms: blueprintRoomTrace.roomOutlines,
           envelopeSettings: {
@@ -5113,6 +5120,16 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <p style={auditSourceStyle}>Document Container</p>
                       <div style={blueprintDocument ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
                         {blueprintDocument ? "Verified" : "Missing"}
+                      </div>
+                    </div>
+                    <div style={auditRowStyle}>
+                      <p style={auditLabelStyle}>Reference Dimensions</p>
+                      <p style={auditValueStyle}>
+                        {blueprintOverlaySize.widthPx > 0 ? `${Math.round(blueprintOverlaySize.widthPx)} x ${Math.round(blueprintOverlaySize.heightPx)} px` : "Pending render"}
+                      </p>
+                      <p style={auditSourceStyle}>Viewport Persistence</p>
+                      <div style={blueprintOverlaySize.widthPx > 0 ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                        {blueprintOverlaySize.widthPx > 0 ? "Restored" : "Waiting"}
                       </div>
                     </div>
                   </div>
