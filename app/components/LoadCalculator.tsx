@@ -71,7 +71,7 @@ import {
   createBlueprintTechnicianReport,
   type BlueprintTechnicianReport,
 } from "@/lib/hvac/blueprintReport";
-import { saveBlueprintAsset } from "@/lib/hvac/blueprintAssetStorage";
+import { saveBlueprintAsset, getBlueprintAsset } from "@/lib/hvac/blueprintAssetStorage";
 import { loadPDFDocument, renderPDFPageToDataURL } from "@/lib/hvac/pdfRenderingService";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
@@ -953,7 +953,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     }
   };
 
-  const handleLoadV3Project = (projectId: string) => {
+  const handleLoadV3Project = async (projectId: string) => {
     try {
       let project = loadBlueprintProjectFromLocalStorage(projectId);
       if (!project) {
@@ -967,21 +967,45 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       setActiveV3ProjectId(project.id);
       setLoadedEngineMetadata(project.engineMetadata);
       setV3ProjectName(project.name);
-      
+
       // Load document container
       setBlueprintDocument(project.blueprintDocument || null);
-      
+
       // Hydrate overlay size for area calculation stability
       if (project.blueprintOverlaySize) {
         setBlueprintOverlaySize(project.blueprintOverlaySize);
       }
-      
+
       // Hydrate root-level active state from the active page (or fall back to root)
       const activePage = project.blueprintDocument?.pages.find(p => p.id === project.blueprintDocument?.activePageId);
-      
+
       setBlueprintCalibration(activePage?.calibration || project.calibration);
-      
-      if (project.blueprintImage?.dataUrl) {
+
+      if (project.blueprintDocument?.assetId) {
+        // PDF-backed project: Hydrate visually from IndexedDB
+        try {
+          setProjectActionMessage("Loading PDF asset...");
+          const asset = await getBlueprintAsset(project.blueprintDocument.assetId);
+          if (asset) {
+            const pdf = await loadPDFDocument(asset.blob);
+            const pageIndex = project.blueprintDocument.pages.findIndex(p => p.id === project.blueprintDocument?.activePageId);
+            // Render the saved active page
+            const dataUrl = await renderPDFPageToDataURL(pdf, Math.max(1, pageIndex + 1));
+
+            setIsBlueprintRestoring(true);
+            setPendingV3Rooms(activePage?.tracedRooms || project.tracedRooms);
+            setBlueprintPreviewUrl(dataUrl);
+            setBlueprintFileName(project.blueprintImage?.name || project.name);
+            setProjectActionMessage(`PDF project loaded (page ${pageIndex + 1})`);
+          } else {
+            setProjectActionMessage("PDF source file is missing. Re-upload the blueprint set.");
+          }
+        } catch (e) {
+          console.error("Failed to hydrate PDF project:", e);
+          setProjectActionMessage("Failed to load PDF blueprint.");
+        }
+      } else if (project.blueprintImage?.dataUrl) {
+        // Standard image-backed project
         setIsBlueprintRestoring(true);
         setPendingV3Rooms(activePage?.tracedRooms || project.tracedRooms);
         setBlueprintPreviewUrl(project.blueprintImage.dataUrl);
@@ -995,7 +1019,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
       setInsulationQuality(project.envelopeSettings.insulationQuality);
       setOregonRegion(project.envelopeSettings.oregonRegion);
-      
+
       if (project.manualDProjectState) {
         setLoadedManualDProjectState(project.manualDProjectState);
       }
@@ -1008,7 +1032,6 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       setV3SaveStatus("Load failed");
     }
   };
-
   useEffect(() => {
     if (!activeV3ProjectId) return;
 
@@ -1419,7 +1442,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
-  const handlePageSwitch = (targetPageIndex: number) => {
+  const handlePageSwitch = async (targetPageIndex: number) => {
     if (!blueprintDocument) return;
     if (targetPageIndex < 0 || targetPageIndex >= blueprintDocument.pages.length) return;
 
@@ -1452,6 +1475,31 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       isTracing: false,
       draftPoints: [],
     }));
+
+    // 3. Handle PDF rendering if applicable
+    if (blueprintDocument.assetId) {
+      try {
+        setProjectActionMessage(`Rendering PDF page ${targetPageIndex + 1} of ${blueprintDocument.pages.length}...`);
+        
+        const asset = await getBlueprintAsset(blueprintDocument.assetId);
+        if (!asset) {
+          setProjectActionMessage("PDF source file is missing. Re-upload the blueprint set.");
+          return;
+        }
+
+        const pdf = await loadPDFDocument(asset.blob);
+        const dataUrl = await renderPDFPageToDataURL(pdf, targetPageIndex + 1);
+        
+        setBlueprintPreviewUrl(dataUrl);
+        // Reset overlay size to ensure ResizeObserver triggers for the new page aspect ratio
+        setBlueprintOverlaySize({ widthPx: 0, heightPx: 0 });
+        
+        setProjectActionMessage(`PDF page ${targetPageIndex + 1} loaded.`);
+      } catch (error) {
+        console.error("Failed to render PDF page:", error);
+        setProjectActionMessage("Failed to render PDF page.");
+      }
+    }
 
     setDetectedRoomActionMessage(`Switched to ${targetPage.label}`);
   };
