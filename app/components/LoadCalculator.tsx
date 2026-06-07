@@ -2014,6 +2014,55 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setBlueprintZoom(1.0);
   };
 
+  const jumpToBuilding = () => {
+    if (!activeFocusArea) {
+      setProjectActionMessage("Set a focus area first.");
+      return;
+    }
+
+    const viewport = blueprintViewportRef.current;
+    if (!viewport || !blueprintOverlaySize.widthPx) return;
+
+    // 1. Calculate optimal zoom
+    // focusArea is in normalized percentages (0-100)
+    // We want to fit focus region into viewport at ~85% of its size
+    const focusWidthPx = (activeFocusArea.width / 100) * blueprintOverlaySize.widthPx;
+    const focusHeightPx = (activeFocusArea.height / 100) * blueprintOverlaySize.heightPx;
+
+    const zoomToFitWidth = (viewport.clientWidth * 0.85) / focusWidthPx;
+    const zoomToFitHeight = (viewport.clientHeight * 0.85) / focusHeightPx;
+    
+    // Choose the smaller zoom to ensure entire area fits
+    const targetZoom = Math.min(zoomToFitWidth, zoomToFitHeight);
+    const clampedZoom = Math.max(0.2, Math.min(5.0, Number(targetZoom.toFixed(2))));
+    
+    setBlueprintZoom(clampedZoom);
+
+    // 2. Calculate center position and scroll
+    // Center point in base image pixels:
+    const centerX = ((activeFocusArea.x + activeFocusArea.width / 2) / 100) * blueprintOverlaySize.widthPx;
+    const centerY = ((activeFocusArea.y + activeFocusArea.height / 2) / 100) * blueprintOverlaySize.heightPx;
+
+    // Center point in scaled display pixels:
+    const scaledCenterX = centerX * clampedZoom;
+    const scaledCenterY = centerY * clampedZoom;
+
+    // Scroll position to center that point:
+    const scrollLeft = scaledCenterX - viewport.clientWidth / 2;
+    const scrollTop = scaledCenterY - viewport.clientHeight / 2;
+
+    // Use a small timeout to ensure state update has propagated to the DOM transform
+    setTimeout(() => {
+      viewport.scrollTo({
+        left: Math.max(0, scrollLeft),
+        top: Math.max(0, scrollTop),
+        behavior: "smooth"
+      });
+    }, 100);
+
+    setProjectActionMessage("Jumped to building footprint.");
+  };
+
   const confirmedBlueprintPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
 
   const tracedRoomsWithSqft = useMemo(() => {
@@ -3978,17 +4027,27 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <Target size={16} /> {isFocusAreaMode ? "Cancel Focus" : "Set Focus"}
                         </button>
                         {activeFocusArea && (
-                          <button 
-                            type="button" 
-                            style={commandBarButtonStyle} 
-                            onClick={() => {
-                              setActiveFocusArea(null);
-                              setProjectActionMessage("Focus area cleared.");
-                            }}
-                            title="Clear Focus Area"
-                          >
-                            <X size={16} /> Clear
-                          </button>
+                          <>
+                            <button 
+                              type="button" 
+                              style={commandBarButtonStyle} 
+                              onClick={jumpToBuilding}
+                              title="Zoom and center on building footprint"
+                            >
+                              <Square size={16} /> Jump To Building
+                            </button>
+                            <button 
+                              type="button" 
+                              style={commandBarButtonStyle} 
+                              onClick={() => {
+                                setActiveFocusArea(null);
+                                setProjectActionMessage("Focus area cleared.");
+                              }}
+                              title="Clear Focus Area"
+                            >
+                              <X size={16} /> Clear
+                            </button>
+                          </>
                         )}
                       </div>
 
