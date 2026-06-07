@@ -991,7 +991,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       const activePage = project.blueprintDocument?.pages.find(p => p.id === project.blueprintDocument?.activePageId);
 
       setBlueprintCalibration(activePage?.calibration || project.calibration);
-
+      setActiveFocusArea(activePage?.focusArea || null);
       if (project.blueprintDocument?.assetId) {
         // PDF-backed project: Hydrate visually from IndexedDB
         try {
@@ -1595,7 +1595,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     
     setFocusAreaStartPoint(null);
     setIsFocusAreaMode(false);
-    setProjectActionMessage("Focus area set.");
+    setProjectActionMessage("Focus area saved.");
   };
 
   const moveDraggedBlueprintTracePoint = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -4152,7 +4152,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                             // During drawing, make it more obvious
                             background: isFocusAreaMode ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.05)",
                           }}
-                        />
+                        >
+                          <span style={blueprintFocusAreaLabelStyle}>Focus Area</span>
+                        </div>
                       )}
 
                       {tracedRoomsWithSqft.map((outline) => (
@@ -6723,6 +6725,20 @@ const blueprintFocusAreaStyle: React.CSSProperties = {
   borderRadius: "4px",
   pointerEvents: "none",
   zIndex: 15,
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "flex-start",
+};
+
+const blueprintFocusAreaLabelStyle: React.CSSProperties = {
+  background: "#d4af37",
+  color: "#1e293b",
+  fontSize: "9px",
+  fontWeight: 900,
+  padding: "2px 6px",
+  borderRadius: "0 0 4px 0",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
 };
 
 const blueprintCalibrationButtonStyle: React.CSSProperties = {
