@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Maximize2, Minimize2, Target, Square, RotateCcw } from "lucide-react";
 import { calculateManualJLoad, type ManualJResults } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -598,6 +598,9 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
   const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
   const [isBlueprintFocusMode, setIsBlueprintFocusMode] = useState(false);
+  const [isFocusAreaMode, setIsFocusAreaMode] = useState(false);
+  const [activeFocusArea, setActiveFocusArea] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+  const [focusAreaStartPoint, setFocusAreaStartPoint] = useState<{ x: number, y: number } | null>(null);
   const [isBlueprintRestoring, setIsBlueprintRestoring] = useState(false);
   const [pendingV3Rooms, setPendingV3Rooms] = useState<BlueprintRoomOutline[] | null>(null);
   const [v3ReportPreview, setV3ReportPreview] = useState<BlueprintTechnicianReport | null>(null);
@@ -888,7 +891,12 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
           ...updatedDocument,
           pages: updatedDocument.pages.map(page => 
             page.id === updatedDocument?.activePageId 
-              ? { ...page, calibration: blueprintCalibration, tracedRooms: blueprintRoomTrace.roomOutlines }
+              ? { 
+                  ...page, 
+                  calibration: blueprintCalibration, 
+                  tracedRooms: blueprintRoomTrace.roomOutlines,
+                  focusArea: activeFocusArea || undefined,
+                }
               : page
           )
         };
@@ -1051,7 +1059,12 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
             ...updatedDocument,
             pages: updatedDocument.pages.map(page => 
               page.id === updatedDocument?.activePageId 
-                ? { ...page, calibration: blueprintCalibration, tracedRooms: blueprintRoomTrace.roomOutlines }
+                ? { 
+                    ...page, 
+                    calibration: blueprintCalibration, 
+                    tracedRooms: blueprintRoomTrace.roomOutlines,
+                    focusArea: activeFocusArea || undefined,
+                  }
                 : page
             )
           };
@@ -1463,6 +1476,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
                 ...page,
                 calibration: blueprintCalibration,
                 tracedRooms: blueprintRoomTrace.roomOutlines,
+                focusArea: activeFocusArea || undefined,
               }
             : page
         ),
@@ -1472,6 +1486,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
     // 2. Hydrate root-level state from the target page
     setBlueprintCalibration(targetPage.calibration || createDefaultBlueprintCalibrationState());
+    setActiveFocusArea(targetPage.focusArea || null);
     setBlueprintRoomTrace((prev) => ({
       ...prev,
       roomOutlines: targetPage.tracedRooms || [],
@@ -1552,18 +1567,54 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     };
   };
 
+  const handleFocusAreaPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isFocusAreaMode) return;
+    const point = getBlueprintOverlayPointFromPointer(event);
+    if (!point) return;
+    
+    setFocusAreaStartPoint({ x: point.xPercent, y: point.yPercent });
+    setActiveFocusArea({ x: point.xPercent, y: point.yPercent, width: 0, height: 0 });
+    suppressNextBlueprintOverlayClickRef.current = true;
+  };
+
+  const handleFocusAreaPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isFocusAreaMode || !focusAreaStartPoint) return;
+    const point = getBlueprintOverlayPointFromPointer(event);
+    if (!point) return;
+
+    const x = Math.min(focusAreaStartPoint.x, point.xPercent);
+    const y = Math.min(focusAreaStartPoint.y, point.yPercent);
+    const width = Math.abs(point.xPercent - focusAreaStartPoint.x);
+    const height = Math.abs(point.yPercent - focusAreaStartPoint.y);
+
+    setActiveFocusArea({ x, y, width, height });
+  };
+
+  const handleFocusAreaPointerUp = () => {
+    if (!isFocusAreaMode || !focusAreaStartPoint) return;
+    
+    setFocusAreaStartPoint(null);
+    setIsFocusAreaMode(false);
+    setProjectActionMessage("Focus area set.");
+  };
+
   const moveDraggedBlueprintTracePoint = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (draggingTracePointIndex === null) return;
+    if (draggingTracePointIndex !== null) {
+      const nextPoint = getBlueprintOverlayPointFromPointer(event);
+      if (!nextPoint) return;
 
-    const nextPoint = getBlueprintOverlayPointFromPointer(event);
-    if (!nextPoint) return;
-
-    setBlueprintRoomTrace((currentTrace) =>
-      updateBlueprintRoomTracePoint(currentTrace, draggingTracePointIndex, nextPoint)
-    );
+      setBlueprintRoomTrace((currentTrace) =>
+        updateBlueprintRoomTracePoint(currentTrace, draggingTracePointIndex, nextPoint)
+      );
+    } else if (isFocusAreaMode && focusAreaStartPoint) {
+      handleFocusAreaPointerMove(event);
+    }
   };
 
   const finishDraggingBlueprintTracePoint = () => {
+    if (isFocusAreaMode && focusAreaStartPoint) {
+      handleFocusAreaPointerUp();
+    }
     setDraggingTracePointIndex(null);
   };
 
@@ -1574,6 +1625,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     }
 
     if (draggingTracePointIndex !== null) return;
+    if (isFocusAreaMode) return;
 
     const overlayBounds = event.currentTarget.getBoundingClientRect();
     let xPercent = Math.min(
@@ -3916,6 +3968,33 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={commandBarGroupStyle}>
                         <button 
                           type="button" 
+                          style={isFocusAreaMode ? commandBarButtonActiveStyle : commandBarButtonStyle} 
+                          onClick={() => {
+                            setIsFocusAreaMode(!isFocusAreaMode);
+                            setBlueprintWorkspaceMode("manual-trace"); // Ensure we can click the overlay
+                          }}
+                          title={isFocusAreaMode ? "Cancel Set Focus" : "Set Focus Area"}
+                        >
+                          <Target size={16} /> {isFocusAreaMode ? "Cancel Focus" : "Set Focus"}
+                        </button>
+                        {activeFocusArea && (
+                          <button 
+                            type="button" 
+                            style={commandBarButtonStyle} 
+                            onClick={() => {
+                              setActiveFocusArea(null);
+                              setProjectActionMessage("Focus area cleared.");
+                            }}
+                            title="Clear Focus Area"
+                          >
+                            <X size={16} /> Clear
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={commandBarGroupStyle}>
+                        <button 
+                          type="button" 
                           style={isBlueprintFocusMode ? commandBarButtonActiveStyle : commandBarButtonStyle} 
                           onClick={() => setIsBlueprintFocusMode(!isBlueprintFocusMode)}
                           title={isBlueprintFocusMode ? "Show Panels" : "Focus Blueprint"}
@@ -3927,7 +4006,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <Maximize2 size={16} /> Fit Width
                         </button>
                         <button type="button" style={commandBarButtonStyle} onClick={resetBlueprintView}>
-                          <Minimize2 size={16} /> Reset
+                          <RotateCcw size={16} /> Reset
                         </button>
                         <div style={{ ...commandBarGroupStyle, marginLeft: "4px" }}>
                           <button type="button" style={{ ...commandBarButtonStyle, padding: "0 12px" }} onClick={zoomBlueprintOut}>-</button>
@@ -4056,10 +4135,26 @@ const averageTonnage = (minTon + maxTon) / 2;
                       }}
                       aria-label="Blueprint calibration point selection overlay"
                       onClick={selectBlueprintCalibrationPointFromPreview}
+                      onPointerDown={handleFocusAreaPointerDown}
                       onPointerMove={moveDraggedBlueprintTracePoint}
                       onPointerUp={finishDraggingBlueprintTracePoint}
                       onPointerLeave={finishDraggingBlueprintTracePoint}
                     >
+                      {/* Active Focus Area Visual */}
+                      {activeFocusArea && (
+                        <div
+                          style={{
+                            ...blueprintFocusAreaStyle,
+                            left: `${activeFocusArea.x}%`,
+                            top: `${activeFocusArea.y}%`,
+                            width: `${activeFocusArea.width}%`,
+                            height: `${activeFocusArea.height}%`,
+                            // During drawing, make it more obvious
+                            background: isFocusAreaMode ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.05)",
+                          }}
+                        />
+                      )}
+
                       {tracedRoomsWithSqft.map((outline) => (
                         <svg
                           key={outline.id}
@@ -6619,6 +6714,15 @@ const blueprintCalibrationFieldMeasurementStyle: React.CSSProperties = {
   fontSize: "10px",
   fontWeight: 800,
   whiteSpace: "nowrap",
+};
+
+const blueprintFocusAreaStyle: React.CSSProperties = {
+  position: "absolute",
+  border: "2px dashed #d4af37",
+  background: "rgba(212,175,55,0.08)",
+  borderRadius: "4px",
+  pointerEvents: "none",
+  zIndex: 15,
 };
 
 const blueprintCalibrationButtonStyle: React.CSSProperties = {

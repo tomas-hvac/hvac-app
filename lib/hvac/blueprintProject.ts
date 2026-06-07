@@ -53,6 +53,12 @@ export type BlueprintPage = {
   image?: BlueprintPageImage;
   calibration?: BlueprintCalibrationState | null;
   tracedRooms?: BlueprintRoomOutline[];
+  focusArea?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 };
 
 export type BlueprintDocument = {
