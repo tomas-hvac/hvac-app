@@ -58,6 +58,7 @@ export type BlueprintPage = {
 export type BlueprintDocument = {
   id: string;
   name: string;
+  assetId?: string; // Reference to IndexedDB large asset (original PDF/image)
   pages: BlueprintPage[];
   activePageId?: string | null;
 };

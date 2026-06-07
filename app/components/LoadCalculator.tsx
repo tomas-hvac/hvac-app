@@ -71,6 +71,8 @@ import {
   createBlueprintTechnicianReport,
   type BlueprintTechnicianReport,
 } from "@/lib/hvac/blueprintReport";
+import { saveBlueprintAsset } from "@/lib/hvac/blueprintAssetStorage";
+import { loadPDFDocument, renderPDFPageToDataURL } from "@/lib/hvac/pdfRenderingService";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
 import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
@@ -774,7 +776,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   useEffect(() => {
     if (!blueprintFile || !blueprintFile.type.startsWith("image/")) {
-      setBlueprintPreviewUrl("");
+      // Do not clear previewUrl if it's a PDF (processed async)
+      const isPdf = blueprintFile?.type === "application/pdf" || blueprintFile?.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) {
+        setBlueprintPreviewUrl("");
+      }
       return;
     }
 
@@ -1176,17 +1182,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     ]);
   };
 
-  const handleBlueprintFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBlueprintFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
-    // Stage 1A: PDF Upload Guard
-    // Detect PDF and prevent it from clearing existing work or breaking the UI
-    if (selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith(".pdf")) {
-      window.alert("PDF plan sets are detected, but multi-page PDF rendering is not enabled yet. For now, upload a PNG or JPG screenshot of the floor plan page.");
-      event.target.value = "";
-      return;
-    }
+    const isPdf = selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith(".pdf");
 
     const hasWork = blueprintCalibration.status !== "uncalibrated" || blueprintRoomTrace.roomOutlines.length > 0;
     if (
@@ -1201,9 +1201,67 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
     setBlueprintFile(selectedFile ?? null);
     setBlueprintFileName(selectedFile?.name ?? "");
+    setBlueprintZoom(1);
+    setBlueprintCalibration(createDefaultBlueprintCalibrationState());
+    setBlueprintRoomTrace(createDefaultBlueprintRoomTraceState());
+    setBlueprintWorkspaceMode("manual-trace");
+    setSelectedDetectedRoomId(null);
+    setSelectedBlueprintBoundaryEdge(null);
+    setBlueprintDetectionPipeline({
+      mode: "preview",
+      status: "mock",
+      sourceFileName: selectedFile?.name ?? "",
+      rooms: [],
+    });
     
-    // Initialize one-page BlueprintDocument for single-image uploads
-    if (selectedFile) {
+    if (isPdf) {
+      try {
+        setProjectActionMessage("Processing PDF plan set...");
+        const assetId = `pdf-${Date.now()}`;
+        
+        await saveBlueprintAsset(assetId, selectedFile, {
+          name: selectedFile.name,
+          type: selectedFile.type,
+          size: selectedFile.size,
+          createdAt: new Date().toISOString(),
+        });
+
+        const pdf = await loadPDFDocument(selectedFile);
+        const totalPages = pdf.numPages;
+        
+        const pages: BlueprintPage[] = [];
+        for (let i = 1; i <= totalPages; i++) {
+          pages.push({
+            id: `page-${Date.now()}-${i}`,
+            pageNumber: i,
+            label: `Page ${i}`,
+            sheetType: "unknown",
+            calibration: createDefaultBlueprintCalibrationState(),
+            tracedRooms: [],
+          });
+        }
+
+        const doc: BlueprintDocument = {
+          id: `doc-${Date.now()}`,
+          name: selectedFile.name,
+          assetId,
+          pages,
+          activePageId: pages[0].id,
+        };
+
+        setBlueprintDocument(doc);
+        
+        // Render Page 1
+        const dataUrl = await renderPDFPageToDataURL(pdf, 1);
+        setBlueprintPreviewUrl(dataUrl);
+        setProjectActionMessage(`PDF blueprint set loaded: ${totalPages} pages, viewing page 1`);
+        setDetectedRoomActionMessage("PDF uploaded. Viewing Page 1. Trace manually or run auto-detect preview.");
+      } catch (error) {
+        console.error("PDF processing failed:", error);
+        setProjectActionMessage("Failed to process PDF blueprint.");
+      }
+    } else {
+      // Initialize one-page BlueprintDocument for single-image uploads
       const newPage: BlueprintPage = {
         id: `page-${Date.now()}-0`,
         pageNumber: 1,
@@ -1223,24 +1281,9 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
         pages: [newPage],
         activePageId: newPage.id,
       });
-    } else {
-      setBlueprintDocument(null);
+      setProjectActionMessage("Image blueprint loaded.");
+      setDetectedRoomActionMessage("Blueprint uploaded. Trace manually or run auto-detect preview.");
     }
-
-    setBlueprintZoom(1);
-    setBlueprintCalibration(createDefaultBlueprintCalibrationState());
-    setBlueprintRoomTrace(createDefaultBlueprintRoomTraceState());
-    setBlueprintWorkspaceMode("manual-trace");
-    setSelectedDetectedRoomId(null);
-    setSelectedBlueprintBoundaryEdge(null);
-    setBlueprintDetectionPipeline({
-      mode: "preview",
-      status: "mock",
-      sourceFileName: selectedFile?.name ?? "",
-      rooms: [],
-    });
-    setDetectedRoomActionMessage("Blueprint uploaded. Trace manually or run auto-detect preview.");
-    setEnvelopeSuggestions(selectedFile ? mockEnvelopeSuggestions : undefined);
   };
 
   const runBlueprintAutoDetectPreview = () => {
@@ -5116,6 +5159,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                         {blueprintDocument && blueprintDocument.pages.length > 0 && (
                           ` (page ${blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of ${blueprintDocument.pages.length})`
                         )}
+                        {blueprintDocument?.assetId?.startsWith('pdf-') && " [PDF source]"}
                       </p>
                       <p style={auditSourceStyle}>Document Container</p>
                       <div style={blueprintDocument ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
