@@ -1995,11 +1995,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const zoomBlueprintIn = () => {
-    setBlueprintZoom((currentZoom) => Math.min(5.0, Number((currentZoom + 0.25).toFixed(2))));
+    setBlueprintZoom((currentZoom) => Math.min(5.0, Number((currentZoom + 0.10).toFixed(2))));
   };
 
   const zoomBlueprintOut = () => {
-    setBlueprintZoom((currentZoom) => Math.max(0.2, Number((currentZoom - 0.25).toFixed(2))));
+    setBlueprintZoom((currentZoom) => Math.max(0.2, Number((currentZoom - 0.10).toFixed(2))));
   };
 
   const fitBlueprintToWidth = () => {
