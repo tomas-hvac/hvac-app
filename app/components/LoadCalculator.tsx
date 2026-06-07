@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { calculateManualJLoad, type ManualJResults } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -524,8 +524,10 @@ const ProjectIssuesBadge = ({ onClick }: { onClick: () => void }) => {
 export default function LoadCalculator({ onResultChange }: { onResultChange?: (result: ManualJResults) => void }) {
   const blueprintFileInputRef = useRef<HTMLInputElement | null>(null);
   const blueprintPreviewRef = useRef<HTMLDivElement | null>(null);
+  const blueprintViewportRef = useRef<HTMLDivElement | null>(null);
   const blueprintOverlayRef = useRef<HTMLDivElement | null>(null);
   const blueprintImageRef = useRef<HTMLImageElement | null>(null);
+
   const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
   const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const suppressNextBlueprintOverlayClickRef = useRef(false);
@@ -595,6 +597,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [v3SaveStatus, setV3SaveStatus] = useState("");
   const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
   const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
+  const [isBlueprintFocusMode, setIsBlueprintFocusMode] = useState(false);
   const [isBlueprintRestoring, setIsBlueprintRestoring] = useState(false);
   const [pendingV3Rooms, setPendingV3Rooms] = useState<BlueprintRoomOutline[] | null>(null);
   const [v3ReportPreview, setV3ReportPreview] = useState<BlueprintTechnicianReport | null>(null);
@@ -1939,11 +1942,24 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const zoomBlueprintIn = () => {
-    setBlueprintZoom((currentZoom) => Math.min(2.5, Number((currentZoom + 0.25).toFixed(2))));
+    setBlueprintZoom((currentZoom) => Math.min(5.0, Number((currentZoom + 0.25).toFixed(2))));
   };
 
   const zoomBlueprintOut = () => {
-    setBlueprintZoom((currentZoom) => Math.max(0.5, Number((currentZoom - 0.25).toFixed(2))));
+    setBlueprintZoom((currentZoom) => Math.max(0.2, Number((currentZoom - 0.25).toFixed(2))));
+  };
+
+  const fitBlueprintToWidth = () => {
+    const viewport = blueprintViewportRef.current;
+    if (!viewport || !blueprintOverlaySize.widthPx) return;
+    
+    // Calculate zoom to fit width with a 5% margin
+    const targetZoom = (viewport.clientWidth * 0.95) / blueprintOverlaySize.widthPx;
+    setBlueprintZoom(Math.max(0.2, Math.min(5.0, Number(targetZoom.toFixed(2)))));
+  };
+
+  const resetBlueprintView = () => {
+    setBlueprintZoom(1.0);
   };
 
   const confirmedBlueprintPixelsPerFoot = getConfirmedBlueprintPixelsPerFoot(blueprintCalibration);
@@ -2621,6 +2637,59 @@ const averageTonnage = (minTon + maxTon) / 2;
           @keyframes shimmer {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
+          }
+
+          /* Blueprint Focus Mode - Reuses responsive logic for intentional focus */
+          .blueprint-drafting-workspace.focus-mode {
+            display: flex !important;
+            position: relative !important;
+            min-height: 70vh !important;
+            overflow: hidden !important;
+            border-radius: 22px !important;
+          }
+
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-main {
+            flex: 1 !important;
+            width: 100% !important;
+          }
+
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-sidebar,
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-inspector {
+            position: absolute !important;
+            top: 0 !important;
+            height: 100% !important;
+            z-index: 40 !important;
+            width: 60px !important;
+            overflow: hidden !important;
+            transition: width 0.3s ease !important;
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            border-radius: 12px !important;
+          }
+
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-sidebar {
+            left: 0 !important;
+          }
+
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-inspector {
+            right: 0 !important;
+          }
+
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-sidebar:hover,
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-sidebar:focus-within,
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-sidebar.expanded,
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-inspector:hover,
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-inspector:focus-within,
+          .blueprint-drafting-workspace.focus-mode .blueprint-workspace-inspector.expanded {
+            width: 320px !important;
+            z-index: 50 !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+            overflow-y: auto !important;
+          }
+
+          .blueprint-drafting-workspace.focus-mode .tablet-only-toggle {
+            display: flex !important;
           }
 
           @media (max-width: 1024px) {
@@ -3633,7 +3702,7 @@ const averageTonnage = (minTon + maxTon) / 2;
               display: activeTechnicianSection === "manual-room-takeoff" ? "flex" : "none",
             }}
           >
-            <div className="blueprint-drafting-workspace" style={blueprintDraftingWorkspaceStyle}>
+            <div className={`blueprint-drafting-workspace ${isBlueprintFocusMode ? 'focus-mode' : ''}`} style={blueprintDraftingWorkspaceStyle}>
               <aside 
                 className={`blueprint-workspace-sidebar ${isLeftPanelExpanded ? 'expanded' : ''}`} 
                 style={blueprintWorkspaceSidebarStyle}
@@ -3791,110 +3860,136 @@ const averageTonnage = (minTon + maxTon) / 2;
 
               <section className="blueprint-workspace-main" style={blueprintWorkspaceMainStyle}>
                 {blueprintFile ? (
-                  <div ref={blueprintPreviewRef} tabIndex={-1} style={blueprintWorkspaceStyle}>
-                <div style={blueprintWorkspaceToolbarStyle}>
-                  <div>
-                    <p style={blueprintWorkspaceLabelStyle}>Review Preview</p>
-                    <p style={blueprintWorkspaceMetaStyle}>{Math.round(blueprintZoom * 100)}% zoom</p>
-                    <p style={blueprintWorkspaceMetaStyle}>
-                      {blueprintCalibrationStatusText} · {blueprintTraceCalibrationStatusText}
-                    </p>
-                  </div>
+                  <div ref={blueprintPreviewRef} tabIndex={-1} style={{ ...blueprintWorkspaceStyle, gap: 0, padding: 0 }}>
+                    {/* Professional Command Bar */}
+                    <div style={blueprintCommandBarStyle}>
+                      <div style={commandBarGroupStyle}>
+                        <label style={commandBarButtonStyle}>
+                          <UploadCloud size={16} />
+                          Replace Plan
+                          <input
+                            ref={blueprintFileInputRef}
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                            onChange={handleBlueprintFileChange}
+                            style={blueprintUploadInputStyle}
+                          />
+                        </label>
 
-                  {blueprintDocument && (
-                    <div style={blueprintNavigationContainerStyle}>
-                      <button
-                        type="button"
-                        style={{
-                          ...blueprintNavigationButtonStyle,
-                          opacity: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0 ? 0.4 : 1,
-                          cursor: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0 ? "not-allowed" : "pointer"
-                        }}
-                        disabled={blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0}
-                        onClick={handlePrevPage}
-                        title="Previous Page"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      
-                      <span style={blueprintNavigationPageLabelStyle}>
-                        Page {blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of {blueprintDocument.pages.length}
-                      </span>
+                        {blueprintDocument && blueprintDocument.pages.length > 1 && (
+                          <div style={{ ...commandBarGroupStyle, marginLeft: "8px", background: "rgba(255,255,255,0.03)", padding: "0 4px", borderRadius: "10px" }}>
+                            <button
+                              type="button"
+                              style={{
+                                ...commandBarButtonStyle,
+                                background: "transparent",
+                                border: "none",
+                                padding: "0 8px",
+                                opacity: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0 ? 0.3 : 1
+                              }}
+                              disabled={blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === 0}
+                              onClick={handlePrevPage}
+                            >
+                              <ChevronLeft size={18} />
+                            </button>
+                            <span style={blueprintNavigationPageLabelStyle}>
+                              Page {blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of {blueprintDocument.pages.length}
+                            </span>
+                            <button
+                              type="button"
+                              style={{
+                                ...commandBarButtonStyle,
+                                background: "transparent",
+                                border: "none",
+                                padding: "0 8px",
+                                opacity: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1 ? 0.3 : 1
+                              }}
+                              disabled={blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1}
+                              onClick={handleNextPage}
+                            >
+                              <ChevronRight size={18} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
-                      <button
-                        type="button"
-                        style={{
-                          ...blueprintNavigationButtonStyle,
-                          opacity: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1 ? 0.4 : 1,
-                          cursor: blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1 ? "not-allowed" : "pointer"
-                        }}
-                        disabled={blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) === blueprintDocument.pages.length - 1}
-                        onClick={handleNextPage}
-                        title="Next Page"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
+                      <div style={commandBarGroupStyle}>
+                        <button 
+                          type="button" 
+                          style={isBlueprintFocusMode ? commandBarButtonActiveStyle : commandBarButtonStyle} 
+                          onClick={() => setIsBlueprintFocusMode(!isBlueprintFocusMode)}
+                          title={isBlueprintFocusMode ? "Show Panels" : "Focus Blueprint"}
+                        >
+                          {isBlueprintFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                          {isBlueprintFocusMode ? "Show Panels" : "Focus Blueprint"}
+                        </button>
+                        <button type="button" style={commandBarButtonStyle} onClick={fitBlueprintToWidth}>
+                          <Maximize2 size={16} /> Fit Width
+                        </button>
+                        <button type="button" style={commandBarButtonStyle} onClick={resetBlueprintView}>
+                          <Minimize2 size={16} /> Reset
+                        </button>
+                        <div style={{ ...commandBarGroupStyle, marginLeft: "4px" }}>
+                          <button type="button" style={{ ...commandBarButtonStyle, padding: "0 12px" }} onClick={zoomBlueprintOut}>-</button>
+                          <span style={blueprintZoomLabelStyle}>{Math.round(blueprintZoom * 100)}%</span>
+                          <button type="button" style={{ ...commandBarButtonStyle, padding: "0 12px" }} onClick={zoomBlueprintIn}>+</button>
+                        </div>
+                      </div>
                     </div>
-                  )}
 
-                  <div style={blueprintTraceInlineStyle}>
-                    <div>
-                      <p style={blueprintCalibrationStatusStyle}>
-                        {blueprintRoomTrace.isTracing ? "Manual Trace Mode Active" : "Room Outline"}
-                      </p>
-                      <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
-                      {blueprintRoomTrace.isTracing ? (
-                        <p style={blueprintTraceAssistTextStyle}>
-                          Shift-click for straight runs. Click near point 1 to close.
+                    <div style={{ ...blueprintWorkspaceToolbarStyle, padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div>
+                        <p style={blueprintWorkspaceLabelStyle}>{blueprintFileName}</p>
+                        <p style={blueprintWorkspaceMetaStyle}>
+                          {blueprintCalibrationStatusText} · {blueprintTraceCalibrationStatusText}
                         </p>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      style={blueprintTraceButtonStyle}
-                      onClick={startBlueprintRoomOutlineTrace}
-                    >
-                      Trace
-                    </button>
-                    {blueprintRoomTrace.isTracing && blueprintRoomTrace.draftPoints.length > 0 ? (
-                      <button
-                        type="button"
-                        style={blueprintTraceButtonStyle}
-                        onClick={undoLastBlueprintRoomTracePoint}
-                      >
-                        Undo Last Point
-                      </button>
-                    ) : null}
-                    {blueprintRoomTrace.isTracing ? (
-                      <button
-                        type="button"
-                        style={blueprintTraceSecondaryButtonStyle}
-                        onClick={cancelBlueprintRoomOutlineTrace}
-                      >
-                        Cancel Trace
-                      </button>
-                    ) : null}
-                    {blueprintRoomTrace.draftPoints.length >= 3 ? (
-                      <button
-                        type="button"
-                        style={blueprintTraceButtonStyle}
-                        onClick={finishBlueprintRoomOutlineTrace}
-                      >
-                        Finish Room Outline
-                      </button>
-                    ) : null}
-                  </div>
-                  <div style={blueprintZoomControlsStyle}>
-                    <button type="button" style={blueprintZoomButtonStyle} onClick={zoomBlueprintOut}>
-                      -
-                    </button>
-                    <button type="button" style={blueprintZoomButtonStyle} onClick={zoomBlueprintIn}>
-                      +
-                    </button>
-                  </div>
-                </div>
+                      </div>
 
-                <div style={blueprintViewportStyle}>
+                      <div style={blueprintTraceInlineStyle}>
+                        <div>
+                          <p style={blueprintCalibrationStatusStyle}>
+                            {blueprintRoomTrace.isTracing ? "Manual Trace Mode Active" : "Room Outline"}
+                          </p>
+                          <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
+                        </div>
+                        <button
+                          type="button"
+                          style={blueprintTraceButtonStyle}
+                          onClick={startBlueprintRoomOutlineTrace}
+                        >
+                          Trace
+                        </button>
+                        {blueprintRoomTrace.isTracing && blueprintRoomTrace.draftPoints.length > 0 ? (
+                          <button
+                            type="button"
+                            style={blueprintTraceButtonStyle}
+                            onClick={undoLastBlueprintRoomTracePoint}
+                          >
+                            Undo
+                          </button>
+                        ) : null}
+                        {blueprintRoomTrace.isTracing ? (
+                          <button
+                            type="button"
+                            style={blueprintTraceSecondaryButtonStyle}
+                            onClick={cancelBlueprintRoomOutlineTrace}
+                          >
+                            Cancel
+                          </button>
+                        ) : null}
+                        {blueprintRoomTrace.draftPoints.length >= 3 ? (
+                          <button
+                            type="button"
+                            style={blueprintTraceButtonStyle}
+                            onClick={finishBlueprintRoomOutlineTrace}
+                          >
+                            Finish
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                <div ref={blueprintViewportRef} style={blueprintViewportStyle}>
                   <div
                     style={{
                       ...blueprintCanvasStyle,
@@ -4191,7 +4286,11 @@ const averageTonnage = (minTon + maxTon) / 2;
 
               <aside 
                 className={`blueprint-workspace-inspector ${isRightPanelExpanded ? 'expanded' : ''}`} 
-                style={blueprintWorkspaceInspectorStyle}
+                style={{
+                  ...blueprintWorkspaceInspectorStyle,
+                  width: "100px",
+                  transition: "width 0.2s ease-in-out",
+                }}
               >
                 <button 
                   type="button" 
@@ -4203,185 +4302,122 @@ const averageTonnage = (minTon + maxTon) / 2;
                   {isRightPanelExpanded ? <PanelRightClose size={20} /> : <PanelRightOpen size={20} />}
                 </button>
 
-                <div style={blueprintInspectorCardStyle}>
-                  <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor }}>
-                    {blueprintCalibrationUI.statusText}
+                {/* Compact Calibration Section */}
+                <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Blueprint Calibration">
+                  <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor, fontSize: "10px", textAlign: "center" }}>
+                    {blueprintCalibrationUI.statusText === "Scale not verified" ? "UNVERIFIED" : "CALIBRATED"}
                   </p>
-                  <p style={blueprintCalibrationHelperStyle}>{blueprintCalibrationScaleText}</p>
-                  <label style={{ ...blueprintCalibrationInputGroupStyle, marginTop: "10px" }}>
-                    <span style={blueprintCalibrationInputLabelStyle}>Known Length</span>
-                    <input
-                      className="load-input blueprint-takeoff-control"
-                      type="text"
-                      value={blueprintCalibration.realWorldDistance}
-                      onChange={updateBlueprintCalibrationKnownLengthInput}
-                      aria-label="Known blueprint calibration length"
-                      placeholder={`12' 6"`}
-                      style={blueprintCalibrationInputStyle}
-                    />
-                    <span style={blueprintCalibrationFieldMeasurementStyle}>
-                      {blueprintCalibrationMeasurementText}
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    style={{ ...blueprintCalibrationButtonStyle, marginTop: "10px" }}
-                    onClick={recalibrateBlueprintScale}
-                  >
-                    Reset Calibration
-                  </button>
-                  <button
-                    type="button"
-                    disabled={blueprintCalibrationUI.isDisabled || (blueprintCalibrationUI.actionText === "Verified Scale")}
-                    style={{ 
-                      ...(blueprintCalibrationUI.actionText === "Confirm Scale" ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
-                      marginTop: "8px",
-                      ...(blueprintCalibrationUI.actionText === "Verified Scale" ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "default" } : {}),
-                      ...(blueprintCalibrationUI.isDisabled ? { opacity: 0.5, cursor: "not-allowed" } : {})
-                    }}
-                    onClick={blueprintCalibrationUI.canConfirm && blueprintCalibrationUI.actionText !== "Verified Scale" ? confirmCurrentBlueprintCalibration : undefined}
-                  >
-                    {blueprintCalibrationUI.actionText}
-                  </button>
+                  
+                  <div style={{ display: "grid", gap: "6px", marginTop: "4px" }}>
+                    <label style={{ display: "grid", gap: "2px" }}>
+                      <span style={{ ...blueprintCalibrationInputLabelStyle, fontSize: "9px" }}>KNOWN LEN</span>
+                      <input
+                        className="load-input blueprint-takeoff-control"
+                        type="text"
+                        value={blueprintCalibration.realWorldDistance}
+                        onChange={updateBlueprintCalibrationKnownLengthInput}
+                        placeholder={`12'`}
+                        style={{ ...blueprintCalibrationInputStyle, padding: "6px", fontSize: "11px", height: "28px" }}
+                      />
+                    </label>
 
-                  {/* Verification Section */}
+                    <button
+                      type="button"
+                      style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "10px", minHeight: "24px" }}
+                      onClick={recalibrateBlueprintScale}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      disabled={blueprintCalibrationUI.isDisabled || (blueprintCalibrationUI.actionText === "Verified Scale")}
+                      style={{ 
+                        ...(blueprintCalibrationUI.actionText === "Confirm Scale" ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
+                        padding: "4px", 
+                        fontSize: "10px", 
+                        minHeight: "24px",
+                        ...(blueprintCalibrationUI.actionText === "Verified Scale" ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "default" } : {}),
+                        ...(blueprintCalibrationUI.isDisabled ? { opacity: 0.5, cursor: "not-allowed" } : {})
+                      }}
+                      onClick={blueprintCalibrationUI.canConfirm && blueprintCalibrationUI.actionText !== "Verified Scale" ? confirmCurrentBlueprintCalibration : undefined}
+                    >
+                      {blueprintCalibrationUI.actionText === "Confirm Scale" ? "CONFIRM" : "CALIBRATE"}
+                    </button>
+                  </div>
+
                   {blueprintCalibration.status === "calibrated" && (
-                    <div style={{ marginTop: "20px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                      <button
-                        type="button"
-                        onClick={() => setIsVerificationMode(!isVerificationMode)}
-                        style={{
-                          ...blueprintTraceButtonStyle,
-                          background: isVerificationMode ? "rgba(168,85,247,0.24)" : "rgba(15,23,42,0.64)",
-                          border: `1px solid ${isVerificationMode ? "rgba(168,85,247,0.64)" : "rgba(168,85,247,0.24)"}`,
-                          color: "#f8fafc",
-                          width: "100%",
-                        }}
-                      >
-                        {isVerificationMode ? "Exit Verification" : "Verify Measurement"}
-                      </button>
-
-                      {isVerificationMode && (
-                        <div style={{ marginTop: "12px" }}>
-                          <label style={blueprintCalibrationInputGroupStyle}>
-                            <span style={blueprintCalibrationInputLabelStyle}>Verification Length</span>
-                            <input
-                              className="load-input"
-                              type="text"
-                              value={blueprintCalibration.verification?.realWorldDistance || ""}
-                              onChange={updateBlueprintCalibrationKnownLengthInput}
-                              placeholder="Measure known wall"
-                              style={blueprintCalibrationInputStyle}
-                            />
-                          </label>
-
-                          {blueprintCalibration.confidence !== "unverified" && (
-                            <div style={{ marginTop: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ fontSize: "11px", fontWeight: 800, color: "#94a3b8" }}>
-                                Accuracy {verificationErrorPercentage !== null ? `(${verificationErrorPercentage.toFixed(1)}%)` : ""}
-                              </span>
-                              <span
-                                style={{
-                                  padding: "3px 8px",
-                                  borderRadius: "999px",
-                                  fontSize: "10px",
-                                  fontWeight: 900,
-                                  background:
-                                    blueprintCalibration.confidence === "warning"
-                                      ? "rgba(239,68,68,0.2)"
-                                      : "rgba(34,197,94,0.2)",
-                                  color:
-                                    blueprintCalibration.confidence === "warning"
-                                      ? "#f87171"
-                                      : "#4ade80",
-                                  border: `1px solid ${
-                                    blueprintCalibration.confidence === "warning"
-                                      ? "rgba(239,68,68,0.4)"
-                                      : "rgba(34,197,94,0.4)"
-                                  }`,
-                                }}
-                              >
-                                {blueprintCalibration.confidence.toUpperCase()}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsVerificationMode(!isVerificationMode)}
+                      style={{
+                        ...blueprintTraceButtonStyle,
+                        marginTop: "8px",
+                        padding: "4px",
+                        fontSize: "9px",
+                        background: isVerificationMode ? "rgba(168,85,247,0.24)" : "rgba(15,23,42,0.64)",
+                        minHeight: "24px",
+                        width: "100%",
+                      }}
+                    >
+                      {isVerificationMode ? "EXIT VERIF" : "VERIFY"}
+                    </button>
                   )}
                 </div>
 
-                <div style={blueprintInspectorCardStyle}>
-                  <p style={blueprintCalibrationStatusStyle}>Drafting</p>
-                  <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
-                  <div style={blueprintInspectorMetricGridStyle}>
-                    <div style={blueprintAirflowPreviewMetricStyle}>
-                      <span style={blueprintAirflowPreviewMetricLabelStyle}>Detected Rooms</span>
-                      <strong>{detectedBlueprintRooms.length}</strong>
+                {/* Compact Drafting Section */}
+                <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Drafting Status">
+                  <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center" }}>DRAFTING</p>
+                  <div style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
+                    <div style={{ ...blueprintAirflowPreviewMetricStyle, padding: "4px", flexDirection: "column", gap: "2px" }}>
+                      <span style={{ ...blueprintAirflowPreviewMetricLabelStyle, fontSize: "8px" }}>DETECTED</span>
+                      <strong style={{ fontSize: "11px" }}>{detectedBlueprintRooms.length}</strong>
                     </div>
-                    <div style={blueprintAirflowPreviewMetricStyle}>
-                      <span style={blueprintAirflowPreviewMetricLabelStyle}>Outlines</span>
-                      <strong>{tracedRoomsWithSqft.length}</strong>
+                    <div style={{ ...blueprintAirflowPreviewMetricStyle, padding: "4px", flexDirection: "column", gap: "2px" }}>
+                      <span style={{ ...blueprintAirflowPreviewMetricLabelStyle, fontSize: "8px" }}>TRACED</span>
+                      <strong style={{ fontSize: "11px" }}>{tracedRoomsWithSqft.length}</strong>
                     </div>
                   </div>
                 </div>
 
+                {/* Compact Contextual Inspector */}
                 {selectedTracedRoom && selectedBoundaryEdgeMetadata && selectedBlueprintBoundaryEdge ? (
-                  <div style={blueprintInspectorCardStyle}>
-                    <p style={blueprintCalibrationStatusStyle}>Boundary Edge</p>
-                    <p style={blueprintCalibrationHelperStyle}>
-                      {selectedTracedRoom.name} · Edge {selectedBlueprintBoundaryEdge.edgeIndex + 1}
+                  <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Edge Inspector">
+                    <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center" }}>EDGE</p>
+                    <p style={{ ...blueprintCalibrationHelperStyle, fontSize: "9px", textAlign: "center" }}>
+                      {selectedTracedRoom.name.substring(0, 8)}..
                     </p>
-                    <label style={{ ...blueprintCalibrationInputGroupStyle, marginTop: "10px" }}>
-                      <span style={blueprintCalibrationInputLabelStyle}>Boundary Type</span>
-                      <select
-                        className="load-input blueprint-takeoff-control"
-                        value={selectedBoundaryEdgeMetadata.boundaryType}
-                        onChange={(event) =>
-                          updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
-                        }
-                        style={blueprintCalibrationInputStyle}
-                      >
-                        {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <select
+                      className="load-input blueprint-takeoff-control"
+                      value={selectedBoundaryEdgeMetadata.boundaryType}
+                      onChange={(event) =>
+                        updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
+                      }
+                      style={{ ...blueprintCalibrationInputStyle, padding: "4px", fontSize: "10px", height: "28px", marginTop: "4px" }}
+                    >
+                      {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 ) : selectedDetectedRoom && selectedDetectedRoomAirflow ? (
-                  <div style={blueprintAirflowPreviewStyle}>
-                    <div>
-                      <p style={blueprintAirflowPreviewLabelStyle}>Selected Room Airflow</p>
-                      <p style={blueprintAirflowPreviewTitleStyle}>{selectedDetectedRoom.name || "Detected Room"}</p>
-                    </div>
-                    <div style={blueprintAirflowPreviewGridStyle}>
-                      <div style={blueprintAirflowPreviewMetricStyle}>
-                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Estimated Sq. Ft.</span>
-                        <strong>{selectedDetectedRoom.squareFeet.toLocaleString()}</strong>
+                  <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Room Airflow">
+                    <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center" }}>AIRFLOW</p>
+                    <div style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
+                      <div style={{ ...blueprintAirflowPreviewMetricStyle, padding: "4px", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ ...blueprintAirflowPreviewMetricLabelStyle, fontSize: "8px" }}>CFM</span>
+                        <strong style={{ fontSize: "11px" }}>{Math.round(selectedDetectedRoomAirflow.estimatedCfm)}</strong>
                       </div>
-                      <div style={blueprintAirflowPreviewMetricStyle}>
-                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Estimated CFM</span>
-                        <strong>{Math.round(selectedDetectedRoomAirflow.estimatedCfm).toLocaleString()}</strong>
-                      </div>
-                      <div style={blueprintAirflowPreviewMetricStyle}>
-                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Duct Size</span>
-                        <strong>{selectedDetectedRoomAirflow.ductRecommendation.diameterInches}" round</strong>
-                      </div>
-                      <div style={blueprintAirflowPreviewMetricStyle}>
-                        <span style={blueprintAirflowPreviewMetricLabelStyle}>Velocity / Status</span>
-                        <strong>
-                          {Math.round(selectedDetectedRoomAirflow.ductRecommendation.velocityFpm).toLocaleString()} FPM ·{" "}
-                          {selectedDetectedRoomAirflow.ductRecommendation.status}
-                        </strong>
+                      <div style={{ ...blueprintAirflowPreviewMetricStyle, padding: "4px", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ ...blueprintAirflowPreviewMetricLabelStyle, fontSize: "8px" }}>DUCT</span>
+                        <strong style={{ fontSize: "11px" }}>{selectedDetectedRoomAirflow.ductRecommendation.diameterInches}"</strong>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div style={blueprintInspectorCardStyle}>
-                    <p style={blueprintCalibrationStatusStyle}>Inspector</p>
-                    <p style={blueprintCalibrationHelperStyle}>Select a detected room to preview airflow and duct guidance.</p>
+                  <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }}>
+                    <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center", opacity: 0.6 }}>IDLE</p>
                   </div>
                 )}
               </aside>
@@ -6026,7 +6062,7 @@ const blueprintTakeoffGridStyle: React.CSSProperties = {
 
 const blueprintDraftingWorkspaceStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "260px minmax(520px, 1fr) 320px",
+  gridTemplateColumns: "260px minmax(520px, 1fr) 100px",
   alignItems: "start",
   gap: "14px",
   minWidth: 0,
@@ -6453,6 +6489,57 @@ const blueprintNavigationPageLabelStyle: React.CSSProperties = {
   letterSpacing: "0.02em",
 };
 
+const blueprintZoomLabelStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 900,
+  color: "#fde68a",
+  minWidth: "36px",
+  textAlign: "center",
+};
+
+const blueprintCommandBarStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  padding: "12px",
+  background: "rgba(15, 23, 42, 0.96)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "16px 16px 0 0",
+  flexWrap: "wrap",
+  zIndex: 10,
+};
+
+const commandBarGroupStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
+
+const commandBarButtonStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  height: "44px",
+  padding: "0 16px",
+  borderRadius: "10px",
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  color: "#f8fafc",
+  fontSize: "12px",
+  fontWeight: 700,
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+  whiteSpace: "nowrap",
+};
+
+const commandBarButtonActiveStyle: React.CSSProperties = {
+  ...commandBarButtonStyle,
+  background: "rgba(212,175,55,0.15)",
+  border: "1px solid rgba(212,175,55,0.3)",
+  color: "#fde68a",
+};
+
 const blueprintWorkspaceLabelStyle: React.CSSProperties = {
   margin: 0,
   color: "#f8fafc",
@@ -6606,12 +6693,13 @@ const blueprintZoomButtonStyle: React.CSSProperties = {
 };
 
 const blueprintViewportStyle: React.CSSProperties = {
-  height: "clamp(420px, 58vh, 720px)",
+  height: "clamp(480px, 85vh, 880px)",
   overflow: "auto",
   borderRadius: "14px",
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(3, 7, 18, 0.62)",
   cursor: "crosshair",
+  position: "relative",
 };
 
 const blueprintCanvasStyle: React.CSSProperties = {
@@ -6620,7 +6708,7 @@ const blueprintCanvasStyle: React.CSSProperties = {
   minHeight: "100%",
   width: "max-content",
   transformOrigin: "top left",
-  transition: "transform 0.18s ease",
+  transition: "transform 0.18s ease-out",
 };
 
 const blueprintImagePreviewStyle: React.CSSProperties = {
