@@ -597,6 +597,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [v3SaveStatus, setV3SaveStatus] = useState("");
   const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
   const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
+  const [activeViewLabel, setActiveViewLabel] = useState<"full" | "focus">("full");
   const [isBlueprintFocusMode, setIsBlueprintFocusMode] = useState(false);
   const [isFocusAreaMode, setIsFocusAreaMode] = useState(false);
   const [activeFocusArea, setActiveFocusArea] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
@@ -2010,8 +2011,10 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setBlueprintZoom(Math.max(0.2, Math.min(5.0, Number(targetZoom.toFixed(2)))));
   };
 
-  const resetBlueprintView = () => {
+  const showFullSheet = () => {
     setBlueprintZoom(1.0);
+    setActiveViewLabel("full");
+    blueprintViewportRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" });
   };
 
   const jumpToBuilding = () => {
@@ -2037,6 +2040,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     const clampedZoom = Math.max(0.2, Math.min(5.0, Number(targetZoom.toFixed(2))));
     
     setBlueprintZoom(clampedZoom);
+    setActiveViewLabel("focus");
 
     // 2. Calculate center position and scroll
     // Center point in base image pixels:
@@ -3950,9 +3954,16 @@ const averageTonnage = (minTon + maxTon) / 2;
                   </div>
 
                   <div style={blueprintSummaryItemStyle}>
-                    <p style={blueprintSummaryLabelStyle}>Manual J Ready</p>
+                    <p style={blueprintSummaryLabelStyle}>Verified for Manual J</p>
                     <p style={{ ...blueprintSummaryValueStyle, color: (blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? '#22c55e' : '#64748b' }}>
                       {(blueprintCalibration.status === 'calibrated' && tracedRoomsWithSqft.length > 0) ? 'Ready' : 'Pending Verification'}
+                    </p>
+                  </div>
+
+                  <div style={blueprintSummaryItemStyle}>
+                    <p style={blueprintSummaryLabelStyle}>Focus Area Saved</p>
+                    <p style={{ ...blueprintSummaryValueStyle, color: activeFocusArea ? '#22c55e' : '#64748b' }}>
+                      {activeFocusArea ? 'Saved' : 'Not Set'}
                     </p>
                   </div>
                 </div>
@@ -3967,7 +3978,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={commandBarGroupStyle}>
                         <label style={commandBarButtonStyle}>
                           <UploadCloud size={16} />
-                          Replace Plan
+                          Update Plan Sheet
                           <input
                             ref={blueprintFileInputRef}
                             type="file"
@@ -4022,25 +4033,26 @@ const averageTonnage = (minTon + maxTon) / 2;
                             setIsFocusAreaMode(!isFocusAreaMode);
                             setBlueprintWorkspaceMode("manual-trace"); // Ensure we can click the overlay
                           }}
-                          title={isFocusAreaMode ? "Cancel Set Focus" : "Set Focus Area"}
+                          title={isFocusAreaMode ? "Cancel Building Focus" : "Set Building Focus Area"}
                         >
-                          <Target size={16} /> {isFocusAreaMode ? "Cancel Focus" : "Set Focus"}
+                          <Target size={16} /> {isFocusAreaMode ? "Cancel Focus" : "Set Building Focus"}
                         </button>
                         {activeFocusArea && (
                           <>
                             <button 
                               type="button" 
-                              style={commandBarButtonStyle} 
+                              style={activeViewLabel === "focus" ? commandBarButtonActiveStyle : commandBarButtonStyle} 
                               onClick={jumpToBuilding}
                               title="Zoom and center on building footprint"
                             >
-                              <Square size={16} /> Jump To Building
+                              <Square size={16} /> Jump to Building
                             </button>
                             <button 
                               type="button" 
                               style={commandBarButtonStyle} 
                               onClick={() => {
                                 setActiveFocusArea(null);
+                                setActiveViewLabel("full");
                                 setProjectActionMessage("Focus area cleared.");
                               }}
                               title="Clear Focus Area"
@@ -4056,28 +4068,31 @@ const averageTonnage = (minTon + maxTon) / 2;
                           type="button" 
                           style={isBlueprintFocusMode ? commandBarButtonActiveStyle : commandBarButtonStyle} 
                           onClick={() => setIsBlueprintFocusMode(!isBlueprintFocusMode)}
-                          title={isBlueprintFocusMode ? "Show Panels" : "Focus Blueprint"}
+                          title={isBlueprintFocusMode ? "Show Sidebar Panels" : "Maximize Workspace"}
                         >
                           {isBlueprintFocusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                          {isBlueprintFocusMode ? "Show Panels" : "Focus Blueprint"}
+                          {isBlueprintFocusMode ? "Show Panels" : "Maximize Workspace"}
                         </button>
                         <button type="button" style={commandBarButtonStyle} onClick={fitBlueprintToWidth}>
                           <Maximize2 size={16} /> Fit Width
                         </button>
-                        <button type="button" style={commandBarButtonStyle} onClick={resetBlueprintView}>
-                          <RotateCcw size={16} /> Reset
+                        <button type="button" style={activeViewLabel === "full" ? commandBarButtonActiveStyle : commandBarButtonStyle} onClick={showFullSheet}>
+                          <RotateCcw size={16} /> View Full Sheet
                         </button>
                         <div style={{ ...commandBarGroupStyle, marginLeft: "4px" }}>
                           <button type="button" style={{ ...commandBarButtonStyle, padding: "0 12px" }} onClick={zoomBlueprintOut}>-</button>
                           <span style={blueprintZoomLabelStyle}>{Math.round(blueprintZoom * 100)}%</span>
                           <button type="button" style={{ ...commandBarButtonStyle, padding: "0 12px" }} onClick={zoomBlueprintIn}>+</button>
+                          <div style={blueprintViewBadgeStyle}>
+                            {!activeFocusArea ? "Focus Area Not Set" : activeViewLabel === "focus" ? "Viewing Building Focus" : "Viewing Full Sheet"}
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     <div style={{ ...blueprintWorkspaceToolbarStyle, padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                       <div>
-                        <p style={blueprintWorkspaceLabelStyle}>{blueprintFileName}</p>
+                        <p style={blueprintWorkspaceLabelStyle}>Blueprint Workspace</p>
                         <p style={blueprintWorkspaceMetaStyle}>
                           {blueprintCalibrationStatusText} · {blueprintTraceCalibrationStatusText}
                         </p>
@@ -4086,16 +4101,16 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={blueprintTraceInlineStyle}>
                         <div>
                           <p style={blueprintCalibrationStatusStyle}>
-                            {blueprintRoomTrace.isTracing ? "Manual Trace Mode Active" : "Room Outline"}
+                            {blueprintRoomTrace.isTracing ? "Verified Trace Active" : "Verified Takeoff"}
                           </p>
                           <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
                         </div>
                         <button
                           type="button"
-                          style={blueprintTraceButtonStyle}
+                          style={blueprintRoomTrace.isTracing ? blueprintTraceActiveButtonStyle : blueprintTraceButtonStyle}
                           onClick={startBlueprintRoomOutlineTrace}
                         >
-                          Trace
+                          {blueprintRoomTrace.isTracing ? "TRACING..." : "Start Trace"}
                         </button>
                         {blueprintRoomTrace.isTracing && blueprintRoomTrace.draftPoints.length > 0 ? (
                           <button
@@ -4212,7 +4227,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                             background: isFocusAreaMode ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.05)",
                           }}
                         >
-                          <span style={blueprintFocusAreaLabelStyle}>Focus Area</span>
+                          <span style={blueprintFocusAreaLabelStyle}>Building Focus Area</span>
                         </div>
                       )}
 
@@ -6653,6 +6668,19 @@ const blueprintZoomLabelStyle: React.CSSProperties = {
   textAlign: "center",
 };
 
+const blueprintViewBadgeStyle: React.CSSProperties = {
+  fontSize: "9px",
+  fontWeight: 800,
+  color: "#94a3b8",
+  padding: "4px 8px",
+  borderRadius: "6px",
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  marginLeft: "8px",
+};
+
 const blueprintCommandBarStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -6849,6 +6877,14 @@ const blueprintTraceButtonStyle: React.CSSProperties = {
   padding: "0 10px",
   cursor: "pointer",
   whiteSpace: "nowrap",
+};
+
+const blueprintTraceActiveButtonStyle: React.CSSProperties = {
+  ...blueprintTraceButtonStyle,
+  background: "rgba(212,175,55,0.24)",
+  border: "1px solid rgba(212,175,55,0.45)",
+  color: "#fde68a",
+  boxShadow: "0 0 15px rgba(212,175,55,0.15)",
 };
 
 const blueprintTraceSecondaryButtonStyle: React.CSSProperties = {
