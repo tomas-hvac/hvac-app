@@ -550,6 +550,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
   const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const suppressNextBlueprintOverlayClickRef = useRef(false);
+  const isBlueprintTraceFocusForcedRef = useRef(false);
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
   const [activeTechnicianSection, setActiveTechnicianSection] = useState<TechnicianSection>("manual-d");
   const [squareFeet, setSquareFeet] = useState("0");
@@ -1723,12 +1724,24 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setBlueprintWorkspaceMode("manual-trace");
     setSelectedBlueprintBoundaryEdge(null);
     setBlueprintRoomTrace((currentTrace) => startBlueprintRoomTrace(currentTrace));
+    
+    // Only force focus mode if it's not already enabled, and track that we did it
+    if (!isBlueprintFocusMode) {
+      setIsBlueprintFocusMode(true);
+      isBlueprintTraceFocusForcedRef.current = true;
+    }
   };
 
   const finishBlueprintRoomOutlineTrace = () => {
     setBlueprintRoomTrace((currentTrace) =>
       finishBlueprintRoomTrace(currentTrace, getCurrentBlueprintTraceFinishOptions(currentTrace.draftPoints))
     );
+    
+    // Only restore panels if we were the one who collapsed them
+    if (isBlueprintTraceFocusForcedRef.current) {
+      setIsBlueprintFocusMode(false);
+      isBlueprintTraceFocusForcedRef.current = false;
+    }
   };
 
   const undoLastBlueprintRoomTracePoint = () => {
@@ -1737,6 +1750,12 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const cancelBlueprintRoomOutlineTrace = () => {
     setBlueprintRoomTrace((currentTrace) => cancelBlueprintRoomTrace(currentTrace));
+    
+    // Only restore panels if we were the one who collapsed them
+    if (isBlueprintTraceFocusForcedRef.current) {
+      setIsBlueprintFocusMode(false);
+      isBlueprintTraceFocusForcedRef.current = false;
+    }
   };
 
   const recalibrateBlueprintScale = () => {
@@ -4231,7 +4250,13 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     </div>
 
-                <div ref={blueprintViewportRef} style={blueprintViewportStyle}>
+                <div ref={blueprintViewportRef} style={{
+                  ...blueprintViewportStyle,
+                  ...(blueprintRoomTrace.isTracing ? {
+                    border: "2px solid rgba(212,175,55,0.8)",
+                    boxShadow: "0 0 20px rgba(212,175,55,0.2) inset",
+                  } : {})
+                }}>
                   <div
                     style={{
                       ...blueprintCanvasStyle,
