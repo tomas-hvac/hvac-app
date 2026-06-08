@@ -52,33 +52,55 @@ export function calculateBlueprintPixelDistance(
   return Math.sqrt(xDistancePx ** 2 + yDistancePx ** 2);
 }
 
-export function parseFieldMeasurementToFeet(input: string): number | null {
-  const normalizedInput = input.trim().toLowerCase();
-  if (!normalizedInput) return null;
+/**
+ * Parses various field notations into decimal feet.
+ * Supports: 12, 12.5, 12' 6", 12 ft 6 in, 12-6, 12'6, 150 in
+ */
+export function parseFeetInchesToFeet(input: string): number | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
 
-  const decimalFeet = Number(normalizedInput);
-  if (Number.isFinite(decimalFeet) && decimalFeet > 0) return decimalFeet;
-
-  const feetInchesShorthandMatch = normalizedInput.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
-  if (feetInchesShorthandMatch) {
-    const feet = Number(feetInchesShorthandMatch[1]);
-    const inches = Number(feetInchesShorthandMatch[2]);
-    if (Number.isFinite(feet) && Number.isFinite(inches) && inches >= 0) {
-      return feet + inches / 12;
-    }
+  // 1. Direct decimal feet (e.g., "12.5")
+  if (/^\d+(?:\.\d+)?$/.test(normalized)) {
+    return parseFloat(normalized);
   }
 
-  const feetMatch = normalizedInput.match(/(\d+(?:\.\d+)?)\s*(?:'|ft\b|feet\b)/);
-  const inchesMatch = normalizedInput.match(/(\d+(?:\.\d+)?)\s*(?:"|in\b|inch\b|inches\b)/);
-  if (feetMatch || inchesMatch) {
-    const feet = feetMatch ? Number(feetMatch[1]) : 0;
-    const inches = inchesMatch ? Number(inchesMatch[1]) : 0;
-    if (Number.isFinite(feet) && Number.isFinite(inches) && inches >= 0) {
-      return feet + inches / 12;
-    }
+  // 2. Inch-only detection (e.g., "150 in", "150\"", "150inch")
+  const inchOnlyMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*(?:"|in|inch|inches)$/);
+  if (inchOnlyMatch) {
+    return parseFloat(inchOnlyMatch[1]) / 12;
+  }
+
+  // 3. Dash shorthand (e.g., "12-6")
+  const dashMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+  if (dashMatch) {
+    const feet = parseFloat(dashMatch[1]);
+    const inches = parseFloat(dashMatch[2]);
+    return feet + inches / 12;
+  }
+
+  // 4. Mixed notation (e.g., "12' 6\"", "12ft 6in", "12'6")
+  // Captured groups: 1 = feet, 2 = inches
+  const mixedRegex = /^(?:(\d+(?:\.\d+)?)\s*(?:'|ft|feet|foot)?)?\s*(?:(\d+(?:\.\d+)?)\s*(?:"|in|inch|inches)?)?$/;
+  const mixedMatch = normalized.match(mixedRegex);
+
+  if (mixedMatch) {
+    const feetPart = mixedMatch[1];
+    const inchPart = mixedMatch[2];
+
+    if (!feetPart && !inchPart) return null;
+
+    const feet = feetPart ? parseFloat(feetPart) : 0;
+    const inches = inchPart ? parseFloat(inchPart) : 0;
+    
+    return feet + (inches / 12);
   }
 
   return null;
+}
+
+export function parseFieldMeasurementToFeet(input: string): number | null {
+  return parseFeetInchesToFeet(input);
 }
 
 export function calculateBlueprintNormalizedFeet(
