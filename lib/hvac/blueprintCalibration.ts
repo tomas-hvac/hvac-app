@@ -228,7 +228,9 @@ export function updateBlueprintCalibrationKnownLength(
 
   return {
     ...currentState,
-    status: currentState.startPoint && currentState.endPoint && pixelsPerFoot !== null ? "ready" : currentState.status,
+    status: currentState.startPoint && currentState.endPoint && pixelsPerFoot !== null 
+      ? "ready" 
+      : (pixelsPerFoot === null ? "calibrating" : currentState.status),
     realWorldDistance,
     pixelsDistance,
     pixelsPerFoot,

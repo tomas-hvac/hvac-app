@@ -1541,13 +1541,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
         const pdf = await loadPDFDocument(asset.blob);
         const dataUrl = await renderPDFPageToDataURL(pdf, targetPageIndex + 1);
-        
+
         setBlueprintPreviewUrl(dataUrl);
-        // Reset overlay size to ensure ResizeObserver triggers for the new page aspect ratio
-        setBlueprintOverlaySize({ widthPx: 0, heightPx: 0 });
-        
+
         setProjectActionMessage(`PDF page ${targetPageIndex + 1} loaded.`);
-      } catch (error) {
+        } catch (error) {
         console.error("Failed to render PDF page:", error);
         setProjectActionMessage("Failed to render PDF page.");
       }
