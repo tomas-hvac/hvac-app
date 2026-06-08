@@ -1867,6 +1867,36 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     }));
   };
 
+  const updateOpeningInSelectedEdge = (openingId: string, field: "widthFeet" | "heightFeet", value: string) => {
+    if (!selectedBlueprintBoundaryEdge) return;
+    const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
+    
+    // Clamp to minimum 0.1 to avoid zero-dimension errors in Manual J
+    const numericValue = Math.max(0.1, parseFloat(value) || 0.1);
+
+    setBlueprintRoomTrace((currentTrace) => ({
+      ...currentTrace,
+      roomOutlines: currentTrace.roomOutlines.map((outline) => {
+        if (outline.id !== outlineId) return outline;
+        const boundaryEdges = outline.boundaryEdges;
+        if (!boundaryEdges) return outline;
+
+        return {
+          ...outline,
+          boundaryEdges: boundaryEdges.map((edge, idx) => {
+            if (idx !== edgeIndex) return edge;
+            return {
+              ...edge,
+              openings: edge.openings?.map((op) => 
+                op.id === openingId ? { ...op, [field]: numericValue } : op
+              ),
+            };
+          }),
+        };
+      }),
+    }));
+  };
+
   const sendTracedRoomToManualD = (outlineId: string) => {
     const tracedRoom = tracedRoomsWithSqft.find((outline) => outline.id === outlineId);
     const tracedSquareFeet = tracedRoom?.squareFeet;
@@ -4662,7 +4692,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       onChange={(event) =>
                         updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
                       }
-                      style={{ ...blueprintCalibrationInputStyle, padding: "4px", fontSize: "10px", height: "28px", marginTop: "4px" }}
+                      style={{ ...blueprintCalibrationInputStyle, padding: "4px", fontSize: "10px", height: "28px", marginTop: "4px", width: "100%" }}
                     >
                       {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -4670,6 +4700,75 @@ const averageTonnage = (minTon + maxTon) / 2;
                         </option>
                       ))}
                     </select>
+
+                    {/* Openings Editor */}
+                    <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                      <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "9px", opacity: 0.8 }}>OPENINGS</p>
+                      
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
+                        <button
+                          type="button"
+                          style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "9px", minHeight: "26px" }}
+                          onClick={() => addOpeningToSelectedEdge("window")}
+                        >
+                          + Window
+                        </button>
+                        <button
+                          type="button"
+                          style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "9px", minHeight: "26px" }}
+                          onClick={() => addOpeningToSelectedEdge("door")}
+                        >
+                          + Door
+                        </button>
+                      </div>
+
+                      <div style={{ maxHeight: "180px", overflowY: "auto", marginTop: "4px" }}>
+                        {(selectedBoundaryEdgeMetadata.openings ?? []).map((opening) => (
+                          <div key={opening.id} style={inspectorOpeningItemStyle}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "10px", fontWeight: 900, color: "#fde68a" }}>
+                                {opening.type.toUpperCase()}
+                              </span>
+                              <button
+                                type="button"
+                                style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", padding: 0 }}
+                                onClick={() => removeOpeningFromSelectedEdge(opening.id)}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                            
+                            <div style={inspectorOpeningInputGridStyle}>
+                              <label style={roomCardInputWrapperStyle}>
+                                <span style={roomCardInputLabelStyle}>W (FT)</span>
+                                <input
+                                  className="load-input blueprint-takeoff-control"
+                                  type="number"
+                                  step="0.1"
+                                  value={opening.widthFeet}
+                                  onChange={(e) => updateOpeningInSelectedEdge(opening.id, "widthFeet", e.target.value)}
+                                  style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "24px", fontSize: "10px", padding: "0 4px" }}
+                                />
+                              </label>
+                              <label style={roomCardInputWrapperStyle}>
+                                <span style={roomCardInputLabelStyle}>H (FT)</span>
+                                <input
+                                  className="load-input blueprint-takeoff-control"
+                                  type="number"
+                                  step="0.1"
+                                  value={opening.heightFeet}
+                                  onChange={(e) => updateOpeningInSelectedEdge(opening.id, "heightFeet", e.target.value)}
+                                  style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "24px", fontSize: "10px", padding: "0 4px" }}
+                                />
+                              </label>
+                            </div>
+                            <div style={{ textAlign: "right", fontSize: "9px", fontWeight: 800, color: "#94a3b8" }}>
+                              {(opening.widthFeet * opening.heightFeet).toFixed(1)} SQFT
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : selectedDetectedRoom && selectedDetectedRoomAirflow ? (
                   <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Room Airflow">
@@ -6387,6 +6486,22 @@ const blueprintInspectorCardStyle: React.CSSProperties = {
   borderRadius: "14px",
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(15,23,42,0.58)",
+};
+
+const inspectorOpeningItemStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "6px",
+  padding: "8px",
+  borderRadius: "10px",
+  background: "rgba(0,0,0,0.15)",
+  border: "1px solid rgba(255,255,255,0.04)",
+  marginTop: "8px",
+};
+
+const inspectorOpeningInputGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "8px",
 };
 
 const blueprintInspectorMetricGridStyle: React.CSSProperties = {
