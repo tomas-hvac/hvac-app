@@ -212,6 +212,25 @@ const BLUEPRINT_BOUNDARY_TYPE_OPTIONS: Array<{ label: string; value: BlueprintRo
   { label: "Crawlspace", value: "crawlspace" },
 ];
 
+const FRACTION_OPTIONS = [
+  { label: "0", value: "0" },
+  { label: "1/16", value: "0.0625" },
+  { label: "1/8", value: "0.125" },
+  { label: "3/16", value: "0.1875" },
+  { label: "1/4", value: "0.25" },
+  { label: "5/16", value: "0.3125" },
+  { label: "3/8", value: "0.375" },
+  { label: "7/16", value: "0.4375" },
+  { label: "1/2", value: "0.5" },
+  { label: "9/16", value: "0.5625" },
+  { label: "5/8", value: "0.625" },
+  { label: "11/16", value: "0.6875" },
+  { label: "3/4", value: "0.75" },
+  { label: "13/16", value: "0.8125" },
+  { label: "7/8", value: "0.875" },
+  { label: "15/16", value: "0.9375" },
+];
+
 type BlueprintDetectionPipeline = {
   mode: "preview";
   status: "mock";
@@ -598,6 +617,9 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
   const [activeV3ProjectId, setActiveV3ProjectId] = useState<string | null>(null);
   const [activeViewLabel, setActiveViewLabel] = useState<"full" | "focus">("full");
+  const [calibrationFeet, setCalibrationFeet] = useState("12");
+  const [calibrationInches, setCalibrationInches] = useState("0");
+  const [calibrationFraction, setCalibrationFraction] = useState("0");
   const [isBlueprintFocusMode, setIsBlueprintFocusMode] = useState(false);
   const [isFocusAreaMode, setIsFocusAreaMode] = useState(false);
   const [activeFocusArea, setActiveFocusArea] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
@@ -1927,9 +1949,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setActiveTechnicianSection("room-airflow");
   };
 
-  const updateBlueprintCalibrationKnownLengthInput = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const updateBlueprintCalibrationRealWorldDistance = (value: string) => {
     const overlayElement = document.getElementById("blueprint-calibration-overlay");
     const overlayBounds = overlayElement?.getBoundingClientRect();
 
@@ -1937,7 +1957,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       setBlueprintCalibration((currentCalibration) =>
         updateBlueprintVerificationKnownLength(
           currentCalibration,
-          event.target.value,
+          value,
           overlayBounds
             ? {
                 widthPx: overlayBounds.width / blueprintZoom,
@@ -1952,7 +1972,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setBlueprintCalibration((currentCalibration) =>
       updateBlueprintCalibrationKnownLength(
         currentCalibration,
-        event.target.value,
+        value,
         overlayBounds
           ? {
               widthPx: overlayBounds.width / blueprintZoom,
@@ -1962,6 +1982,26 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       )
     );
     setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
+  };
+
+  const updateBlueprintCalibrationKnownLengthInput = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    updateBlueprintCalibrationRealWorldDistance(event.target.value);
+  };
+
+  const updateStructuredCalibration = (f: string, i: string, fr: string) => {
+    setCalibrationFeet(f);
+    setCalibrationInches(i);
+    setCalibrationFraction(fr);
+    
+    const feet = parseFloat(f) || 0;
+    const inches = parseFloat(i) || 0;
+    const fractionVal = parseFloat(fr) || 0;
+    
+    // Convert to decimal feet for the engine
+    const totalDecimalFeet = feet + (inches + fractionVal) / 12;
+    updateBlueprintCalibrationRealWorldDistance(String(totalDecimalFeet));
   };
 
   const scrollToTakeoffElement = (element: HTMLElement | null) => {
@@ -2296,15 +2336,21 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       : blueprintCalibration.status === "ready"
       ? `Scale ready - ${activePixelsPerFoot.toFixed(2)} px / ft`
       : `${activePixelsPerFoot.toFixed(2)} px / ft`;
-  const parsedCalibrationFeet = parseFieldMeasurementToFeet(blueprintCalibration.realWorldDistance);
-  const blueprintCalibrationMeasurementText =
-    blueprintCalibration.realWorldDistance.trim() === ""
-      ? "Use 12, 12.5, 12' 6\", 12 ft 6 in, or 12-6"
-      : parsedCalibrationFeet === null
-      ? "Enter measurement like 12, 12.5, or 12' 6\""
-      : `Using ${formatFieldMeasurementFeet(parsedCalibrationFeet)} / ${Number(
-          parsedCalibrationFeet.toFixed(3)
-        ).toLocaleString()} ft`;
+  const blueprintCalibrationMeasurementText = useMemo(() => {
+    if (blueprintCalibration.realWorldDistance.trim() === "" || !Number.isFinite(parseFloat(blueprintCalibration.realWorldDistance))) {
+      return null;
+    }
+
+    const totalFeet = parseFloat(blueprintCalibration.realWorldDistance);
+    
+    // Build architectural string from structured state for maximum precision
+    const fractionLabel = FRACTION_OPTIONS.find(opt => opt.value === calibrationFraction)?.label || "0";
+    const archStr = `${calibrationFeet}' ${calibrationInches}${fractionLabel !== "0" ? ` ${fractionLabel}` : ""}"`;
+    const decimalStr = `${totalFeet.toFixed(3)} ft`;
+
+    return { arch: archStr, decimal: decimalStr };
+  }, [blueprintCalibration.realWorldDistance, calibrationFeet, calibrationInches, calibrationFraction]);
+
   const canConfirmBlueprintCalibration =
     blueprintCalibration.status === "ready" && activePixelsPerFoot !== null;
   const blueprintTraceCalibrationStatusText = getBlueprintTraceCalibrationStatusText(blueprintCalibration.status);
@@ -2584,6 +2630,9 @@ const averageTonnage = (minTon + maxTon) / 2;
       : snapshot;
   }, [v3ProjectName, activeV3ProjectId, blueprintFile, blueprintCalibration, tracedRoomsWithSqft, insulationQuality, oregonRegion, manualDProjectState, loadedEngineMetadata]);
 
+  const isCalibrating = blueprintCalibration.status === "calibrating" || blueprintCalibration.status === "ready";
+  const activeInspectorWidth = isCalibrating ? "240px" : "140px";
+
   return (
     <ProjectEngineProvider key={activeV3ProjectId ?? "draft-project-engine"} initialProject={projectSnapshot}>
       <ProjectEnginePersistenceBridge
@@ -2652,6 +2701,16 @@ const averageTonnage = (minTon + maxTon) / 2;
             border-color: rgba(212,175,55,0.5);
             box-shadow: 0 0 0 4px rgba(212,175,55,0.12);
             background: rgba(255,255,255,0.06);
+          }
+
+          /* Hide number spinners */
+          .load-input[type=number]::-webkit-inner-spin-button, 
+          .load-input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+          }
+          .load-input[type=number] {
+            -moz-appearance: textfield;
           }
 
           .calc-action-button {
@@ -3807,7 +3866,7 @@ const averageTonnage = (minTon + maxTon) / 2;
               display: activeTechnicianSection === "manual-room-takeoff" ? "flex" : "none",
             }}
           >
-            <div className={`blueprint-drafting-workspace ${isBlueprintFocusMode ? 'focus-mode' : ''}`} style={blueprintDraftingWorkspaceStyle}>
+            <div className={`blueprint-drafting-workspace ${isBlueprintFocusMode ? 'focus-mode' : ''}`} style={{ ...blueprintDraftingWorkspaceStyle, gridTemplateColumns: `260px minmax(520px, 1fr) ${activeInspectorWidth}` }}>
               <aside 
                 className={`blueprint-workspace-sidebar ${isLeftPanelExpanded ? 'expanded' : ''}`} 
                 style={blueprintWorkspaceSidebarStyle}
@@ -4459,7 +4518,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                 className={`blueprint-workspace-inspector ${isRightPanelExpanded ? 'expanded' : ''}`} 
                 style={{
                   ...blueprintWorkspaceInspectorStyle,
-                  width: "100px",
+                  width: activeInspectorWidth,
                   transition: "width 0.2s ease-in-out",
                 }}
               >
@@ -4479,41 +4538,81 @@ const averageTonnage = (minTon + maxTon) / 2;
                     {blueprintCalibrationUI.statusText === "Scale not verified" ? "UNVERIFIED" : "CALIBRATED"}
                   </p>
                   
-                  <div style={{ display: "grid", gap: "6px", marginTop: "4px" }}>
-                    <label style={{ display: "grid", gap: "2px" }}>
-                      <span style={{ ...blueprintCalibrationInputLabelStyle, fontSize: "9px" }}>KNOWN LEN</span>
-                      <input
-                        className="load-input blueprint-takeoff-control"
-                        type="text"
-                        value={blueprintCalibration.realWorldDistance}
-                        onChange={updateBlueprintCalibrationKnownLengthInput}
-                        placeholder={`12'`}
-                        style={{ ...blueprintCalibrationInputStyle, padding: "6px", fontSize: "11px", height: "28px" }}
-                      />
-                    </label>
+                  <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
+                    <div style={structuredCalibrationGridStyle}>
+                      <label style={roomCardInputWrapperStyle}>
+                        <span style={roomCardInputLabelStyle}>FT</span>
+                        <input
+                          className="load-input blueprint-takeoff-control"
+                          type="number"
+                          min="0"
+                          value={calibrationFeet}
+                          onChange={(e) => updateStructuredCalibration(e.target.value, calibrationInches, calibrationFraction)}
+                          style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "11px" }}
+                        />
+                      </label>
+                      <label style={roomCardInputWrapperStyle}>
+                        <span style={roomCardInputLabelStyle}>IN</span>
+                        <input
+                          className="load-input blueprint-takeoff-control"
+                          type="number"
+                          min="0"
+                          max="11"
+                          value={calibrationInches}
+                          onChange={(e) => updateStructuredCalibration(calibrationFeet, e.target.value, calibrationFraction)}
+                          style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "11px" }}
+                        />
+                      </label>
+                      <label style={roomCardInputWrapperStyle}>
+                        <span style={roomCardInputLabelStyle}>1/16</span>
+                        <select
+                          className="load-select blueprint-takeoff-control"
+                          value={calibrationFraction}
+                          onChange={(e) => updateStructuredCalibration(calibrationFeet, calibrationInches, e.target.value)}
+                          style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "10px", padding: "0 4px" }}
+                        >
+                          {FRACTION_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
 
-                    <button
-                      type="button"
-                      style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "10px", minHeight: "24px" }}
-                      onClick={recalibrateBlueprintScale}
-                    >
-                      Reset
-                    </button>
-                    <button
-                      type="button"
-                      disabled={blueprintCalibrationUI.isDisabled || (blueprintCalibrationUI.actionText === "Verified Scale")}
-                      style={{ 
-                        ...(blueprintCalibrationUI.actionText === "Confirm Scale" ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
-                        padding: "4px", 
-                        fontSize: "10px", 
-                        minHeight: "24px",
-                        ...(blueprintCalibrationUI.actionText === "Verified Scale" ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "default" } : {}),
-                        ...(blueprintCalibrationUI.isDisabled ? { opacity: 0.5, cursor: "not-allowed" } : {})
-                      }}
-                      onClick={blueprintCalibrationUI.canConfirm && blueprintCalibrationUI.actionText !== "Verified Scale" ? confirmCurrentBlueprintCalibration : undefined}
-                    >
-                      {blueprintCalibrationUI.actionText === "Confirm Scale" ? "CONFIRM" : "CALIBRATE"}
-                    </button>
+                    {blueprintCalibrationMeasurementText && (
+                      <div style={{ ...blueprintCalibrationHelperStyle, display: "grid", gap: "2px", marginTop: "6px", textAlign: "center" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 900, color: "#fde68a" }}>
+                          Known Length: {blueprintCalibrationMeasurementText.arch}
+                        </span>
+                        <span style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8" }}>
+                          = {blueprintCalibrationMeasurementText.decimal}
+                        </span>
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                      <button
+                        type="button"
+                        style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "28px", fontSize: "10px" }}
+                        onClick={recalibrateBlueprintScale}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        disabled={blueprintCalibrationUI.isDisabled || (blueprintCalibrationUI.actionText === "Verified Scale")}
+                        style={{ 
+                          ...(blueprintCalibrationUI.actionText === "Confirm Scale" ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
+                          width: "100%",
+                          minHeight: "28px",
+                          fontSize: "10px",
+                          ...(blueprintCalibrationUI.actionText === "Verified Scale" ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "default" } : {}),
+                          ...(blueprintCalibrationUI.isDisabled ? { opacity: 0.5, cursor: "not-allowed" } : {})
+                        }}
+                        onClick={blueprintCalibrationUI.canConfirm && blueprintCalibrationUI.actionText !== "Verified Scale" ? confirmCurrentBlueprintCalibration : undefined}
+                      >
+                        {blueprintCalibrationUI.actionText === "Confirm Scale" ? "CONFIRM" : "CALIBRATE"}
+                      </button>
+                    </div>
                   </div>
 
                   {blueprintCalibration.status === "calibrated" && (
@@ -6233,7 +6332,7 @@ const blueprintTakeoffGridStyle: React.CSSProperties = {
 
 const blueprintDraftingWorkspaceStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "260px minmax(520px, 1fr) 100px",
+  gridTemplateColumns: "260px minmax(520px, 1fr) 140px",
   alignItems: "start",
   gap: "14px",
   minWidth: 0,
@@ -6776,6 +6875,25 @@ const blueprintCalibrationInputGroupStyle: React.CSSProperties = {
   display: "grid",
   gap: "4px",
   minWidth: "150px",
+};
+
+const structuredCalibrationGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr 1.5fr",
+  gap: "6px",
+};
+
+const roomCardInputWrapperStyle: React.CSSProperties = {
+  display: "grid",
+  gap: "4px",
+};
+
+const roomCardInputLabelStyle: React.CSSProperties = {
+  color: "#94a3b8",
+  fontSize: "10px",
+  fontWeight: 800,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
 };
 
 const blueprintCalibrationInputLabelStyle: React.CSSProperties = {
