@@ -212,6 +212,16 @@ const BLUEPRINT_BOUNDARY_TYPE_OPTIONS: Array<{ label: string; value: BlueprintRo
   { label: "Crawlspace", value: "crawlspace" },
 ];
 
+const BOUNDARY_TYPE_COLORS: Record<string, string> = {
+  exterior: "#f87171", // High-contrast Red/Orange
+  interior: "#38bdf8", // Light Blue
+  garage: "#c084fc",   // Purple
+  adjacent: "#4ade80", // Emerald Green
+  attic: "#fb923c",    // Orange
+  crawlspace: "#94a3b8", // Gray
+  unknown: "rgba(255, 255, 255, 0.4)", // Muted White
+};
+
 const FRACTION_OPTIONS = [
   { label: "0", value: "0" },
   { label: "1/16", value: "0.0625" },
@@ -1996,6 +2006,22 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     });
 
     setActiveTechnicianSection("room-airflow");
+  };
+
+  const getBoundaryEdgeStyle = (type: string, isSelected: boolean): React.CSSProperties => {
+    const base = isSelected 
+      ? { ...blueprintRoomBoundaryLineStyle, ...blueprintRoomBoundaryLineSelectedStyle }
+      : { ...blueprintRoomBoundaryLineStyle };
+    
+    if (isSelected) return base;
+
+    return {
+      ...base,
+      stroke: BOUNDARY_TYPE_COLORS[type] || BOUNDARY_TYPE_COLORS.unknown,
+      strokeDasharray: type === "unknown" ? "2 2" : "none",
+      // Thin out interior lines to reduce visual noise
+      strokeWidth: type === "interior" ? 0.8 : 1.2,
+    };
   };
 
   const updateBlueprintCalibrationRealWorldDistance = (value: string) => {
@@ -4377,11 +4403,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                                   role="button"
                                   tabIndex={0}
                                   aria-label={`Select ${outline.name} boundary edge ${edgeIndex + 1}`}
-                                  style={
-                                    isSelectedEdge
-                                      ? { ...blueprintRoomBoundaryLineStyle, ...blueprintRoomBoundaryLineSelectedStyle }
-                                      : blueprintRoomBoundaryLineStyle
-                                  }
+                                  style={getBoundaryEdgeStyle(edge.boundaryType, isSelectedEdge)}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     selectTracedRoomBoundaryEdge(outline.id, edgeIndex);
