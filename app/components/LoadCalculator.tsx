@@ -7245,9 +7245,8 @@ const blueprintViewportStyle: React.CSSProperties = {
 
 const blueprintCanvasStyle: React.CSSProperties = {
   position: "relative",
-  minWidth: "100%",
-  minHeight: "100%",
-  width: "max-content",
+  display: "inline-block",
+  lineHeight: 0,
   transformOrigin: "top left",
   transition: "transform 0.18s ease-out",
 };
@@ -7326,17 +7325,17 @@ const blueprintCalibrationLineConfirmedStyle: React.CSSProperties = {
 
 const blueprintCalibrationPointStyle: React.CSSProperties = {
   position: "absolute",
-  width: "22px",
-  height: "22px",
+  width: "18px",
+  height: "18px",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   borderRadius: "999px",
-  border: "2px solid rgba(250,204,21,0.95)",
+  border: "1.2px solid rgba(250,204,21,0.95)",
   background: "rgba(15,23,42,0.88)",
-  boxShadow: "0 10px 22px rgba(0,0,0,0.32)",
+  boxShadow: "0 6px 14px rgba(0,0,0,0.25)",
   color: "#f8fafc",
-  fontSize: "11px",
+  fontSize: "9px",
   fontWeight: 900,
   transform: "translate(-50%, -50%)",
   pointerEvents: "none",
@@ -7366,7 +7365,7 @@ const blueprintVerificationLineStyle: React.CSSProperties = {
 
 const blueprintVerificationPointStyle: React.CSSProperties = {
   ...blueprintCalibrationPointStyle,
-  border: "2px solid rgba(168,85,247,0.95)",
+  border: "1.2px solid rgba(168,85,247,0.95)",
 };
 
 const blueprintRoomOutlineSvgStyle: React.CSSProperties = {
@@ -7417,17 +7416,17 @@ const blueprintRoomDraftLineStyle: React.CSSProperties = {
 
 const blueprintRoomTracePointStyle: React.CSSProperties = {
   position: "absolute",
-  width: "28px",
-  height: "28px",
+  width: "20px",
+  height: "20px",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   borderRadius: "999px",
-  border: "3px solid rgba(56,189,248,0.96)",
+  border: "2px solid rgba(56,189,248,0.96)",
   background: "rgba(15,23,42,0.94)",
   boxShadow: "0 12px 26px rgba(0,0,0,0.34), 0 0 0 4px rgba(56,189,248,0.16)",
   color: "#f8fafc",
-  fontSize: "12px",
+  fontSize: "9px",
   fontWeight: 900,
   transform: "translate(-50%, -50%)",
   cursor: "grab",
@@ -7436,7 +7435,7 @@ const blueprintRoomTracePointStyle: React.CSSProperties = {
 };
 
 const blueprintRoomTracePointDraggingStyle: React.CSSProperties = {
-  border: "3px solid rgba(250,204,21,0.98)",
+  border: "2px solid rgba(250,204,21,0.98)",
   background: "rgba(30,41,59,0.96)",
   boxShadow: "0 0 0 5px rgba(250,204,21,0.18), 0 14px 30px rgba(0,0,0,0.36)",
   cursor: "grabbing",
