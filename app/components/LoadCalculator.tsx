@@ -2530,7 +2530,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       : null;
 
   const blueprintRoomTraceStatusText = blueprintRoomTrace.isTracing
-    ? `${blueprintRoomTrace.draftPoints.length} point${blueprintRoomTrace.draftPoints.length === 1 ? "" : "s"} selected`
+    ? `${blueprintRoomTrace.draftPoints.length} vertices placed. Click start point to close.`
     : `${tracedRoomsWithSqft.length} outline${tracedRoomsWithSqft.length === 1 ? "" : "s"} saved`;
 
   const snapshotSummary = useMemo(() => {
@@ -4274,17 +4274,21 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={blueprintTraceInlineStyle}>
                         <div>
                           <p style={blueprintCalibrationStatusStyle}>
-                            {blueprintRoomTrace.isTracing ? "Verified Trace Active" : "Verified Takeoff"}
+                            {blueprintRoomTrace.isTracing 
+                              ? `Tracing: ${selectedDetectedRoomId ? (detectedBlueprintRooms.find(r => r.id === selectedDetectedRoomId)?.name || "New Room") : "New Room"}` 
+                              : "Verified Takeoff"}
                           </p>
                           <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
                         </div>
-                        <button
-                          type="button"
-                          style={blueprintRoomTrace.isTracing ? blueprintTraceActiveButtonStyle : blueprintTraceButtonStyle}
-                          onClick={startBlueprintRoomOutlineTrace}
-                        >
-                          {blueprintRoomTrace.isTracing ? "TRACING..." : "Start Trace"}
-                        </button>
+                        {!blueprintRoomTrace.isTracing && (
+                          <button
+                            type="button"
+                            style={blueprintTraceButtonStyle}
+                            onClick={startBlueprintRoomOutlineTrace}
+                          >
+                            Start Trace
+                          </button>
+                        )}
                         {blueprintRoomTrace.isTracing && blueprintRoomTrace.draftPoints.length > 0 ? (
                           <button
                             type="button"
