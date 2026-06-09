@@ -55,7 +55,7 @@ type BlueprintRoomTraceFinishOptions = {
   floorLevel?: string;
 };
 
-const TRACE_CLOSE_THRESHOLD_PERCENT = 3;
+const TRACE_CLOSE_THRESHOLD_PERCENT = 1;
 const TRACE_CORNER_SNAP_THRESHOLD_PERCENT = 1.5;
 
 export function createDefaultBlueprintRoomBoundaryEdges(

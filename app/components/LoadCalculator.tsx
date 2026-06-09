@@ -1486,6 +1486,10 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const selectDetectedRoomFromOverlay = (roomId: string) => {
+    if (isTracingLock) {
+      setProjectActionMessage("Selection locked during active trace.");
+      return;
+    }
     setSelectedDetectedRoomId(roomId);
     document
       .getElementById(`detected-room-card-${roomId}`)
@@ -1493,6 +1497,10 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const handlePageSwitch = async (targetPageIndex: number) => {
+    if (isTracingLock) {
+      setProjectActionMessage("Page navigation locked during active trace.");
+      return;
+    }
     if (!blueprintDocument) return;
     if (targetPageIndex < 0 || targetPageIndex >= blueprintDocument.pages.length) return;
 
@@ -1679,7 +1687,6 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
           const naturalY = (yPercent / 100) * img.naturalHeight;
           const existingPolygons = [
             ...blueprintRoomTrace.roomOutlines.map((o) => o.points),
-            blueprintRoomTrace.draftPoints,
           ];
           const snapRadius = (9 / overlayBounds.width) * img.naturalWidth;
           const snapped = findSnapPoint(img, naturalX, naturalY, snapRadius, existingPolygons);
@@ -2083,6 +2090,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const handleBlueprintWorkflowStep = (stepIndex: number) => {
+    if (isTracingLock) {
+      setProjectActionMessage("Navigation locked during active trace.");
+      return;
+    }
+
     if (stepIndex === 0) {
       blueprintFileInputRef.current?.click();
       return;
@@ -2108,14 +2120,26 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const zoomBlueprintIn = () => {
+    if (blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0) {
+      setProjectActionMessage("View changes locked during active trace.");
+      return;
+    }
     setBlueprintZoom((currentZoom) => Math.min(5.0, Number((currentZoom + 0.10).toFixed(2))));
   };
 
   const zoomBlueprintOut = () => {
+    if (blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0) {
+      setProjectActionMessage("View changes locked during active trace.");
+      return;
+    }
     setBlueprintZoom((currentZoom) => Math.max(0.2, Number((currentZoom - 0.10).toFixed(2))));
   };
 
   const fitBlueprintToWidth = () => {
+    if (blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0) {
+      setProjectActionMessage("View changes locked during active trace.");
+      return;
+    }
     const viewport = blueprintViewportRef.current;
     if (!viewport || !blueprintOverlaySize.widthPx) return;
     
@@ -2125,12 +2149,20 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const showFullSheet = () => {
+    if (blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0) {
+      setProjectActionMessage("View changes locked during active trace.");
+      return;
+    }
     setBlueprintZoom(1.0);
     setActiveViewLabel("full");
     blueprintViewportRef.current?.scrollTo({ left: 0, top: 0, behavior: "smooth" });
   };
 
   const jumpToBuilding = () => {
+    if (blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0) {
+      setProjectActionMessage("View changes locked during active trace.");
+      return;
+    }
     if (!activeFocusArea) {
       setProjectActionMessage("Set a focus area first.");
       return;
@@ -2431,6 +2463,9 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     activePixelsDistance,
     activePixelsPerFoot
   );
+
+  const isTracingLock = blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0;
+
   const blueprintCalibrationUI = useMemo(() => {
     if (!blueprintFile) {
       return {
@@ -4106,7 +4141,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                 {blueprintFile ? (
                   <div ref={blueprintPreviewRef} tabIndex={-1} style={{ ...blueprintWorkspaceStyle, gap: 0, padding: 0 }}>
                     {/* Professional Command Bar */}
-                    <div style={blueprintCommandBarStyle}>
+                    <div style={{ ...blueprintCommandBarStyle, opacity: isTracingLock ? 0.4 : 1, pointerEvents: isTracingLock ? "none" : "auto" }}>
                       <div style={commandBarGroupStyle}>
                         <label style={commandBarButtonStyle}>
                           <UploadCloud size={16} />
@@ -4222,6 +4257,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     </div>
 
+                    {isTracingLock && (
+                      <div style={{ background: "rgba(212,175,55,0.12)", borderBottom: "1px solid rgba(212,175,55,0.3)", padding: "6px 16px", color: "#fde68a", fontSize: "11px", fontWeight: 700, textAlign: "center" }}>
+                        Tracing room — view locked. Finish or cancel to unlock view.
+                      </div>
+                    )}
+
                     <div style={{ ...blueprintWorkspaceToolbarStyle, padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                       <div>
                         <p style={blueprintWorkspaceLabelStyle}>Blueprint Workspace</p>
@@ -4276,9 +4317,11 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                 <div ref={blueprintViewportRef} style={{
                   ...blueprintViewportStyle,
-                  ...(blueprintRoomTrace.isTracing ? {
+                  ...(isTracingLock ? {
                     border: "2px solid rgba(212,175,55,0.8)",
                     boxShadow: "0 0 20px rgba(212,175,55,0.2) inset",
+                    overflow: "hidden",
+                    touchAction: "none",
                   } : {})
                 }}>
                   <div
@@ -4595,6 +4638,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                   ...blueprintWorkspaceInspectorStyle,
                   width: activeInspectorWidth,
                   transition: "width 0.2s ease-in-out",
+                  ...(isTracingLock ? { display: "none" } : {}),
                 }}
               >
                 <button 
@@ -7145,14 +7189,14 @@ const blueprintTraceAssistTextStyle: React.CSSProperties = {
 };
 
 const blueprintTraceButtonStyle: React.CSSProperties = {
-  minHeight: "30px",
+  minHeight: "36px",
   border: "1px solid rgba(212,175,55,0.28)",
   borderRadius: "10px",
   background: "rgba(212,175,55,0.14)",
   color: "#f8fafc",
-  fontSize: "11px",
+  fontSize: "12px",
   fontWeight: 900,
-  padding: "0 10px",
+  padding: "0 16px",
   cursor: "pointer",
   whiteSpace: "nowrap",
 };
