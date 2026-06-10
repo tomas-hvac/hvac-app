@@ -561,6 +561,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const suppressNextBlueprintOverlayClickRef = useRef(false);
   const isBlueprintTraceFocusForcedRef = useRef(false);
+  const draftTracePointRefs = useRef<Array<HTMLSpanElement | null>>([]);
+
   const [activeLoadView, setActiveLoadView] = useState<LoadCalculatorView>("customer");
   const [activeTechnicianSection, setActiveTechnicianSection] = useState<TechnicianSection>("manual-d");
   const [squareFeet, setSquareFeet] = useState("0");
@@ -604,6 +606,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [blueprintCalibration, setBlueprintCalibration] = useState(createDefaultBlueprintCalibrationState);
   const [blueprintRoomTrace, setBlueprintRoomTrace] = useState(createDefaultBlueprintRoomTraceState);
   const [draggingTracePointIndex, setDraggingTracePointIndex] = useState<number | null>(null);
+  const [selectedTracePointIndex, setSelectedTracePointIndex] = useState<number | null>(null);
+  const [lastNudgeTime, setLastNudgeTime] = useState<number>(0);
   const [blueprintWorkspaceMode, setBlueprintWorkspaceMode] =
     useState<BlueprintWorkspaceMode>("manual-trace");
   const [isVerificationMode, setIsVerificationMode] = useState(false);
@@ -669,6 +673,14 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       event: prepared.appendedEvent,
     });
   };
+
+  useEffect(() => {
+    if (selectedTracePointIndex === null) return;
+    const el = draftTracePointRefs.current[selectedTracePointIndex];
+    if (el && document.activeElement !== el) {
+      el.focus({ preventScroll: true });
+    }
+  }, [selectedTracePointIndex, blueprintRoomTrace.draftPoints]);
 
   useEffect(() => {
     setV3RecentProjects(listBlueprintProjectsFromLocalStorage());
@@ -1738,6 +1750,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const startBlueprintRoomOutlineTrace = () => {
     setBlueprintWorkspaceMode("manual-trace");
     setSelectedBlueprintBoundaryEdge(null);
+    setSelectedTracePointIndex(null);
     setBlueprintRoomTrace((currentTrace) => startBlueprintRoomTrace(currentTrace));
     
     // Only force focus mode if it's not already enabled, and track that we did it
@@ -1748,6 +1761,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const finishBlueprintRoomOutlineTrace = () => {
+    setSelectedTracePointIndex(null);
     setBlueprintRoomTrace((currentTrace) =>
       finishBlueprintRoomTrace(currentTrace, getCurrentBlueprintTraceFinishOptions(currentTrace.draftPoints))
     );
@@ -1760,10 +1774,17 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const undoLastBlueprintRoomTracePoint = () => {
-    setBlueprintRoomTrace((currentTrace) => undoBlueprintRoomTracePoint(currentTrace));
+    setBlueprintRoomTrace((currentTrace) => {
+      const nextTrace = undoBlueprintRoomTracePoint(currentTrace);
+      if (selectedTracePointIndex !== null && selectedTracePointIndex >= nextTrace.draftPoints.length) {
+        setSelectedTracePointIndex(null);
+      }
+      return nextTrace;
+    });
   };
 
   const cancelBlueprintRoomOutlineTrace = () => {
+    setSelectedTracePointIndex(null);
     setBlueprintRoomTrace((currentTrace) => cancelBlueprintRoomTrace(currentTrace));
     
     // Only restore panels if we were the one who collapsed them
@@ -2909,6 +2930,11 @@ const averageTonnage = (minTon + maxTon) / 2;
           @keyframes shimmer {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
+          }
+
+          @keyframes nudgePulse {
+            0% { transform: scale(0.6); opacity: 1; }
+            100% { transform: scale(1.6); opacity: 0; }
           }
 
           /* Blueprint Focus Mode - Reuses responsive logic for intentional focus */
@@ -4259,7 +4285,9 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                     {isTracingLock && (
                       <div style={{ background: "rgba(212,175,55,0.12)", borderBottom: "1px solid rgba(212,175,55,0.3)", padding: "6px 16px", color: "#fde68a", fontSize: "11px", fontWeight: 700, textAlign: "center" }}>
-                        Tracing room — pan to move view. Finish or cancel to unlock tools.
+                        {selectedTracePointIndex !== null 
+                          ? `Point ${selectedTracePointIndex + 1} selected — use arrow keys to nudge. Shift = faster.`
+                          : "Tracing room — pan to move view. Finish or cancel to unlock tools."}
                       </div>
                     )}
 
@@ -4486,23 +4514,73 @@ const averageTonnage = (minTon + maxTon) / 2;
                       {blueprintRoomTrace.draftPoints.map((point, index) => (
                         <span
                           key={`blueprint-room-draft-point-${index}-${point.xPercent}-${point.yPercent}`}
+                          ref={(el) => { draftTracePointRefs.current[index] = el; }}
+                          tabIndex={0}
                           style={{
                             ...(index === 0 ? blueprintRoomTracePointStartStyle : blueprintRoomTracePointStyle),
                             ...(draggingTracePointIndex === index ? blueprintRoomTracePointDraggingStyle : null),
+                            ...(selectedTracePointIndex === index ? blueprintRoomTracePointSelectedStyle : null),
                             left: `${point.xPercent}%`,
                             top: `${point.yPercent}%`,
                           }}
+                          onFocus={() => setSelectedTracePointIndex(index)}
                           onPointerDown={(event) => {
                             event.stopPropagation();
                             suppressNextBlueprintOverlayClickRef.current = true;
                             setDraggingTracePointIndex(index);
+                            setSelectedTracePointIndex(index);
+                          }}
+                          onKeyDown={(event) => {
+                            const isInput = ["INPUT", "TEXTAREA", "SELECT"].includes((event.target as HTMLElement).tagName) || 
+                                           (event.target as HTMLElement).isContentEditable;
+                            
+                            if (isInput && event.target !== event.currentTarget) return;
+
+                            const isArrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key);
+                            if (!isArrow) return;
+
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            const step = event.shiftKey ? 0.25 : 0.05;
+                            let nextX = point.xPercent;
+                            let nextY = point.yPercent;
+
+                            if (event.key === "ArrowLeft") nextX -= step;
+                            if (event.key === "ArrowRight") nextX += step;
+                            if (event.key === "ArrowUp") nextY -= step;
+                            if (event.key === "ArrowDown") nextY += step;
+
+                            const clampedX = Math.min(100, Math.max(0, nextX));
+                            const clampedY = Math.min(100, Math.max(0, nextY));
+
+                            if (clampedX !== point.xPercent || clampedY !== point.yPercent) {
+                              setLastNudgeTime(Date.now());
+                            }
+
+                            setBlueprintRoomTrace((currentTrace) =>
+                              updateBlueprintRoomTracePoint(currentTrace, index, {
+                                xPercent: clampedX,
+                                yPercent: clampedY,
+                              })
+                            );
                           }}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <div style={{ ...blueprintRoomTraceCrosshairLineHStyle, width: (index === 0 || draggingTracePointIndex === index) ? "11px" : "9px" }} />
-                          <div style={{ ...blueprintRoomTraceCrosshairLineVStyle, height: (index === 0 || draggingTracePointIndex === index) ? "11px" : "9px" }} />
+                          <div style={{ 
+                            ...blueprintRoomTraceCrosshairLineHStyle, 
+                            width: (index === 0 || draggingTracePointIndex === index || selectedTracePointIndex === index) ? "11px" : "9px" 
+                          }} />
+                          <div style={{ 
+                            ...blueprintRoomTraceCrosshairLineVStyle, 
+                            height: (index === 0 || draggingTracePointIndex === index || selectedTracePointIndex === index) ? "11px" : "9px" 
+                          }} />
                           <div style={blueprintRoomTraceCrosshairDotStyle} />
                           <span style={blueprintRoomTraceNumberLabelStyle}>{index + 1}</span>
+                          {selectedTracePointIndex === index && <div style={{ ...blueprintRoomTracePointFocusStyle, position: "absolute", inset: "-4px", borderRadius: "50%", pointerEvents: "none" }} />}
+                          {selectedTracePointIndex === index && Date.now() - lastNudgeTime < 400 && (
+                            <div key={`nudge-pulse-${lastNudgeTime}`} style={blueprintRoomTraceNudgePulseStyle} />
+                          )}
                         </span>
                       ))}
                       {blueprintCalibration.startPoint && blueprintCalibration.endPoint ? (
@@ -7481,6 +7559,26 @@ const blueprintRoomTracePointStartStyle: React.CSSProperties = {
 const blueprintRoomTracePointDraggingStyle: React.CSSProperties = {
   color: "#fac015",
   cursor: "grabbing",
+};
+
+const blueprintRoomTracePointSelectedStyle: React.CSSProperties = {
+  color: "#fde68a",
+  outline: "none",
+  zIndex: 10,
+};
+
+const blueprintRoomTracePointFocusStyle: React.CSSProperties = {
+  outline: "1.5px solid rgba(250,204,21,0.8)",
+  outlineOffset: "3px",
+};
+
+const blueprintRoomTraceNudgePulseStyle: React.CSSProperties = {
+  position: "absolute",
+  inset: "-10px",
+  borderRadius: "50%",
+  border: "1.5px solid rgba(250,204,21,0.6)",
+  pointerEvents: "none",
+  animation: "nudgePulse 0.4s ease-out forwards",
 };
 
 const blueprintRoomTraceCrosshairDotStyle: React.CSSProperties = {
