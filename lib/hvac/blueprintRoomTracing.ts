@@ -56,7 +56,7 @@ type BlueprintRoomTraceFinishOptions = {
 };
 
 const TRACE_CLOSE_THRESHOLD_PERCENT = 1;
-const TRACE_CORNER_SNAP_THRESHOLD_PERCENT = 0.2;
+const TRACE_CORNER_SNAP_THRESHOLD_PERCENT = 0;
 
 export function createDefaultBlueprintRoomBoundaryEdges(
   points: BlueprintCalibrationPoint[]
