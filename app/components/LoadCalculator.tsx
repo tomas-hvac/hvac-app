@@ -1688,7 +1688,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
           const existingPolygons = [
             ...blueprintRoomTrace.roomOutlines.map((o) => o.points),
           ];
-          const snapRadius = (9 / overlayBounds.width) * img.naturalWidth;
+          const snapRadius = (5 / overlayBounds.width) * img.naturalWidth;
           const snapped = findSnapPoint(img, naturalX, naturalY, snapRadius, existingPolygons);
 
           tracePoint = {
@@ -4259,7 +4259,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                     {isTracingLock && (
                       <div style={{ background: "rgba(212,175,55,0.12)", borderBottom: "1px solid rgba(212,175,55,0.3)", padding: "6px 16px", color: "#fde68a", fontSize: "11px", fontWeight: 700, textAlign: "center" }}>
-                        Tracing room — view locked. Finish or cancel to unlock view.
+                        Tracing room — pan to move view. Finish or cancel to unlock tools.
                       </div>
                     )}
 
@@ -4274,8 +4274,8 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={blueprintTraceInlineStyle}>
                         <div>
                           <p style={blueprintCalibrationStatusStyle}>
-                            {blueprintRoomTrace.isTracing 
-                              ? `Tracing: ${selectedDetectedRoomId ? (detectedBlueprintRooms.find(r => r.id === selectedDetectedRoomId)?.name || "New Room") : "New Room"}` 
+                            {blueprintRoomTrace.isTracing
+                              ? `Tracing: ${selectedDetectedRoomId ? (detectedBlueprintRooms.find(r => r.id === selectedDetectedRoomId)?.name || "New Room") : "New Room"}`
                               : "Verified Takeoff"}
                           </p>
                           <p style={blueprintCalibrationHelperStyle}>{blueprintRoomTraceStatusText}</p>
@@ -4319,15 +4319,15 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     </div>
 
-                <div ref={blueprintViewportRef} style={{
-                  ...blueprintViewportStyle,
-                  ...(isTracingLock ? {
+                    <div ref={blueprintViewportRef} style={{
+                    ...blueprintViewportStyle,
+                    ...(isTracingLock ? {
                     border: "2px solid rgba(212,175,55,0.8)",
                     boxShadow: "0 0 20px rgba(212,175,55,0.2) inset",
-                    overflow: "hidden",
-                    touchAction: "none",
-                  } : {})
-                }}>
+                    overflow: "auto",
+                    touchAction: "pan-x pan-y",
+                    } : {})
+                    }}>
                   <div
                     style={{
                       ...blueprintCanvasStyle,
@@ -4487,7 +4487,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                         <span
                           key={`blueprint-room-draft-point-${index}-${point.xPercent}-${point.yPercent}`}
                           style={{
-                            ...blueprintRoomTracePointStyle,
+                            ...(index === 0 ? blueprintRoomTracePointStartStyle : blueprintRoomTracePointStyle),
                             ...(draggingTracePointIndex === index ? blueprintRoomTracePointDraggingStyle : null),
                             left: `${point.xPercent}%`,
                             top: `${point.yPercent}%`,
@@ -4499,7 +4499,10 @@ const averageTonnage = (minTon + maxTon) / 2;
                           }}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          {index + 1}
+                          <div style={{ ...blueprintRoomTraceCrosshairLineHStyle, width: (index === 0 || draggingTracePointIndex === index) ? "11px" : "9px" }} />
+                          <div style={{ ...blueprintRoomTraceCrosshairLineVStyle, height: (index === 0 || draggingTracePointIndex === index) ? "11px" : "9px" }} />
+                          <div style={blueprintRoomTraceCrosshairDotStyle} />
+                          <span style={blueprintRoomTraceNumberLabelStyle}>{index + 1}</span>
                         </span>
                       ))}
                       {blueprintCalibration.startPoint && blueprintCalibration.endPoint ? (
@@ -4543,7 +4546,10 @@ const averageTonnage = (minTon + maxTon) / 2;
                             top: `${blueprintCalibration.startPoint.yPercent}%`,
                           }}
                         >
-                          A
+                          <div style={blueprintCalibrationCrosshairLineHStyle} />
+                          <div style={blueprintCalibrationCrosshairLineVStyle} />
+                          <div style={blueprintCalibrationCrosshairDotStyle} />
+                          <span style={blueprintCalibrationNumberLabelStyle}>A</span>
                         </span>
                       ) : null}
                       {blueprintCalibration.endPoint ? (
@@ -4554,7 +4560,10 @@ const averageTonnage = (minTon + maxTon) / 2;
                             top: `${blueprintCalibration.endPoint.yPercent}%`,
                           }}
                         >
-                          B
+                          <div style={blueprintCalibrationCrosshairLineHStyle} />
+                          <div style={blueprintCalibrationCrosshairLineVStyle} />
+                          <div style={blueprintCalibrationCrosshairDotStyle} />
+                          <span style={blueprintCalibrationNumberLabelStyle}>B</span>
                         </span>
                       ) : null}
 
@@ -4567,7 +4576,10 @@ const averageTonnage = (minTon + maxTon) / 2;
                             top: `${blueprintCalibration.verification.startPoint.yPercent}%`,
                           }}
                         >
-                          V1
+                          <div style={blueprintCalibrationCrosshairLineHStyle} />
+                          <div style={blueprintCalibrationCrosshairLineVStyle} />
+                          <div style={blueprintCalibrationCrosshairDotStyle} />
+                          <span style={blueprintCalibrationNumberLabelStyle}>V1</span>
                         </span>
                       )}
                       {blueprintCalibration.verification?.endPoint && (
@@ -4593,7 +4605,10 @@ const averageTonnage = (minTon + maxTon) / 2;
                               top: `${blueprintCalibration.verification.endPoint.yPercent}%`,
                             }}
                           >
-                            V2
+                            <div style={blueprintCalibrationCrosshairLineHStyle} />
+                            <div style={blueprintCalibrationCrosshairLineVStyle} />
+                            <div style={blueprintCalibrationCrosshairDotStyle} />
+                            <span style={blueprintCalibrationNumberLabelStyle}>V2</span>
                           </span>
                         </>
                       )}
@@ -7325,19 +7340,49 @@ const blueprintCalibrationLineConfirmedStyle: React.CSSProperties = {
 
 const blueprintCalibrationPointStyle: React.CSSProperties = {
   position: "absolute",
-  width: "18px",
-  height: "18px",
-  display: "inline-flex",
+  width: "20px",
+  height: "20px",
+  display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: "999px",
-  border: "1.2px solid rgba(250,204,21,0.95)",
-  background: "rgba(15,23,42,0.88)",
-  boxShadow: "0 6px 14px rgba(0,0,0,0.25)",
-  color: "#f8fafc",
-  fontSize: "9px",
-  fontWeight: 900,
   transform: "translate(-50%, -50%)",
+  pointerEvents: "none",
+  color: "#fac015",
+};
+
+const blueprintCalibrationCrosshairDotStyle: React.CSSProperties = {
+  width: "3px",
+  height: "3px",
+  borderRadius: "50%",
+  background: "currentColor",
+  boxShadow: "0 0 1.5px rgba(0,0,0,0.9)",
+  zIndex: 2,
+};
+
+const blueprintCalibrationCrosshairLineHStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "12px",
+  height: "1px",
+  background: "currentColor",
+  boxShadow: "0 0 1px rgba(0,0,0,0.5)",
+};
+
+const blueprintCalibrationCrosshairLineVStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "1px",
+  height: "12px",
+  background: "currentColor",
+  boxShadow: "0 0 1px rgba(0,0,0,0.5)",
+};
+
+const blueprintCalibrationNumberLabelStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "-12px",
+  right: "-12px",
+  fontSize: "10px",
+  fontWeight: 950,
+  color: "#fde68a",
+  textShadow: "0 1px 3px rgba(0,0,0,1)",
   pointerEvents: "none",
 };
 
@@ -7365,7 +7410,7 @@ const blueprintVerificationLineStyle: React.CSSProperties = {
 
 const blueprintVerificationPointStyle: React.CSSProperties = {
   ...blueprintCalibrationPointStyle,
-  border: "1.2px solid rgba(168,85,247,0.95)",
+  color: "#a855f7",
 };
 
 const blueprintRoomOutlineSvgStyle: React.CSSProperties = {
@@ -7416,29 +7461,62 @@ const blueprintRoomDraftLineStyle: React.CSSProperties = {
 
 const blueprintRoomTracePointStyle: React.CSSProperties = {
   position: "absolute",
-  width: "20px",
-  height: "20px",
-  display: "inline-flex",
+  width: "14px",
+  height: "14px",
+  display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  borderRadius: "999px",
-  border: "2px solid rgba(56,189,248,0.96)",
-  background: "rgba(15,23,42,0.94)",
-  boxShadow: "0 12px 26px rgba(0,0,0,0.34), 0 0 0 4px rgba(56,189,248,0.16)",
-  color: "#f8fafc",
-  fontSize: "9px",
-  fontWeight: 900,
   transform: "translate(-50%, -50%)",
   cursor: "grab",
   pointerEvents: "auto",
   touchAction: "none",
+  color: "rgba(56,189,248,0.9)",
+};
+
+const blueprintRoomTracePointStartStyle: React.CSSProperties = {
+  ...blueprintRoomTracePointStyle,
+  color: "#38bdf8",
 };
 
 const blueprintRoomTracePointDraggingStyle: React.CSSProperties = {
-  border: "2px solid rgba(250,204,21,0.98)",
-  background: "rgba(30,41,59,0.96)",
-  boxShadow: "0 0 0 5px rgba(250,204,21,0.18), 0 14px 30px rgba(0,0,0,0.36)",
+  color: "#fac015",
   cursor: "grabbing",
+};
+
+const blueprintRoomTraceCrosshairDotStyle: React.CSSProperties = {
+  width: "2px",
+  height: "2px",
+  borderRadius: "50%",
+  background: "currentColor",
+  boxShadow: "0 0 1px rgba(0,0,0,0.8)",
+  zIndex: 2,
+};
+
+const blueprintRoomTraceCrosshairLineHStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "9px",
+  height: "1px",
+  background: "currentColor",
+  opacity: 0.8,
+};
+
+const blueprintRoomTraceCrosshairLineVStyle: React.CSSProperties = {
+  position: "absolute",
+  width: "1px",
+  height: "9px",
+  background: "currentColor",
+  opacity: 0.8,
+};
+
+const blueprintRoomTraceNumberLabelStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "-10px",
+  right: "-10px",
+  fontSize: "7px",
+  fontWeight: 900,
+  color: "#f8fafc",
+  textShadow: "0 1px 2px rgba(0,0,0,0.9)",
+  pointerEvents: "none",
 };
 
 const blueprintOverlayLayerStyle: React.CSSProperties = {
