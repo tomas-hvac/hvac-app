@@ -628,6 +628,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
+  const [previousTracedArea, setPreviousTracedArea] = useState<number | null>(null);
+  const [manualExpectedArea, setManualExpectedArea] = useState<string>("");
   const [projectActionMessage, setProjectActionMessage] = useState("");
   const [v3ProjectName, setV3ProjectName] = useState("New Blueprint Project");
   const [v3SaveStatus, setV3SaveStatus] = useState("");
@@ -1806,6 +1808,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const finishBlueprintRoomOutlineTrace = () => {
     setSelectedTracePointIndex(null);
+    setPreviousTracedArea(null);
+    setManualExpectedArea("");
     setBlueprintRoomTrace((currentTrace) =>
       finishBlueprintRoomTrace(currentTrace, getCurrentBlueprintTraceFinishOptions(currentTrace.draftPoints))
     );
@@ -1829,6 +1833,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const cancelBlueprintRoomOutlineTrace = () => {
     setSelectedTracePointIndex(null);
+    setPreviousTracedArea(null);
+    setManualExpectedArea("");
     setBlueprintRoomTrace((currentTrace) => cancelBlueprintRoomTrace(currentTrace));
     
     // Only restore panels if we were the one who collapsed them
@@ -1856,6 +1862,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setIsVerificationMode(false);
     setCalibrationPlacementMode(null);
     setSelectedCalibrationPointId(null);
+    setPreviousTracedArea(null);
+    setManualExpectedArea("");
     setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
   };
 
@@ -1874,9 +1882,55 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
 
   const editTracedRoomOutline = (outlineId: string) => {
+    const room = tracedRoomsWithSqft.find(r => r.id === outlineId);
+    if (room) {
+      setPreviousTracedArea(room.squareFeet);
+    }
     setBlueprintWorkspaceMode("manual-trace");
     setSelectedBlueprintBoundaryEdge(null);
     setBlueprintRoomTrace((currentTrace) => editBlueprintRoomOutline(currentTrace, outlineId));
+  };
+
+  const alignSelectedEdge = (mode: "auto" | "vertical" | "horizontal") => {
+    if (!selectedBlueprintBoundaryEdge) return;
+    const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
+
+    setBlueprintRoomTrace((currentTrace) => {
+      const room = currentTrace.roomOutlines.find((r) => r.id === outlineId);
+      if (!room) return currentTrace;
+
+      const nextPoints = [...room.points];
+      const startIdx = edgeIndex;
+      const endIdx = (edgeIndex + 1) % room.points.length;
+
+      const p1 = nextPoints[startIdx];
+      const p2 = nextPoints[endIdx];
+
+      if (!p1 || !p2) return currentTrace;
+
+      if (mode === "vertical") {
+        nextPoints[endIdx] = { ...p2, xPercent: p1.xPercent };
+      } else if (mode === "horizontal") {
+        nextPoints[endIdx] = { ...p2, yPercent: p1.yPercent };
+      } else {
+        const xDelta = Math.abs(p1.xPercent - p2.xPercent);
+        const yDelta = Math.abs(p1.yPercent - p2.yPercent);
+        if (xDelta < yDelta) {
+          nextPoints[endIdx] = { ...p2, xPercent: p1.xPercent };
+        } else {
+          nextPoints[endIdx] = { ...p2, yPercent: p1.yPercent };
+        }
+      }
+
+      return {
+        ...currentTrace,
+        roomOutlines: currentTrace.roomOutlines.map((r) =>
+          r.id === outlineId ? { ...r, points: nextPoints, squareFeet: null } : r
+        ),
+      };
+    });
+    
+    setProjectActionMessage(mode === "auto" ? "Edge straightened." : `Edge aligned ${mode}.`);
   };
 
   const removeTracedRoom = (outlineId: string) => {
@@ -2617,9 +2671,18 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
         ] ?? null
       : null;
 
-  const blueprintRoomTraceStatusText = blueprintRoomTrace.isTracing
-    ? `${blueprintRoomTrace.draftPoints.length} vertices placed. Click start point to close.`
-    : `${tracedRoomsWithSqft.length} outline${tracedRoomsWithSqft.length === 1 ? "" : "s"} saved`;
+  const blueprintRoomTraceStatusText = useMemo(() => {
+    if (blueprintRoomTrace.isTracing) {
+      const draftSqft = calculateBlueprintPolygonSquareFeet(
+        blueprintRoomTrace.draftPoints,
+        confirmedBlueprintPixelsPerFoot,
+        blueprintOverlaySize.widthPx > 0 ? blueprintOverlaySize : undefined
+      );
+      const prevText = previousTracedArea !== null ? ` (Prev: ${Math.round(previousTracedArea)} sq ft)` : "";
+      return `${blueprintRoomTrace.draftPoints.length} vertices. ${draftSqft !== null ? `${Math.round(draftSqft)} sq ft${prevText}. ` : ""}Click start to close.`;
+    }
+    return `${tracedRoomsWithSqft.length} outline${tracedRoomsWithSqft.length === 1 ? "" : "s"} saved`;
+  }, [blueprintRoomTrace.isTracing, blueprintRoomTrace.draftPoints, tracedRoomsWithSqft.length, confirmedBlueprintPixelsPerFoot, blueprintOverlaySize, previousTracedArea]);
 
   const snapshotSummary = useMemo(() => {
     const sqft = Math.max(0, Math.round(activeConditionedArea));
@@ -4352,9 +4415,14 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                     {isTracingLock && (
                       <div style={{ background: "rgba(212,175,55,0.12)", borderBottom: "1px solid rgba(212,175,55,0.3)", padding: "6px 16px", color: "#fde68a", fontSize: "11px", fontWeight: 700, textAlign: "center" }}>
-                        {selectedTracePointIndex !== null 
-                          ? `Point ${selectedTracePointIndex + 1} selected — use arrow keys to nudge. Shift = faster.`
-                          : "Tracing room — pan to move view. Finish or cancel to unlock tools."}
+                        <p style={{ margin: 0 }}>
+                          {selectedTracePointIndex !== null
+                            ? `Point ${selectedTracePointIndex + 1} selected — use arrow keys to nudge. Shift = faster.`
+                            : "Tracing room — pan to move view. Finish or cancel to unlock tools."}
+                        </p>
+                        <p style={{ margin: "2px 0 0", fontSize: "9px", opacity: 0.8, fontStyle: "italic" }}>
+                          INSIDE FACE MODE: Trace finished boundaries for Manual J accuracy.
+                        </p>
                       </div>
                     )}
 
@@ -5509,6 +5577,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                     Traced rooms are the source of truth for takeoff. Area calculations use:{" "}
                     {blueprintTraceCalibrationStatusText}.
                   </p>
+                  <p style={{ ...detectedRoomsNoteStyle, color: "#fbbf24", fontStyle: "italic", marginTop: "4px" }}>
+                    For Manual J, trace the inside finished room boundary unless intentionally including wall thickness.
+                  </p>
                   {detectedRoomActionMessage ? (
                     <p style={detectedRoomActionMessageStyle}>{detectedRoomActionMessage}</p>
                   ) : null}
@@ -5564,12 +5635,72 @@ const averageTonnage = (minTon + maxTon) / 2;
                             {boundaryCompleteness.completionPercent}% classified ({boundaryCompleteness.classifiedEdges}/{boundaryCompleteness.totalEdges} edges)
                           </span>
                         </div>
+
+                        {selectedDetectedRoomId === outline.id && (
+                          <div style={{ ...detectedRoomFactsStyle, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "8px", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
+                            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "10px" }}>
+                              <span style={{ fontSize: "9px", fontWeight: 800, color: "#94a3b8" }}>EXPECTED AREA (SQ FT)</span>
+                              <input 
+                                type="number"
+                                className="load-input"
+                                placeholder="e.g. 150"
+                                value={manualExpectedArea}
+                                onChange={(e) => setManualExpectedArea(e.target.value)}
+                                style={{ ...inputControlStyle, width: "60px", height: "20px", fontSize: "10px", background: "rgba(0,0,0,0.2)", textAlign: "right" }}
+                              />
+                            </label>
+                            {manualExpectedArea && outline.squareFeet !== null && (
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                <span style={{ fontSize: "9px", color: "#64748b" }}>TRACE VARIANCE</span>
+                                {(() => {
+                                  const expected = parseFloat(manualExpectedArea);
+                                  if (!expected || expected <= 0) return null;
+                                  const diff = ((outline.squareFeet - expected) / expected) * 100;
+                                  return (
+                                    <span style={{ fontSize: "10px", fontWeight: 900, color: Math.abs(diff) > 5 ? "#fca5a5" : "#4ade80" }}>
+                                      {diff > 0 ? "+" : ""}{diff.toFixed(1)}%
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {selectedCardEdge ? (
                           <div style={{ ...detectedRoomEditFieldStyle, flexDirection: "column", alignItems: "flex-start", gap: "12px" }}>
-                            <div>
-                              <span style={{ ...detectedRoomEditLabelStyle, marginBottom: "8px", display: "block" }}>
-                                Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Exposure Verification
-                              </span>
+                            <div style={{ width: "100%" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                <span style={detectedRoomEditLabelStyle}>
+                                  Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Exposure Verification
+                                </span>
+                                <div style={{ display: "flex", gap: "4px" }}>
+                                  <button
+                                    type="button"
+                                    style={{ ...detectedRoomButtonStyle, fontSize: "8px", padding: "2px 4px", minHeight: "20px", background: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.2)", color: "#fbbf24" }}
+                                    onClick={() => alignSelectedEdge("vertical")}
+                                    title="Make this edge perfectly vertical"
+                                  >
+                                    V-ALIGN
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{ ...detectedRoomButtonStyle, fontSize: "8px", padding: "2px 4px", minHeight: "20px", background: "rgba(251,191,36,0.05)", border: "1px solid rgba(251,191,36,0.2)", color: "#fbbf24" }}
+                                    onClick={() => alignSelectedEdge("horizontal")}
+                                    title="Make this edge perfectly horizontal"
+                                  >
+                                    H-ALIGN
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{ ...detectedRoomButtonStyle, fontSize: "9px", padding: "2px 8px", minHeight: "22px", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)", color: "#fbbf24" }}
+                                    onClick={() => alignSelectedEdge("auto")}
+                                    title="Auto-straighten based on dominant axis"
+                                  >
+                                    STRAIGHTEN
+                                  </button>
+                                </div>
+                              </div>
                               <div style={edgeTypeSelectorStyle}>
                                 {[
                                   { label: "Exterior", value: "exterior" },
