@@ -145,3 +145,7 @@ textarea{
 .hidden{
   display:none;
 }
+
+.blueprint-calibration-marker:hover {
+  opacity: 0.85 !important;
+}
