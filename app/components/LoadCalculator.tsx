@@ -607,6 +607,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [blueprintRoomTrace, setBlueprintRoomTrace] = useState(createDefaultBlueprintRoomTraceState);
   const [draggingTracePointIndex, setDraggingTracePointIndex] = useState<number | null>(null);
   const [selectedTracePointIndex, setSelectedTracePointIndex] = useState<number | null>(null);
+  const [selectedCalibrationPointId, setSelectedCalibrationPointId] = useState<"A" | "B" | null>(null);
+  const [calibrationPlacementMode, setCalibrationPlacementMode] = useState<"A" | "B" | null>(null);
   const [lastNudgeTime, setLastNudgeTime] = useState<number>(0);
   const [blueprintWorkspaceMode, setBlueprintWorkspaceMode] =
     useState<BlueprintWorkspaceMode>("manual-trace");
@@ -635,6 +637,20 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [calibrationFeet, setCalibrationFeet] = useState("12");
   const [calibrationInches, setCalibrationInches] = useState("0");
   const [calibrationFraction, setCalibrationFraction] = useState("0");
+  const [verificationFeet, setVerificationFeet] = useState("10");
+  const [verificationInches, setVerificationInches] = useState("0");
+  const [verificationFraction, setVerificationFraction] = useState("0");
+
+  const updateStructuredVerification = (f: string, i: string, fr: string) => {
+    setVerificationFeet(f);
+    setVerificationInches(i);
+    setVerificationFraction(fr);
+    const feet = parseFloat(f) || 0;
+    const inches = parseFloat(i) || 0;
+    const fractionVal = parseFloat(fr) || 0;
+    const totalDecimalFeet = feet + (inches + fractionVal) / 12;
+    updateBlueprintCalibrationRealWorldDistance(String(totalDecimalFeet));
+  };
   const [isBlueprintFocusMode, setIsBlueprintFocusMode] = useState(false);
   const [isFocusAreaMode, setIsFocusAreaMode] = useState(false);
   const [activeFocusArea, setActiveFocusArea] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
@@ -851,9 +867,14 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        setBlueprintOverlaySize({
-          widthPx: entry.contentRect.width,
-          heightPx: entry.contentRect.height,
+        setBlueprintOverlaySize((prev) => {
+          if (prev.widthPx === entry.contentRect.width && prev.heightPx === entry.contentRect.height) {
+            return prev;
+          }
+          return {
+            widthPx: entry.contentRect.width,
+            heightPx: entry.contentRect.height,
+          };
         });
       }
     });
@@ -1738,13 +1759,36 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       return;
     }
 
-    setBlueprintCalibration((currentCalibration) =>
-      selectBlueprintCalibrationPoint(currentCalibration, { xPercent, yPercent }, {
-        widthPx: overlayBounds.width / blueprintZoom,
-        heightPx: overlayBounds.height / blueprintZoom,
-      })
-    );
-    setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
+    if (calibrationPlacementMode === "A" || calibrationPlacementMode === "B") {
+      setBlueprintCalibration((current) => {
+        const isA = calibrationPlacementMode === "A";
+        const next = selectBlueprintCalibrationPoint(
+          { ...current, isLocked: false, [isA ? "startPoint" : "endPoint"]: null },
+          { xPercent, yPercent },
+          {
+            widthPx: overlayBounds.width / blueprintZoom,
+            heightPx: overlayBounds.height / blueprintZoom,
+          }
+        );
+
+        // If it was calibrated, demote it to ready because it just moved
+        if (current.status === "calibrated") {
+          return { ...next, status: "ready" };
+        }
+        return next;
+      });
+      setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
+      return;
+    }
+
+    // Default sequential calibration is disabled in favor of explicit A/B controls
+    // setBlueprintCalibration((currentCalibration) =>
+    //   selectBlueprintCalibrationPoint(currentCalibration, { xPercent, yPercent }, {
+    //     widthPx: overlayBounds.width / blueprintZoom,
+    //     heightPx: overlayBounds.height / blueprintZoom,
+    //   })
+    // );
+    // setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
   };
 
   const startBlueprintRoomOutlineTrace = () => {
@@ -1796,16 +1840,22 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const recalibrateBlueprintScale = () => {
     const roomCount = blueprintRoomTrace.roomOutlines.length;
-    const warningMessage = roomCount > 0
-      ? `Are you sure you want to reset the blueprint scale? This will clear the calculated square footage for all ${roomCount} traced rooms. The room outlines and names will be preserved, but you must complete a new calibration to restore their areas.`
-      : "Are you sure you want to reset the blueprint scale?";
+    const isVerified = blueprintCalibration.status === "calibrated";
 
-    if (!window.confirm(warningMessage)) {
-      return;
+    if (isVerified) {
+      const warningMessage = roomCount > 0
+        ? `Replace existing verified scale? This will update calculated areas for all ${roomCount} traced rooms.`
+        : "Reset verified blueprint scale?";
+
+      if (!window.confirm(warningMessage)) {
+        return;
+      }
     }
 
     setBlueprintCalibration(createDefaultBlueprintCalibrationState());
     setIsVerificationMode(false);
+    setCalibrationPlacementMode(null);
+    setSelectedCalibrationPointId(null);
     setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
   };
 
@@ -2070,9 +2120,14 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       return;
     }
 
-    setBlueprintCalibration((currentCalibration) =>
-      updateBlueprintCalibrationKnownLength(
-        currentCalibration,
+    setBlueprintCalibration((currentCalibration) => {
+      // If we are already calibrated, we need to unlock to allow the update
+      const baseCalibration = currentCalibration.status === "calibrated" 
+        ? { ...currentCalibration, isLocked: false } 
+        : currentCalibration;
+
+      const nextCalibration = updateBlueprintCalibrationKnownLength(
+        baseCalibration,
         value,
         overlayBounds
           ? {
@@ -2080,8 +2135,15 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
               heightPx: overlayBounds.height / blueprintZoom,
             }
           : undefined
-      )
-    );
+      );
+
+      // If it was calibrated and the value actually changed, demote it to ready 
+      // so the technician must click CONFIRM again to verify the new scale.
+      if (currentCalibration.status === "calibrated" && nextCalibration.realWorldDistance !== currentCalibration.realWorldDistance) {
+        return { ...nextCalibration, status: "ready" };
+      }
+      return nextCalibration;
+    });
     setBlueprintRoomTrace((currentTrace) => markBlueprintRoomOutlinesNeedRecalculation(currentTrace));
   };
 
@@ -2419,12 +2481,12 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     );
   }, [activePixelsDistance, blueprintCalibration.realWorldDistance, blueprintCalibration.realWorldUnit]);
 
-  const verificationErrorPercentage = useMemo(() => {
+  const scaleCheckResult = useMemo(() => {
     if (
       !blueprintCalibration.verification?.startPoint ||
       !blueprintCalibration.verification?.endPoint ||
       !activePixelsPerFoot ||
-      !blueprintCalibration.verification?.realWorldDistance
+      (parseFloat(verificationFeet) <= 0 && parseFloat(verificationInches) <= 0 && parseFloat(verificationFraction) <= 0)
     ) {
       return null;
     }
@@ -2437,16 +2499,21 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     );
 
     const measuredFeet = calculateBlueprintMeasuredFeet(pixelsDistance, activePixelsPerFoot);
+    
+    // Parse from current state instead of relying on calibration state which might be stale
+    const expectedFeet = (parseFloat(verificationFeet) || 0) + (parseFloat(verificationInches) || 0) / 12 + (parseFloat(verificationFraction) || 0) / 12;
+    
+    const error = expectedFeet > 0 ? (Math.abs(measuredFeet! - expectedFeet) / expectedFeet) * 100 : null;
+    const confidence = error === null ? "unverified" : error <= 1.0 ? "verified" : error <= 3.0 ? "acceptable" : "warning";
+    const isPassed = confidence === "verified" || confidence === "acceptable";
 
-    return calculateBlueprintVerificationError(
-      measuredFeet,
-      blueprintCalibration.verification.realWorldDistance,
-      blueprintCalibration.realWorldUnit
-    );
+    return { measuredFeet, expectedFeet, error, confidence, isPassed };
   }, [
     blueprintCalibration.verification,
     activePixelsPerFoot,
-    blueprintCalibration.realWorldUnit,
+    verificationFeet,
+    verificationInches,
+    verificationFraction,
     blueprintOverlaySize,
   ]);
 
@@ -4618,8 +4685,66 @@ const averageTonnage = (minTon + maxTon) / 2;
                       ) : null}
                       {blueprintCalibration.startPoint ? (
                         <span
+                          key="calibration-point-a"
+                          className="blueprint-calibration-marker"
+                          tabIndex={0}
+                          onFocus={() => setSelectedCalibrationPointId("A")}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            (event.currentTarget as HTMLElement).focus();
+                          }}
+                          onKeyDown={(event) => {
+                            const isInput = ["INPUT", "TEXTAREA", "SELECT"].includes((event.target as HTMLElement).tagName) || 
+                                           (event.target as HTMLElement).isContentEditable;
+                            if (isInput && event.target !== event.currentTarget) return;
+
+                            const isArrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key);
+                            if (!isArrow) {
+                              if (event.key === "Escape") {
+                                (event.currentTarget as HTMLElement).blur();
+                                setSelectedCalibrationPointId(null);
+                              }
+                              return;
+                            }
+
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            const step = event.shiftKey ? 0.25 : 0.05;
+                            let nextX = blueprintCalibration.startPoint!.xPercent;
+                            let nextY = blueprintCalibration.startPoint!.yPercent;
+
+                            if (event.key === "ArrowLeft") nextX -= step;
+                            if (event.key === "ArrowRight") nextX += step;
+                            if (event.key === "ArrowUp") nextY -= step;
+                            if (event.key === "ArrowDown") nextY += step;
+
+                            const clampedX = Math.min(100, Math.max(0, nextX));
+                            const clampedY = Math.min(100, Math.max(0, nextY));
+
+                            if (clampedX !== blueprintCalibration.startPoint!.xPercent || clampedY !== blueprintCalibration.startPoint!.yPercent) {
+                              setLastNudgeTime(Date.now());
+                              setBlueprintCalibration((currentCalibration) => {
+                                const overlayBounds = blueprintOverlayRef.current?.getBoundingClientRect();
+                                const nextCalibration = selectBlueprintCalibrationPoint(
+                                  { ...currentCalibration, isLocked: false, startPoint: null, endPoint: currentCalibration.endPoint },
+                                  { xPercent: clampedX, yPercent: clampedY },
+                                  overlayBounds ? {
+                                    widthPx: overlayBounds.width / blueprintZoom,
+                                    heightPx: overlayBounds.height / blueprintZoom,
+                                  } : undefined
+                                );
+
+                                if (currentCalibration.status === "calibrated") {
+                                  return { ...nextCalibration, status: "ready" };
+                                }
+                                return nextCalibration;
+                              });
+                            }
+                          }}
                           style={{
                             ...blueprintCalibrationPointStyle,
+                            ...(selectedCalibrationPointId === "A" ? blueprintCalibrationPointSelectedStyle : null),
                             left: `${blueprintCalibration.startPoint.xPercent}%`,
                             top: `${blueprintCalibration.startPoint.yPercent}%`,
                           }}
@@ -4627,13 +4752,74 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <div style={blueprintCalibrationCrosshairLineHStyle} />
                           <div style={blueprintCalibrationCrosshairLineVStyle} />
                           <div style={blueprintCalibrationCrosshairDotStyle} />
-                          <span style={blueprintCalibrationNumberLabelStyle}>A</span>
+                          <span style={{ ...blueprintCalibrationNumberLabelStyle, top: "-14px", right: "-14px" }}>A</span>
+                          {selectedCalibrationPointId === "A" && Date.now() - lastNudgeTime < 400 && (
+                            <div key={`nudge-pulse-A-${lastNudgeTime}`} style={blueprintRoomTraceNudgePulseStyle} />
+                          )}
                         </span>
                       ) : null}
                       {blueprintCalibration.endPoint ? (
                         <span
+                          key="calibration-point-b"
+                          className="blueprint-calibration-marker"
+                          tabIndex={0}
+                          onFocus={() => setSelectedCalibrationPointId("B")}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            (event.currentTarget as HTMLElement).focus();
+                          }}
+                          onKeyDown={(event) => {
+                            const isInput = ["INPUT", "TEXTAREA", "SELECT"].includes((event.target as HTMLElement).tagName) || 
+                                           (event.target as HTMLElement).isContentEditable;
+                            if (isInput && event.target !== event.currentTarget) return;
+
+                            const isArrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key);
+                            if (!isArrow) {
+                              if (event.key === "Escape") {
+                                (event.currentTarget as HTMLElement).blur();
+                                setSelectedCalibrationPointId(null);
+                              }
+                              return;
+                            }
+
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            const step = event.shiftKey ? 0.25 : 0.05;
+                            let nextX = blueprintCalibration.endPoint!.xPercent;
+                            let nextY = blueprintCalibration.endPoint!.yPercent;
+
+                            if (event.key === "ArrowLeft") nextX -= step;
+                            if (event.key === "ArrowRight") nextX += step;
+                            if (event.key === "ArrowUp") nextY -= step;
+                            if (event.key === "ArrowDown") nextY += step;
+
+                            const clampedX = Math.min(100, Math.max(0, nextX));
+                            const clampedY = Math.min(100, Math.max(0, nextY));
+
+                            if (clampedX !== blueprintCalibration.endPoint!.xPercent || clampedY !== blueprintCalibration.endPoint!.yPercent) {
+                              setLastNudgeTime(Date.now());
+                              setBlueprintCalibration((currentCalibration) => {
+                                const overlayBounds = blueprintOverlayRef.current?.getBoundingClientRect();
+                                const nextCalibration = selectBlueprintCalibrationPoint(
+                                  { ...currentCalibration, isLocked: false, endPoint: null },
+                                  { xPercent: clampedX, yPercent: clampedY },
+                                  overlayBounds ? {
+                                    widthPx: overlayBounds.width / blueprintZoom,
+                                    heightPx: overlayBounds.height / blueprintZoom,
+                                  } : undefined
+                                );
+
+                                if (currentCalibration.status === "calibrated") {
+                                  return { ...nextCalibration, status: "ready" };
+                                }
+                                return nextCalibration;
+                              });
+                            }
+                          }}
                           style={{
                             ...blueprintCalibrationPointStyle,
+                            ...(selectedCalibrationPointId === "B" ? blueprintCalibrationPointSelectedStyle : null),
                             left: `${blueprintCalibration.endPoint.xPercent}%`,
                             top: `${blueprintCalibration.endPoint.yPercent}%`,
                           }}
@@ -4641,13 +4827,17 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <div style={blueprintCalibrationCrosshairLineHStyle} />
                           <div style={blueprintCalibrationCrosshairLineVStyle} />
                           <div style={blueprintCalibrationCrosshairDotStyle} />
-                          <span style={blueprintCalibrationNumberLabelStyle}>B</span>
+                          <span style={{ ...blueprintCalibrationNumberLabelStyle, top: "-14px", right: "-14px" }}>B</span>
+                          {selectedCalibrationPointId === "B" && Date.now() - lastNudgeTime < 400 && (
+                            <div key={`nudge-pulse-B-${lastNudgeTime}`} style={blueprintRoomTraceNudgePulseStyle} />
+                          )}
                         </span>
                       ) : null}
 
                       {/* Verification Overlay */}
                       {blueprintCalibration.verification?.startPoint && (
                         <span
+                          className="blueprint-calibration-marker"
                           style={{
                             ...blueprintVerificationPointStyle,
                             left: `${blueprintCalibration.verification.startPoint.xPercent}%`,
@@ -4677,6 +4867,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                             />
                           </svg>
                           <span
+                            className="blueprint-calibration-marker"
                             style={{
                               ...blueprintVerificationPointStyle,
                               left: `${blueprintCalibration.verification.endPoint.xPercent}%`,
@@ -4751,102 +4942,285 @@ const averageTonnage = (minTon + maxTon) / 2;
                 {/* Compact Calibration Section */}
                 <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Blueprint Calibration">
                   <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor, fontSize: "10px", textAlign: "center" }}>
-                    {blueprintCalibrationUI.statusText === "Scale not verified" ? "UNVERIFIED" : "CALIBRATED"}
+                    {blueprintCalibration.status === "calibrated" ? "CALIBRATED" : "UNVERIFIED"}
                   </p>
                   
                   <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
-                    <div style={structuredCalibrationGridStyle}>
-                      <label style={roomCardInputWrapperStyle}>
-                        <span style={roomCardInputLabelStyle}>FT</span>
-                        <input
-                          className="load-input blueprint-takeoff-control"
-                          type="number"
-                          min="0"
-                          value={calibrationFeet}
-                          onChange={(e) => updateStructuredCalibration(e.target.value, calibrationInches, calibrationFraction)}
-                          style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "11px" }}
-                        />
-                      </label>
-                      <label style={roomCardInputWrapperStyle}>
-                        <span style={roomCardInputLabelStyle}>IN</span>
-                        <input
-                          className="load-input blueprint-takeoff-control"
-                          type="number"
-                          min="0"
-                          max="11"
-                          value={calibrationInches}
-                          onChange={(e) => updateStructuredCalibration(calibrationFeet, e.target.value, calibrationFraction)}
-                          style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "11px" }}
-                        />
-                      </label>
-                      <label style={roomCardInputWrapperStyle}>
-                        <span style={roomCardInputLabelStyle}>1/16</span>
-                        <select
-                          className="load-select blueprint-takeoff-control"
-                          value={calibrationFraction}
-                          onChange={(e) => updateStructuredCalibration(calibrationFeet, calibrationInches, e.target.value)}
-                          style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "10px", padding: "0 4px" }}
+                    {blueprintCalibration.status === "calibrated" ? (
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        <div style={{ padding: "8px", background: "rgba(34,197,94,0.1)", borderRadius: "8px", border: "1px solid rgba(34,197,94,0.2)", textAlign: "center" }}>
+                          <p style={{ margin: 0, fontSize: "11px", fontWeight: 800, color: "#4ade80" }}>Scale Verified</p>
+                          <p style={{ margin: "2px 0 0", fontSize: "10px", color: "#94a3b8" }}>
+                            {blueprintCalibrationMeasurementText?.arch} = {activePixelsPerFoot?.toFixed(2)} px/ft
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "34px", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5" }}
+                          onClick={recalibrateBlueprintScale}
                         >
-                          {FRACTION_OPTIONS.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-
-                    {blueprintCalibrationMeasurementText && (
-                      <div style={{ ...blueprintCalibrationHelperStyle, display: "grid", gap: "2px", marginTop: "6px", textAlign: "center" }}>
-                        <span style={{ fontSize: "11px", fontWeight: 900, color: "#fde68a" }}>
-                          Known Length: {blueprintCalibrationMeasurementText.arch}
-                        </span>
-                        <span style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8" }}>
-                          = {blueprintCalibrationMeasurementText.decimal}
-                        </span>
+                          REPLACE SCALE
+                        </button>
                       </div>
-                    )}
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
+                          <span style={{ fontSize: "10px", fontWeight: 800, color: "#64748b" }}>ACTIVE:</span>
+                          <span style={{ fontSize: "10px", fontWeight: 900, color: calibrationPlacementMode ? "#fbbf24" : "#94a3b8" }}>
+                            {calibrationPlacementMode === "A" ? "SETTING POINT A" : calibrationPlacementMode === "B" ? "SETTING POINT B" : "NONE"}
+                          </span>
+                        </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-                      <button
-                        type="button"
-                        style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "28px", fontSize: "10px" }}
-                        onClick={recalibrateBlueprintScale}
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        disabled={blueprintCalibrationUI.isDisabled || (blueprintCalibrationUI.actionText === "Verified Scale")}
-                        style={{ 
-                          ...(blueprintCalibrationUI.actionText === "Confirm Scale" ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
-                          width: "100%",
-                          minHeight: "28px",
-                          fontSize: "10px",
-                          ...(blueprintCalibrationUI.actionText === "Verified Scale" ? { background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#4ade80", cursor: "default" } : {}),
-                          ...(blueprintCalibrationUI.isDisabled ? { opacity: 0.5, cursor: "not-allowed" } : {})
-                        }}
-                        onClick={blueprintCalibrationUI.canConfirm && blueprintCalibrationUI.actionText !== "Verified Scale" ? confirmCurrentBlueprintCalibration : undefined}
-                      >
-                        {blueprintCalibrationUI.actionText === "Confirm Scale" ? "CONFIRM" : "CALIBRATE"}
-                      </button>
-                    </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                          <div style={{ display: "grid", gap: "4px" }}>
+                            <p style={{ margin: 0, fontSize: "9px", fontWeight: 800, color: blueprintCalibration.startPoint ? "#4ade80" : "#64748b", textAlign: "center" }}>
+                              PT A: {blueprintCalibration.startPoint ? "SET" : "NOT SET"}
+                            </p>
+                            <button
+                              type="button"
+                              className="blueprint-takeoff-control"
+                              style={{
+                                ...blueprintCalibrationButtonStyle,
+                                ...(calibrationPlacementMode === "A" ? blueprintCalibrationConfirmButtonStyle : {}),
+                                fontSize: "10px",
+                                minHeight: "26px",
+                                border: calibrationPlacementMode === "A" ? "1px solid #fbbf24" : blueprintCalibrationButtonStyle.border
+                              }}
+                              onClick={() => {
+                                if (calibrationPlacementMode === "A") {
+                                  setCalibrationPlacementMode(null);
+                                } else {
+                                  setCalibrationPlacementMode("A");
+                                  setSelectedCalibrationPointId("A");
+                                  setIsVerificationMode(false);
+                                }
+                              }}
+                            >
+                              {calibrationPlacementMode === "A" ? "FINISH A" : (blueprintCalibration.startPoint ? "ADJUST A" : "SET POINT A")}
+                            </button>
+                          </div>
+                          <div style={{ display: "grid", gap: "4px" }}>
+                            <p style={{ margin: 0, fontSize: "9px", fontWeight: 800, color: blueprintCalibration.endPoint ? "#4ade80" : "#64748b", textAlign: "center" }}>
+                              PT B: {blueprintCalibration.endPoint ? "SET" : "NOT SET"}
+                            </p>
+                            <button
+                              type="button"
+                              className="blueprint-takeoff-control"
+                              style={{
+                                ...blueprintCalibrationButtonStyle,
+                                ...(calibrationPlacementMode === "B" ? blueprintCalibrationConfirmButtonStyle : {}),
+                                fontSize: "10px",
+                                minHeight: "26px",
+                                border: calibrationPlacementMode === "B" ? "1px solid #fbbf24" : blueprintCalibrationButtonStyle.border
+                              }}
+                              onClick={() => {
+                                if (calibrationPlacementMode === "B") {
+                                  setCalibrationPlacementMode(null);
+                                } else {
+                                  setCalibrationPlacementMode("B");
+                                  setSelectedCalibrationPointId("B");
+                                  setIsVerificationMode(false);
+                                }
+                              }}
+                            >
+                              {calibrationPlacementMode === "B" ? "FINISH B" : (blueprintCalibration.endPoint ? "ADJUST B" : "SET POINT B")}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={structuredCalibrationGridStyle}>
+                          <label style={roomCardInputWrapperStyle}>
+                            <span style={roomCardInputLabelStyle}>FT</span>
+                            <input
+                              className="load-input blueprint-takeoff-control"
+                              type="number"
+                              min="0"
+                              value={calibrationFeet}
+                              onChange={(e) => updateStructuredCalibration(e.target.value, calibrationInches, calibrationFraction)}
+                              style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "11px" }}
+                            />
+                          </label>
+                          <label style={roomCardInputWrapperStyle}>
+                            <span style={roomCardInputLabelStyle}>IN</span>
+                            <input
+                              className="load-input blueprint-takeoff-control"
+                              type="number"
+                              min="0"
+                              max="11"
+                              value={calibrationInches}
+                              onChange={(e) => updateStructuredCalibration(calibrationFeet, e.target.value, calibrationFraction)}
+                              style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "11px" }}
+                            />
+                          </label>
+                          <label style={roomCardInputWrapperStyle}>
+                            <span style={roomCardInputLabelStyle}>1/16</span>
+                            <select
+                              className="load-select blueprint-takeoff-control"
+                              value={calibrationFraction}
+                              onChange={(e) => updateStructuredCalibration(calibrationFeet, calibrationInches, e.target.value)}
+                              style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "32px", fontSize: "10px", padding: "0 4px" }}
+                            >
+                              {FRACTION_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        {blueprintCalibrationMeasurementText && (
+                          <div style={{ ...blueprintCalibrationHelperStyle, display: "grid", gap: "2px", marginTop: "6px", textAlign: "center" }}>
+                            <span style={{ fontSize: "11px", fontWeight: 900, color: "#fde68a" }}>
+                              Known Length: {blueprintCalibrationMeasurementText.arch}
+                            </span>
+                            <span style={{ fontSize: "10px", fontWeight: 800, color: "#94a3b8" }}>
+                              = {blueprintCalibrationMeasurementText.decimal}
+                            </span>
+                          </div>
+                        )}
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                          <button
+                            type="button"
+                            style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "28px", fontSize: "10px" }}
+                            onClick={recalibrateBlueprintScale}
+                            title="Reset current points and start over"
+                          >
+                            RESET
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!blueprintCalibration.startPoint || !blueprintCalibration.endPoint || !blueprintCalibrationUI.canConfirm}
+                            style={{ 
+                              ...(blueprintCalibrationUI.canConfirm ? blueprintCalibrationConfirmButtonStyle : blueprintCalibrationButtonStyle), 
+                              width: "100%",
+                              minHeight: "28px",
+                              fontSize: "10px",
+                              ...(!blueprintCalibrationUI.canConfirm ? { opacity: 0.5, cursor: "not-allowed" } : {})
+                            }}
+                            onClick={confirmCurrentBlueprintCalibration}
+                          >
+                            CONFIRM SCALE
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {blueprintCalibration.status === "calibrated" && (
-                    <button
-                      type="button"
-                      onClick={() => setIsVerificationMode(!isVerificationMode)}
-                      style={{
-                        ...blueprintTraceButtonStyle,
-                        marginTop: "8px",
-                        padding: "4px",
-                        fontSize: "9px",
-                        background: isVerificationMode ? "rgba(168,85,247,0.24)" : "rgba(15,23,42,0.64)",
-                        minHeight: "24px",
-                        width: "100%",
-                      }}
-                    >
-                      {isVerificationMode ? "EXIT VERIF" : "VERIFY"}
-                    </button>
+                    <div style={{ marginTop: "8px", display: "grid", gap: "8px" }}>
+                      {!isVerificationMode && scaleCheckResult && (
+                        <div style={{ 
+                          padding: "6px 10px", 
+                          background: scaleCheckResult.isPassed ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                          borderRadius: "8px",
+                          border: `1px solid ${scaleCheckResult.isPassed ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)"}`,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
+                          <div style={{ display: "grid", gap: "1px" }}>
+                            <p style={{ margin: 0, fontSize: "9px", fontWeight: 800, color: scaleCheckResult.isPassed ? "#4ade80" : "#fca5a5" }}>
+                              {scaleCheckResult.isPassed ? "Scale Check Passed" : "Scale Check Warning"}
+                            </p>
+                            <p style={{ margin: 0, fontSize: "8px", color: "#94a3b8" }}>
+                              {scaleCheckResult.measuredFeet?.toFixed(2)} ft vs {scaleCheckResult.expectedFeet?.toFixed(2)} ft
+                            </p>
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => setBlueprintCalibration(curr => ({ ...curr, verification: null }))}
+                            style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "14px", fontWeight: 800, padding: "0 4px" }}
+                            title="Clear result"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setIsVerificationMode(!isVerificationMode)}
+                        style={{
+                          ...blueprintTraceButtonStyle,
+                          padding: "4px",
+                          fontSize: "9px",
+                          background: isVerificationMode ? "rgba(168,85,247,0.24)" : "rgba(15,23,42,0.64)",
+                          border: isVerificationMode ? "1px solid rgba(168,85,247,0.4)" : blueprintTraceButtonStyle.border,
+                          minHeight: "24px",
+                          width: "100%",
+                        }}
+                      >
+                        {isVerificationMode 
+                          ? (blueprintCalibration.verification?.endPoint ? "FINISH SCALE CHECK" : "CANCEL CHECK") 
+                          : "CHECK SCALE"}
+                      </button>
+
+                      {isVerificationMode && (
+                        <div style={{ display: "grid", gap: "10px", padding: "8px", background: "rgba(168,85,247,0.05)", borderRadius: "8px", border: "1px solid rgba(168,85,247,0.15)" }}>
+                          <p style={{ margin: 0, fontSize: "9px", fontWeight: 800, color: "#a855f7", textAlign: "center" }}>
+                            KNOWN CHECK DISTANCE
+                          </p>
+                          <div style={structuredCalibrationGridStyle}>
+                            <label style={roomCardInputWrapperStyle}>
+                              <span style={roomCardInputLabelStyle}>FT</span>
+                              <input
+                                className="load-input blueprint-takeoff-control"
+                                type="number"
+                                min="0"
+                                value={verificationFeet}
+                                onChange={(e) => updateStructuredVerification(e.target.value, verificationInches, verificationFraction)}
+                                style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "28px", fontSize: "11px" }}
+                              />
+                            </label>
+                            <label style={roomCardInputWrapperStyle}>
+                              <span style={roomCardInputLabelStyle}>IN</span>
+                              <input
+                                className="load-input blueprint-takeoff-control"
+                                type="number"
+                                min="0"
+                                max="11"
+                                value={verificationInches}
+                                onChange={(e) => updateStructuredVerification(verificationFeet, e.target.value, verificationFraction)}
+                                style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "28px", fontSize: "11px" }}
+                              />
+                            </label>
+                            <label style={roomCardInputWrapperStyle}>
+                              <span style={roomCardInputLabelStyle}>1/16</span>
+                              <select
+                                className="load-select blueprint-takeoff-control"
+                                value={verificationFraction}
+                                onChange={(e) => updateStructuredVerification(verificationFeet, verificationInches, e.target.value)}
+                                style={{ ...blueprintCalibrationInputStyle, width: "100%", height: "28px", fontSize: "10px", padding: "0 4px" }}
+                              >
+                                {FRACTION_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+
+                          <div style={{ textAlign: "center", borderTop: "1px solid rgba(168,85,247,0.2)", paddingTop: "8px" }}>
+                            {scaleCheckResult ? (
+                              <div style={{ display: "grid", gap: "2px" }}>
+                                <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#f8fafc" }}>
+                                  Measured: {scaleCheckResult.measuredFeet?.toFixed(2)} ft
+                                </p>
+                                <p style={{ margin: 0, fontSize: "9px", color: scaleCheckResult.isPassed ? "#4ade80" : "#fbbf24" }}>
+                                  Accuracy: {scaleCheckResult.confidence?.toUpperCase()}
+                                </p>
+                              </div>
+                            ) : (
+                              <p style={{ margin: 0, fontSize: "9px", color: "#94a3b8" }}>
+                                Place V1 and V2 on the blueprint
+                              </p>
+                            )}
+                          </div>
+                          <p style={{ margin: 0, fontSize: "8px", color: "#64748b", lineHeight: 1.2, fontStyle: "italic" }}>
+                            Measure another known dimension to confirm scale accuracy.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -7424,33 +7798,50 @@ const blueprintCalibrationPointStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   transform: "translate(-50%, -50%)",
-  pointerEvents: "none",
+  pointerEvents: "auto",
+  cursor: "pointer",
   color: "#fac015",
+  zIndex: 10,
+  opacity: 0.65,
+  transition: "opacity 0.2s ease, color 0.2s ease",
 };
 
 const blueprintCalibrationCrosshairDotStyle: React.CSSProperties = {
-  width: "3px",
-  height: "3px",
+  position: "absolute",
+  width: "2.5px",
+  height: "2.5px",
   borderRadius: "50%",
   background: "currentColor",
-  boxShadow: "0 0 1.5px rgba(0,0,0,0.9)",
-  zIndex: 2,
+  boxShadow: "0 0 1px rgba(0,0,0,0.6)",
+  zIndex: 10,
 };
 
 const blueprintCalibrationCrosshairLineHStyle: React.CSSProperties = {
   position: "absolute",
   width: "12px",
-  height: "1px",
+  height: "0.8px",
   background: "currentColor",
-  boxShadow: "0 0 1px rgba(0,0,0,0.5)",
+  boxShadow: "0 0 0.5px rgba(0,0,0,0.4)",
+  zIndex: 5,
 };
 
 const blueprintCalibrationCrosshairLineVStyle: React.CSSProperties = {
   position: "absolute",
-  width: "1px",
+  width: "0.8px",
   height: "12px",
   background: "currentColor",
-  boxShadow: "0 0 1px rgba(0,0,0,0.5)",
+  boxShadow: "0 0 0.5px rgba(0,0,0,0.4)",
+  zIndex: 5,
+};
+
+const blueprintCalibrationPointSelectedStyle: React.CSSProperties = {
+  ...blueprintCalibrationPointStyle,
+  color: "#fac015",
+  opacity: 1,
+  outline: "none",
+  boxShadow: "0 0 0 3px rgba(250,204,21,0.4), 0 0 0 6px rgba(250,204,21,0.2)",
+  borderRadius: "50%",
+  zIndex: 20,
 };
 
 const blueprintCalibrationNumberLabelStyle: React.CSSProperties = {
