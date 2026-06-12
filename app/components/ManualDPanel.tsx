@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Layers, Thermometer, Wind } from "lucide-react";
+import { AlertTriangle, Layers, Thermometer, Wind } from "lucide-react";
 import {
   ROUND_METAL_DESIGN_BASIS_MESSAGE,
   ROUND_RESIDENTIAL_DUCT_SIZES_INCHES,
@@ -69,6 +69,7 @@ export type ManualDRoom = {
   insulationLevel: RoomInsulationLevel;
   sunExposure: RoomSunExposure;
   blueprintSourceRoomId?: string;
+  originalWindowsAreaInput?: string;
 };
 
 type RoomInsulationLevel = "poor" | "average" | "good";
@@ -280,6 +281,7 @@ function createDefaultRoom(
     floorLevelInput: "",
     insulationLevel: "average",
     sunExposure: "medium",
+    originalWindowsAreaInput: "",
   };
 }
 
@@ -398,6 +400,7 @@ export default function ManualDPanel({
         floorLevelInput: room.floorLevel,
         windowsCountInput: room.windowsCount ?? "",
         windowsAreaInput: room.windowsArea ?? "",
+        originalWindowsAreaInput: room.windowsArea ?? "",
         exteriorWallsCountInput: room.exteriorWallsCount ?? "",
         blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
       })),
@@ -1518,23 +1521,34 @@ export default function ManualDPanel({
                     />
                   </label>
                   <label style={roomCardInputWrapperStyle}>
-                    <span style={roomCardInputLabelStyle}>Window Area (sq ft)</span>
-                    <input
-                      className="load-input"
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      aria-label={`${room.name} total window area`}
-                      placeholder="Sq Ft"
-                      value={room.windowsAreaInput}
-                      onChange={(event) => updateRoom(room.id, "windowsArea", event.target.value)}
-                      style={inputControlStyle}
-                    />
+                    <span style={roomCardInputLabelStyle}>Window Area</span>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <input
+                        className="load-input"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        aria-label={`${room.name} total window area`}
+                        placeholder="0.0"
+                        value={room.windowsAreaInput}
+                        onChange={(event) => updateRoom(room.id, "windowsArea", event.target.value)}
+                        style={{ ...inputControlStyle, paddingRight: "30px" }}
+                      />
+                      <span style={{ position: "absolute", right: "6px", fontSize: "8px", color: "#64748b", pointerEvents: "none" }}>sq ft</span>
+                    </div>
                   </label>
-                  {room.blueprintSourceRoomId && room.windowsAreaInput && (
-                    <p style={{ gridColumn: "span 2", margin: "4px 0 0", fontSize: "8px", color: "#4ade80", fontStyle: "italic" }}>
-                      Window area from verified blueprint openings
-                    </p>
+                  {room.blueprintSourceRoomId && (room.windowsAreaInput || room.windowsCountInput) && (
+                    <div style={{ gridColumn: "span 2", margin: "4px 0 0" }}>
+                      {room.originalWindowsAreaInput && room.windowsAreaInput !== room.originalWindowsAreaInput ? (
+                        <p style={{ margin: 0, fontSize: "8px", color: "#fbbf24", fontStyle: "italic", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <AlertTriangle size={10} /> Manual override active — verified blueprint window area changed.
+                        </p>
+                      ) : (
+                        <p style={{ margin: 0, fontSize: "8px", color: "#4ade80", fontStyle: "italic" }}>
+                          Window count and area from verified blueprint openings
+                        </p>
+                      )}
+                    </div>
                   )}
                   <label style={roomCardInputWrapperStyle}>
                     <span style={roomCardInputLabelStyle}>Exterior Wall Count</span>
