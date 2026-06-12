@@ -19,6 +19,7 @@ export type ManualDBlueprintRoom = {
   floorLevel: string;
   sourceBlueprintRoomId?: string;
   windowsCount?: string;
+  windowsArea?: string;
   exteriorWallsCount?: string;
 };
 
@@ -61,6 +62,7 @@ export type ManualDRoom = {
   squareFeetInput: string;
   supplyRegisterCount: number;
   windowsCountInput: string;
+  windowsAreaInput: string;
   exteriorWallsCountInput: string;
   ceilingHeightInput: string;
   floorLevelInput: string;
@@ -77,6 +79,7 @@ type ManualDRoomEditableField =
   | "squareFeet"
   | "supplyRegisterCount"
   | "windowsCount"
+  | "windowsArea"
   | "exteriorWallsCount"
   | "ceilingHeight"
   | "insulationLevel"
@@ -214,12 +217,17 @@ function recommendReturnDuctSize(
 
 function calculateRoomLoadFactor(room: ManualDRoom): number {
   const windowsCount = Math.max(0, Number(room.windowsCountInput) || 0);
+  const windowsArea = Math.max(0, Number(room.windowsAreaInput) || 0);
   const exteriorWallsCount = Math.max(0, Number(room.exteriorWallsCountInput) || 0);
   const ceilingHeight = Math.max(0, Number(room.ceilingHeightInput) || 8);
 
   // Conservative preliminary room load multiplier:
   // square footage remains the baseline, then field inputs nudge the room share.
-  const windowMultiplier = Math.min(0.18, windowsCount * 0.03);
+  
+  // Prefer actual area if provided, otherwise estimate from count (assuming ~15 sq ft per window)
+  const effectiveWindowArea = windowsArea > 0 ? windowsArea : windowsCount * 15;
+  const windowMultiplier = Math.min(0.24, (effectiveWindowArea / 150) * 0.15);
+  
   const exteriorWallMultiplier = Math.min(0.22, exteriorWallsCount * 0.07);
   const ceilingHeightMultiplier = Math.min(0.18, Math.max(0, ceilingHeight - 8) * 0.05);
 
@@ -266,6 +274,7 @@ function createDefaultRoom(
     squareFeetInput: String(squareFeet),
     supplyRegisterCount: 1,
     windowsCountInput: "",
+    windowsAreaInput: "",
     exteriorWallsCountInput: "",
     ceilingHeightInput: "",
     floorLevelInput: "",
@@ -388,6 +397,7 @@ export default function ManualDPanel({
         ceilingHeightInput: room.ceilingHeight,
         floorLevelInput: room.floorLevel,
         windowsCountInput: room.windowsCount ?? "",
+        windowsAreaInput: room.windowsArea ?? "",
         exteriorWallsCountInput: room.exteriorWallsCount ?? "",
         blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
       })),
@@ -471,6 +481,10 @@ export default function ManualDPanel({
 
         if (field === "windowsCount") {
           return { ...room, windowsCountInput: String(value) };
+        }
+
+        if (field === "windowsArea") {
+          return { ...room, windowsAreaInput: String(value) };
         }
 
         if (field === "exteriorWallsCount") {
@@ -1503,6 +1517,25 @@ export default function ManualDPanel({
                       style={inputControlStyle}
                     />
                   </label>
+                  <label style={roomCardInputWrapperStyle}>
+                    <span style={roomCardInputLabelStyle}>Window Area (sq ft)</span>
+                    <input
+                      className="load-input"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      aria-label={`${room.name} total window area`}
+                      placeholder="Sq Ft"
+                      value={room.windowsAreaInput}
+                      onChange={(event) => updateRoom(room.id, "windowsArea", event.target.value)}
+                      style={inputControlStyle}
+                    />
+                  </label>
+                  {room.blueprintSourceRoomId && room.windowsAreaInput && (
+                    <p style={{ gridColumn: "span 2", margin: "4px 0 0", fontSize: "8px", color: "#4ade80", fontStyle: "italic" }}>
+                      Window area from verified blueprint openings
+                    </p>
+                  )}
                   <label style={roomCardInputWrapperStyle}>
                     <span style={roomCardInputLabelStyle}>Exterior Wall Count</span>
                     <input

@@ -33,6 +33,7 @@ export type ManualDBlueprintRoomOutput = {
   floorLevel: string;
   sourceBlueprintRoomId?: string;
   windowsCount?: string;
+  windowsArea?: string;
   exteriorWallsCount?: string;
 };
 
@@ -143,9 +144,16 @@ export function adaptTracedRoomToManualDBlueprintRoom({
     (edge) => edge.boundaryType === "exterior"
   ).length ?? 0;
 
-  const windowsCount = tracedRoom.boundaryEdges?.reduce((count, edge) => {
-    return count + (edge.openings?.filter((op) => op.type === "window").length ?? 0);
-  }, 0) ?? 0;
+  let totalWindowsCount = 0;
+  let totalWindowsArea = 0;
+
+  tracedRoom.boundaryEdges?.forEach((edge) => {
+    const windows = edge.openings?.filter((op) => op.type === "window") ?? [];
+    totalWindowsCount += windows.length;
+    windows.forEach((win) => {
+      totalWindowsArea += win.widthFeet * win.heightFeet;
+    });
+  });
 
   return {
     id: outputId,
@@ -153,7 +161,8 @@ export function adaptTracedRoomToManualDBlueprintRoom({
     squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
     ceilingHeight: unifiedRoom.ceilingHeight,
     floorLevel: unifiedRoom.floorLevel,
-    windowsCount: String(windowsCount),
+    windowsCount: String(totalWindowsCount),
+    windowsArea: totalWindowsArea > 0 ? totalWindowsArea.toFixed(1) : undefined,
     exteriorWallsCount: String(exteriorWallsCount),
     sourceBlueprintRoomId: tracedRoom.id,
   };
