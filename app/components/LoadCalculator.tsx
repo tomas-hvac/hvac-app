@@ -2671,6 +2671,31 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
         ] ?? null
       : null;
 
+  const selectedRoomPageInfo = useMemo(() => {
+    if (!selectedDetectedRoomId || !blueprintDocument) return null;
+    
+    // Check if it's on the current page first
+    const isOnCurrentPage = tracedRoomsWithSqft.some(r => r.id === selectedDetectedRoomId);
+    if (isOnCurrentPage) return { isOnCurrentPage: true };
+
+    // Search other pages
+    for (let i = 0; i < blueprintDocument.pages.length; i++) {
+      const page = blueprintDocument.pages[i];
+      if (page.tracedRooms?.some(r => r.id === selectedDetectedRoomId)) {
+        return { 
+          isOnCurrentPage: false, 
+          pageLabel: page.label,
+          pageIndex: i 
+        };
+      }
+    }
+    
+    return null;
+  }, [selectedDetectedRoomId, blueprintDocument, tracedRoomsWithSqft]);
+
+  const isSelectedRoomOnCurrentPage =
+    selectedRoomPageInfo == null || selectedRoomPageInfo.isOnCurrentPage || isTracingLock;
+
   const blueprintRoomTraceStatusText = useMemo(() => {
     if (blueprintRoomTrace.isTracing) {
       const draftSqft = calculateBlueprintPolygonSquareFeet(
@@ -4166,7 +4191,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                   {[
                     { label: "Blueprint Uploaded", status: blueprintFile ? 'done' : 'inactive' },
                     { label: "Preview Generated", status: blueprintPreviewUrl ? 'done' : 'inactive' },
-                    { label: "Verified Takeoff Complete", status: (tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === 'calibrated') ? 'done' : 'inactive' },
+                    { label: "Verified Takeoff In Progress", status: (tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === 'calibrated') ? 'done' : 'inactive' },
                     { label: "Sent to Manual J", status: blueprintRoomsForManualD.length > 0 ? 'done' : 'inactive' },
                     { label: "Sent to Manual D", status: blueprintRoomsForManualD.length > 0 ? 'done' : 'inactive' },
                   ].map((step) => {
@@ -4222,7 +4247,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                   {tracedRoomsWithSqft.length > 0 && blueprintCalibration.status === 'calibrated' && (
                     <button type="button" style={blueprintActionButtonStyle} onClick={sendAllVerifiedRoomsToManualJ}>
-                      <Wind size={18} /> Send Verified Takeoff to Manual J
+                      <Wind size={18} /> Send Current Verified Rooms to Manual J
                     </button>
                   )}
 
@@ -5308,50 +5333,75 @@ const averageTonnage = (minTon + maxTon) / 2;
                 </div>
 
                 {/* Compact Contextual Inspector */}
-                {selectedTracedRoom && selectedBoundaryEdgeMetadata && selectedBlueprintBoundaryEdge ? (
-                  <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Edge Inspector">
-                    <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center" }}>EDGE</p>
-                    <p style={{ ...blueprintCalibrationHelperStyle, fontSize: "9px", textAlign: "center" }}>
-                      {selectedTracedRoom.name.substring(0, 8)}..
+                {selectedDetectedRoomId && selectedRoomPageInfo && !selectedRoomPageInfo.isOnCurrentPage && (
+                  <div style={{ ...blueprintInspectorCardStyle, padding: "10px", background: "rgba(30, 41, 59, 0.95)", border: "1px solid rgba(251, 191, 36, 0.3)" }} title="Out of Context">
+                    <p style={{ ...blueprintCalibrationStatusStyle, color: "#fbbf24", fontSize: "10px", textAlign: "center" }}>OFF-PAGE ROOM</p>
+                    <p style={{ ...blueprintCalibrationHelperStyle, fontSize: "9px", textAlign: "center", color: "#94a3b8", margin: "4px 0 8px" }}>
+                      Selected room is on {selectedRoomPageInfo.pageLabel}
                     </p>
-                    <select
-                      className="load-input blueprint-takeoff-control"
-                      value={selectedBoundaryEdgeMetadata.boundaryType}
-                      onChange={(event) =>
-                        updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
-                      }
-                      style={{ ...blueprintCalibrationInputStyle, padding: "4px", fontSize: "10px", height: "28px", marginTop: "4px", width: "100%" }}
+                    <button
+                      type="button"
+                      style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "28px", background: "rgba(251, 191, 36, 0.15)", border: "1px solid rgba(251, 191, 36, 0.4)", color: "#fbbf24", fontSize: "10px" }}
+                      onClick={() => handlePageSwitch(selectedRoomPageInfo.pageIndex!)}
                     >
-                      {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                      JUMP TO PAGE
+                    </button>
+                  </div>
+                )}
 
-                    {/* Openings Editor */}
-                    <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
-                      <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "9px", opacity: 0.8 }}>OPENINGS</p>
-                      
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
-                        <button
-                          type="button"
-                          style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "9px", minHeight: "26px" }}
-                          onClick={() => addOpeningToSelectedEdge("window")}
-                        >
-                          + Window
-                        </button>
-                        <button
-                          type="button"
-                          style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "9px", minHeight: "26px" }}
-                          onClick={() => addOpeningToSelectedEdge("door")}
-                        >
-                          + Door
-                        </button>
+                {(selectedTracedRoom && selectedBoundaryEdgeMetadata && selectedBlueprintBoundaryEdge && isSelectedRoomOnCurrentPage) || (isTracingLock && selectedDetectedRoomId && isSelectedRoomOnCurrentPage) ? (
+                  <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Edge Inspector">
+                    {isTracingLock ? (
+                      <div style={{ padding: "12px", textAlign: "center" }}>
+                        <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", color: "#fbbf24" }}>EDIT MODE ACTIVE</p>
+                        <p style={{ ...blueprintCalibrationHelperStyle, fontSize: "9px", marginTop: "4px" }}>
+                          Finish outline editing before classifying walls or openings.
+                        </p>
                       </div>
+                    ) : (
+                      <>
+                        <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center" }}>EDGE</p>
+                        <p style={{ ...blueprintCalibrationHelperStyle, fontSize: "9px", textAlign: "center" }}>
+                          {selectedTracedRoom?.name.substring(0, 8)}..
+                        </p>
+                        <select
+                          className="load-input blueprint-takeoff-control"
+                          value={selectedBoundaryEdgeMetadata?.boundaryType}
+                          onChange={(event) =>
+                            updateSelectedBoundaryType(event.target.value as BlueprintRoomBoundaryType)
+                          }
+                          style={{ ...blueprintCalibrationInputStyle, padding: "4px", fontSize: "10px", height: "28px", marginTop: "4px", width: "100%" }}
+                        >
+                          {BLUEPRINT_BOUNDARY_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
 
-                      <div style={{ maxHeight: "180px", overflowY: "auto", marginTop: "4px" }}>
-                        {(selectedBoundaryEdgeMetadata.openings ?? []).map((opening) => (
+                        {/* Openings Editor */}
+                        <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                          <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "9px", opacity: 0.8 }}>OPENINGS</p>
+
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
+                            <button
+                              type="button"
+                              style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "9px", minHeight: "26px" }}
+                              onClick={() => addOpeningToSelectedEdge("window")}
+                            >
+                              + Window
+                            </button>
+                            <button
+                              type="button"
+                              style={{ ...blueprintCalibrationButtonStyle, padding: "4px", fontSize: "9px", minHeight: "26px" }}
+                              onClick={() => addOpeningToSelectedEdge("door")}
+                            >
+                              + Door
+                            </button>
+                          </div>
+
+                          <div style={{ maxHeight: "180px", overflowY: "auto", marginTop: "4px" }}>
+                            {(selectedBoundaryEdgeMetadata?.openings ?? []).map((opening) => (
                           <div key={opening.id} style={inspectorOpeningItemStyle}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                               <span style={{ fontSize: "10px", fontWeight: 900, color: "#fde68a" }}>
@@ -5397,7 +5447,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                         ))}
                       </div>
                     </div>
-                  </div>
+                  </>)}</div>
                 ) : selectedDetectedRoom && selectedDetectedRoomAirflow ? (
                   <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Room Airflow">
                     <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "10px", textAlign: "center" }}>AIRFLOW</p>
@@ -5616,6 +5666,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                             ? { ...detectedRoomCardStyle, ...detectedRoomCardActiveStyle }
                             : detectedRoomCardStyle
                         }
+                        onClick={() => {
+                          setSelectedDetectedRoomId(outline.id);
+                          if (selectedBlueprintBoundaryEdge?.outlineId !== outline.id) {
+                            setSelectedBlueprintBoundaryEdge({ outlineId: outline.id, edgeIndex: 0 });
+                          }
+                        }}
                       >
                         <div style={detectedRoomHeaderStyle}>
                           <p style={tracedRoomTitleStyle}>{outline.name}</p>
@@ -5638,7 +5694,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                         {selectedDetectedRoomId === outline.id && (
                           <div style={{ ...detectedRoomFactsStyle, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "8px", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
-                            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "10px" }}>
+                            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "10px" }} onClick={(e) => e.stopPropagation()}>
                               <span style={{ fontSize: "9px", fontWeight: 800, color: "#94a3b8" }}>EXPECTED AREA (SQ FT)</span>
                               <input 
                                 type="number"
@@ -5669,7 +5725,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                         {selectedCardEdge ? (
                           <div style={{ ...detectedRoomEditFieldStyle, flexDirection: "column", alignItems: "flex-start", gap: "12px" }}>
-                            <div style={{ width: "100%" }}>
+                            <div style={{ width: "100%" }} onClick={(e) => e.stopPropagation()}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                 <span style={detectedRoomEditLabelStyle}>
                                   Edge {selectedBlueprintBoundaryEdge!.edgeIndex + 1} Exposure Verification
@@ -5722,7 +5778,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                             </div>
 
                             {selectedCardEdge.boundaryType === "exterior" ? (
-                              <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                              <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }} onClick={(e) => e.stopPropagation()}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                   <span style={detectedRoomEditLabelStyle}>Opening Verification</span>
                                   <div style={{ display: "flex", gap: "6px" }}>
@@ -5821,14 +5877,14 @@ const averageTonnage = (minTon + maxTon) / 2;
                           <button
                             type="button"
                             style={detectedRoomButtonStyle}
-                            onClick={() => renameTracedRoom(outline.id)}
+                            onClick={(e) => { e.stopPropagation(); renameTracedRoom(outline.id); }}
                           >
                             Rename
                           </button>
                           <button
                             type="button"
                             style={detectedRoomButtonStyle}
-                            onClick={() => editTracedRoomOutline(outline.id)}
+                            onClick={(e) => { e.stopPropagation(); editTracedRoomOutline(outline.id); }}
                           >
                             Edit Outline
                           </button>
@@ -5848,14 +5904,14 @@ const averageTonnage = (minTon + maxTon) / 2;
                               outline.squareFeet <= 0 ||
                               !Number.isFinite(outline.squareFeet)
                             }
-                            onClick={() => sendTracedRoomToManualD(outline.id)}
+                            onClick={(e) => { e.stopPropagation(); sendTracedRoomToManualD(outline.id); }}
                           >
                             Send to Manual D
                           </button>
                           <button
                             type="button"
                             style={detectedRoomRemoveButtonStyle}
-                            onClick={() => removeTracedRoom(outline.id)}
+                            onClick={(e) => { e.stopPropagation(); removeTracedRoom(outline.id); }}
                           >
                             Remove
                           </button>
