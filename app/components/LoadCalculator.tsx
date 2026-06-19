@@ -41,7 +41,9 @@ import {
   type BlueprintRoomOutline,
   type BlueprintOpeningType,
   type BlueprintWallOpening,
+  type SuggestedRoomIntelligence,
 } from "@/lib/hvac/blueprintRoomTracing";
+import { calculateRoomReadiness } from "@/lib/hvac/roomReadiness";
 import {
   adaptDetectedRoomToManualDBlueprintRoom,
   adaptManualFallbackRoomToManualDBlueprintRoom,
@@ -56,6 +58,7 @@ import {
   BlueprintProject,
   BlueprintEnvelopeSuggestions,
   EnvelopeSuggestion,
+  WindowScheduleEntry,
   createBlueprintProjectSnapshot,
   updateBlueprintProjectSnapshot,
   ensureBlueprintDocument,
@@ -189,7 +192,7 @@ const CalculationLifecycleSync = ({ isCalculating }: { isCalculating: boolean })
 };
 
 type LoadCalculatorView = "customer" | "technician";
-type TechnicianSection = ManualDPanelSection | "manual-room-takeoff" | "envelope-verification";
+type TechnicianSection = ManualDPanelSection | "manual-room-takeoff" | "envelope-verification" | "window-schedule";
 type BlueprintWorkspaceMode = "review-detected" | "manual-trace";
 type DetectedRoomEditableField =
   | "name"
@@ -201,6 +204,8 @@ type SelectedBlueprintBoundaryEdge = {
   outlineId: string;
   edgeIndex: number;
 };
+
+type GuidedWorkflowTask = "classify-walls" | "verify-openings" | null;
 
 const BLUEPRINT_BOUNDARY_TYPE_OPTIONS: Array<{ label: string; value: BlueprintRoomBoundaryType }> = [
   { label: "Unknown", value: "unknown" },
@@ -630,7 +635,30 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [previousTracedArea, setPreviousTracedArea] = useState<number | null>(null);
   const [manualExpectedArea, setManualExpectedArea] = useState<string>("");
+  const [windowSchedule, setWindowSchedule] = useState<WindowScheduleEntry[]>([]);
   const [projectActionMessage, setProjectActionMessage] = useState("");
+
+  const addWindowScheduleEntry = () => {
+    const newEntry: WindowScheduleEntry = {
+      id: `window-${Date.now()}`,
+      mark: `W${windowSchedule.length + 1}`,
+      glassArea: 15,
+      uFactor: 0.30,
+      description: "Standard Window",
+    };
+    setWindowSchedule(prev => [...prev, newEntry]);
+  };
+
+  const updateWindowScheduleEntry = (id: string, field: keyof WindowScheduleEntry, value: string | number) => {
+    setWindowSchedule(prev => prev.map(entry => {
+      if (entry.id !== id) return entry;
+      return { ...entry, [field]: value };
+    }));
+  };
+
+  const removeWindowScheduleEntry = (id: string) => {
+    setWindowSchedule(prev => prev.filter(entry => entry.id !== id));
+  };
   const [v3ProjectName, setV3ProjectName] = useState("New Blueprint Project");
   const [v3SaveStatus, setV3SaveStatus] = useState("");
   const [v3RecentProjects, setV3RecentProjects] = useState<BlueprintProject[]>([]);
@@ -655,6 +683,8 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   };
   const [isBlueprintFocusMode, setIsBlueprintFocusMode] = useState(false);
   const [isFocusAreaMode, setIsFocusAreaMode] = useState(false);
+  const [activeGuidedWorkflow, setActiveGuidedWorkflow] = useState<GuidedWorkflowTask>(null);
+  const [activeClassificationType, setActiveClassificationType] = useState<BlueprintRoomBoundaryType>("exterior");
   const [activeFocusArea, setActiveFocusArea] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
   const [focusAreaStartPoint, setFocusAreaStartPoint] = useState<{ x: number, y: number } | null>(null);
   const [isBlueprintRestoring, setIsBlueprintRestoring] = useState(false);
@@ -1042,40 +1072,40 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       }
 
       // Promote legacy projects to BlueprintDocument model
-      project = ensureBlueprintDocument(project);
+      const upgradedProject = ensureBlueprintDocument(project);
 
-      setActiveV3ProjectId(project.id);
-      setLoadedEngineMetadata(project.engineMetadata);
-      setV3ProjectName(project.name);
+      setActiveV3ProjectId(upgradedProject.id);
+      setLoadedEngineMetadata(upgradedProject.engineMetadata);
+      setV3ProjectName(upgradedProject.name);
 
       // Load document container
-      setBlueprintDocument(project.blueprintDocument || null);
+      setBlueprintDocument(upgradedProject.blueprintDocument || null);
 
       // Hydrate overlay size for area calculation stability
-      if (project.blueprintOverlaySize) {
-        setBlueprintOverlaySize(project.blueprintOverlaySize);
+      if (upgradedProject.blueprintOverlaySize) {
+        setBlueprintOverlaySize(upgradedProject.blueprintOverlaySize);
       }
 
       // Hydrate root-level active state from the active page (or fall back to root)
-      const activePage = project.blueprintDocument?.pages.find(p => p.id === project.blueprintDocument?.activePageId);
+      const activePage = upgradedProject.blueprintDocument?.pages.find(p => p.id === upgradedProject.blueprintDocument?.activePageId);
 
-      setBlueprintCalibration(activePage?.calibration || project.calibration);
+      setBlueprintCalibration(activePage?.calibration || upgradedProject.calibration);
       setActiveFocusArea(activePage?.focusArea || null);
-      if (project.blueprintDocument?.assetId) {
+      if (upgradedProject.blueprintDocument?.assetId) {
         // PDF-backed project: Hydrate visually from IndexedDB
         try {
           setProjectActionMessage("Loading PDF asset...");
-          const asset = await getBlueprintAsset(project.blueprintDocument.assetId);
+          const asset = await getBlueprintAsset(upgradedProject.blueprintDocument.assetId);
           if (asset) {
             const pdf = await loadPDFDocument(asset.blob);
-            const pageIndex = project.blueprintDocument.pages.findIndex(p => p.id === project.blueprintDocument?.activePageId);
+            const pageIndex = upgradedProject.blueprintDocument.pages.findIndex(p => p.id === upgradedProject.blueprintDocument?.activePageId);
             // Render the saved active page
             const dataUrl = await renderPDFPageToDataURL(pdf, Math.max(1, pageIndex + 1));
 
             setIsBlueprintRestoring(true);
-            setPendingV3Rooms(activePage?.tracedRooms || project.tracedRooms);
+            setPendingV3Rooms(activePage?.tracedRooms || upgradedProject.tracedRooms);
             setBlueprintPreviewUrl(dataUrl);
-            setBlueprintFileName(project.blueprintImage?.name || project.name);
+            setBlueprintFileName(upgradedProject.blueprintImage?.name || upgradedProject.name);
             setProjectActionMessage(`PDF project loaded (page ${pageIndex + 1})`);
           } else {
             setProjectActionMessage("PDF source file is missing. Re-upload the blueprint set.");
@@ -1084,24 +1114,24 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
           console.error("Failed to hydrate PDF project:", e);
           setProjectActionMessage("Failed to load PDF blueprint.");
         }
-      } else if (project.blueprintImage?.dataUrl) {
+      } else if (upgradedProject.blueprintImage?.dataUrl) {
         // Standard image-backed project
         setIsBlueprintRestoring(true);
-        setPendingV3Rooms(activePage?.tracedRooms || project.tracedRooms);
-        setBlueprintPreviewUrl(project.blueprintImage.dataUrl);
-        setBlueprintFileName(project.blueprintImage.name);
+        setPendingV3Rooms(activePage?.tracedRooms || upgradedProject.tracedRooms);
+        setBlueprintPreviewUrl(upgradedProject.blueprintImage.dataUrl);
+        setBlueprintFileName(upgradedProject.blueprintImage.name);
       } else {
         setBlueprintRoomTrace((currentTrace) => ({
           ...currentTrace,
-          roomOutlines: activePage?.tracedRooms || project.tracedRooms,
+          roomOutlines: activePage?.tracedRooms || upgradedProject.tracedRooms,
         }));
       }
 
-      setInsulationQuality(project.envelopeSettings.insulationQuality);
-      setOregonRegion(project.envelopeSettings.oregonRegion);
+      setInsulationQuality(upgradedProject.envelopeSettings.insulationQuality);
+      setOregonRegion(upgradedProject.envelopeSettings.oregonRegion);
 
-      if (project.manualDProjectState) {
-        setLoadedManualDProjectState(project.manualDProjectState);
+      if (upgradedProject.manualDProjectState) {
+        setLoadedManualDProjectState(upgradedProject.manualDProjectState);
       }
 
       setV3SaveStatus("Project loaded");
@@ -1958,15 +1988,140 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const updateSelectedBoundaryType = (boundaryType: BlueprintRoomBoundaryType) => {
     if (!selectedBlueprintBoundaryEdge) return;
+    const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
 
     setBlueprintRoomTrace((currentTrace) =>
       updateBlueprintRoomBoundaryEdgeType(
         currentTrace,
-        selectedBlueprintBoundaryEdge.outlineId,
-        selectedBlueprintBoundaryEdge.edgeIndex,
+        outlineId,
+        edgeIndex,
         boundaryType
       )
     );
+
+    if (activeGuidedWorkflow === "classify-walls") {
+      const room = blueprintRoomTrace.roomOutlines.find(r => r.id === outlineId);
+      if (room && room.boundaryEdges) {
+        // We look for the next unknown edge, excluding the one we just classified.
+        let nextUnknownIdx = -1;
+        for (let i = 0; i < room.boundaryEdges.length; i++) {
+          if (i !== edgeIndex && room.boundaryEdges[i].boundaryType === "unknown") {
+            nextUnknownIdx = i;
+            break;
+          }
+        }
+        
+        if (nextUnknownIdx !== -1) {
+          setSelectedBlueprintBoundaryEdge({ outlineId, edgeIndex: nextUnknownIdx });
+        } else {
+          setActiveGuidedWorkflow(null);
+          setProjectActionMessage("Exterior walls complete.");
+        }
+      }
+    }
+  };
+
+  const generateRoomIntelligenceSuggestions = (outlineId: string) => {
+    setBlueprintRoomTrace((currentTrace) => {
+      const room = currentTrace.roomOutlines.find(r => r.id === outlineId);
+      if (!room) return currentTrace;
+
+      // Heuristics
+      const extWalls = room.boundaryEdges?.filter(e => e.boundaryType === "exterior").length || 0;
+      const windowCount = room.boundaryEdges?.reduce((acc, e) => acc + (e.openings?.filter(o => o.type === "window" && o.isVerified).length || 0), 0) || 0;
+      const doorCount = room.boundaryEdges?.reduce((acc, e) => acc + (e.openings?.filter(o => o.type === "door" && o.isVerified).length || 0), 0) || 0;
+      
+      const reasons: string[] = [];
+      let confidence = 0;
+      let typeSuggestion = "Living Area";
+
+      // 1. Meaningful Name Check
+      const genericNames = ["Traced Room", "New Room", "Room"];
+      const isGenericName = genericNames.some(gn => room.name.startsWith(gn));
+      const hasMeaningfulName = room.name.length > 0 && !isGenericName;
+
+      if (hasMeaningfulName) {
+        if (/bed/i.test(room.name)) {
+          typeSuggestion = "Bedroom";
+          confidence += 40;
+          reasons.push(`Inferred Bedroom from room label "${room.name}"`);
+        } else if (/bath|powder/i.test(room.name)) {
+          typeSuggestion = "Bathroom";
+          confidence += 40;
+          reasons.push(`Inferred Bathroom from room label "${room.name}"`);
+        } else if (/kitchen/i.test(room.name)) {
+          typeSuggestion = "Kitchen";
+          confidence += 40;
+          reasons.push(`Inferred Kitchen from room label "${room.name}"`);
+        } else if (/garage/i.test(room.name)) {
+          typeSuggestion = "Garage";
+          confidence += 50;
+          reasons.push(`Inferred Garage from room label "${room.name}"`);
+        } else {
+          confidence += 20;
+          reasons.push(`Using technician room label "${room.name}"`);
+        }
+      }
+
+      // 2. Physical Attributes Evidence
+      if (extWalls > 0) {
+        confidence += 15;
+        reasons.push(`Detected ${extWalls} exterior thermal boundaries`);
+      }
+      if (windowCount > 0) {
+        confidence += 20;
+        reasons.push(`Validated ${windowCount} window openings from tracing`);
+      }
+      if (doorCount > 0) {
+        confidence += 10;
+        reasons.push(`Validated ${doorCount} door openings`);
+      }
+
+      const suggestions: SuggestedRoomIntelligence = {
+        roomNameSuggestion: room.name,
+        roomTypeSuggestion: typeSuggestion,
+        possibleExteriorWalls: extWalls,
+        possibleWindowCount: windowCount,
+        possibleDoorCount: doorCount,
+        confidence: Math.min(95, confidence),
+        reasons: reasons.length > 0 ? reasons : ["No reliable room evidence found yet."]
+      };
+
+      return {
+        ...currentTrace,
+        roomOutlines: currentTrace.roomOutlines.map(r => 
+          r.id === outlineId ? { ...r, suggestions } : r
+        )
+      };
+    });
+  };
+
+  const applyRoomIntelligence = (outlineId: string, mode: "accept" | "ignore") => {
+    setBlueprintRoomTrace((currentTrace) => {
+      const room = currentTrace.roomOutlines.find(r => r.id === outlineId);
+      if (!room || !room.suggestions) return currentTrace;
+
+      if (mode === "ignore") {
+        return {
+          ...currentTrace,
+          roomOutlines: currentTrace.roomOutlines.map(r => 
+            r.id === outlineId ? { ...r, suggestions: undefined } : r
+          )
+        };
+      }
+
+      // Accept: copy suggestions into verified fields (if applicable)
+      return {
+        ...currentTrace,
+        roomOutlines: currentTrace.roomOutlines.map(r => 
+          r.id === outlineId ? { ...r, suggestions: undefined } : r
+        )
+      };
+    });
+
+    if (mode === "accept") {
+      setProjectActionMessage("Suggestions accepted and merged into verified data.");
+    }
   };
 
   const addOpeningToSelectedEdge = (type: BlueprintOpeningType) => {
@@ -2836,6 +2991,11 @@ const averageTonnage = (minTon + maxTon) / 2;
       description: "Verify insulation R-values, window factors, and infiltration.",
     },
     {
+      id: "window-schedule",
+      title: "Window Schedule",
+      description: "Define standard window types from blueprint schedules.",
+    },
+    {
       id: "room-airflow",
       title: "Room-by-Room Airflow",
       description: "Room loads, branch ducts, register airflow, and status messages.",
@@ -2859,7 +3019,7 @@ const averageTonnage = (minTon + maxTon) / 2;
   const activeWorkflowStep =
     activeTechnicianSection === "manual-room-takeoff"
       ? 1
-      : activeTechnicianSection === "envelope-verification"
+      : (activeTechnicianSection === "envelope-verification" || activeTechnicianSection === "window-schedule")
       ? 2
       : activeTechnicianSection === "room-airflow"
       ? 3
@@ -4149,6 +4309,123 @@ const averageTonnage = (minTon + maxTon) / 2;
           </div>
 
           <div
+            className="load-section-panel"
+            style={{
+              ...sectionPanelStyle,
+              display: activeTechnicianSection === "window-schedule" ? "grid" : "none",
+            }}
+          >
+            <div style={sectionPanelHeaderStyle}>
+              <div style={sectionPanelIconStyle}>
+                <FileText size={18} strokeWidth={1.8} />
+              </div>
+              <div>
+                <p style={sectionPanelTitleStyle}>Window Schedule</p>
+                <p style={sectionPanelDescriptionStyle}>Define standard window types from blueprint schedules.</p>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              {windowSchedule.length > 0 ? (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: "1fr 1fr 1fr 2fr 40px", 
+                    gap: "8px", 
+                    padding: "0 8px",
+                    opacity: 0.6,
+                    fontSize: "10px",
+                    fontWeight: 800,
+                    color: "#94a3b8"
+                  }}>
+                    <span>MARK</span>
+                    <span>GLASS SF</span>
+                    <span>U-FACTOR</span>
+                    <span>DESCRIPTION</span>
+                    <span></span>
+                  </div>
+                  {windowSchedule.map((entry) => (
+                    <div key={entry.id} style={{ 
+                      display: "grid", 
+                      gridTemplateColumns: "1fr 1fr 1fr 2fr 40px", 
+                      gap: "8px", 
+                      alignItems: "center",
+                      background: "rgba(255,255,255,0.03)",
+                      padding: "8px",
+                      borderRadius: "10px",
+                      border: "1px solid rgba(255,255,255,0.05)"
+                    }}>
+                      <input 
+                        className="load-input"
+                        value={entry.mark}
+                        onChange={(e) => updateWindowScheduleEntry(entry.id, "mark", e.target.value)}
+                        placeholder="e.g. W1"
+                        style={{ ...inputControlStyle, height: "28px", fontSize: "11px" }}
+                      />
+                      <input 
+                        className="load-input"
+                        type="number"
+                        step="0.1"
+                        value={entry.glassArea}
+                        onChange={(e) => updateWindowScheduleEntry(entry.id, "glassArea", parseFloat(e.target.value) || 0)}
+                        placeholder="Area"
+                        style={{ ...inputControlStyle, height: "28px", fontSize: "11px" }}
+                      />
+                      <input 
+                        className="load-input"
+                        type="number"
+                        step="0.01"
+                        value={entry.uFactor}
+                        onChange={(e) => updateWindowScheduleEntry(entry.id, "uFactor", parseFloat(e.target.value) || 0)}
+                        placeholder="U-Val"
+                        style={{ ...inputControlStyle, height: "28px", fontSize: "11px" }}
+                      />
+                      <input 
+                        className="load-input"
+                        value={entry.description || ""}
+                        onChange={(e) => updateWindowScheduleEntry(entry.id, "description", e.target.value)}
+                        placeholder="Notes..."
+                        style={{ ...inputControlStyle, height: "28px", fontSize: "11px" }}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => removeWindowScheduleEntry(entry.id)}
+                        style={{ 
+                          background: "rgba(239,68,68,0.1)", 
+                          border: "1px solid rgba(239,68,68,0.2)", 
+                          color: "#f87171", 
+                          borderRadius: "6px",
+                          height: "28px",
+                          display: "grid",
+                          placeItems: "center",
+                          cursor: "pointer"
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding: "32px", textAlign: "center", background: "rgba(255,255,255,0.02)", borderRadius: "16px", border: "1px dashed rgba(255,255,255,0.1)" }}>
+                  <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>No window types defined yet.</p>
+                  <p style={{ margin: "4px 0 0", fontSize: "10px", color: "#475569" }}>Add rows to support precision Manual J area inputs.</p>
+                </div>
+              )}
+              <button 
+                type="button"
+                style={{ ...blueprintCalibrationButtonStyle, marginTop: "8px", width: "100%", background: "rgba(212,175,55,0.1)", color: "#d4af37", border: "1px solid rgba(212,175,55,0.3)" }}
+                onClick={addWindowScheduleEntry}
+              >
+                <Plus size={16} /> Add Window Type
+              </button>
+              <p style={{ margin: "12px 0 0", fontSize: "10px", color: "#64748b", fontStyle: "italic", textAlign: "center" }}>
+                Retrofit projects can ignore this section. These values will be available for assignment during room tracing.
+              </p>
+            </div>
+          </div>
+
+          <div
             className="blueprint-takeoff-panel"
             style={{
               ...blueprintTakeoffPanelStyle,
@@ -4507,6 +4784,25 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     </div>
 
+                    {isVerificationMode && (
+                      <div style={{
+                        background: "rgba(168, 85, 247, 0.15)",
+                        borderBottom: "1px solid rgba(168, 85, 247, 0.4)",
+                        padding: "8px 16px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "2px",
+                        textAlign: "center"
+                      }}>
+                        <span style={{ fontSize: "11px", fontWeight: "bold", color: "#c084fc", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Scale Check Mode
+                        </span>
+                        <span style={{ fontSize: "10px", color: "#cbd5e1" }}>
+                          Measure another known dimension to verify calibration accuracy.
+                        </span>
+                      </div>
+                    )}
+
                     <div ref={blueprintViewportRef} style={{
                     ...blueprintViewportStyle,
                     ...(isTracingLock ? {
@@ -4609,7 +4905,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                           key={outline.id}
                           viewBox="0 0 100 100"
                           preserveAspectRatio="none"
-                          style={{ ...blueprintRoomOutlineSvgStyle, pointerEvents: "auto" }}
+                          style={{ 
+                            ...blueprintRoomOutlineSvgStyle, 
+                            pointerEvents: "auto",
+                            opacity: activeGuidedWorkflow === "classify-walls" && selectedDetectedRoomId !== outline.id ? 0.2 : 1,
+                            transition: "opacity 0.2s ease"
+                          }}
                           aria-label={`${outline.name} boundary edges`}
                         >
                           <polygon
@@ -4636,10 +4937,32 @@ const averageTonnage = (minTon + maxTon) / 2;
                                   role="button"
                                   tabIndex={0}
                                   aria-label={`Select ${outline.name} boundary edge ${edgeIndex + 1}`}
-                                  style={getBoundaryEdgeStyle(edge.boundaryType, isSelectedEdge)}
+                                  style={{
+                                    ...getBoundaryEdgeStyle(edge.boundaryType, isSelectedEdge),
+                                    ...(activeGuidedWorkflow === "classify-walls" 
+                                      ? {
+                                          opacity: edge.boundaryType === "unknown" ? 1 : 0.4,
+                                          strokeWidth: isSelectedEdge ? 4 : (edge.boundaryType === "unknown" ? 3 : 2),
+                                          strokeDasharray: isSelectedEdge ? "none" : (edge.boundaryType === "unknown" ? "4 4" : "none"),
+                                          stroke: isSelectedEdge ? "#fbbf24" : (edge.boundaryType === "unknown" ? "#38bdf8" : undefined)
+                                        } 
+                                      : {})
+                                  }}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     selectTracedRoomBoundaryEdge(outline.id, edgeIndex);
+                                    if (activeGuidedWorkflow === "classify-walls") {
+                                      // Simple toggle: Unknown <-> Exterior
+                                      const nextType = edge.boundaryType === "exterior" ? "unknown" : "exterior";
+                                      setBlueprintRoomTrace((currentTrace) =>
+                                        updateBlueprintRoomBoundaryEdgeType(
+                                          currentTrace,
+                                          outline.id,
+                                          edgeIndex,
+                                          nextType
+                                        )
+                                      );
+                                    }
                                   }}
                                   onKeyDown={(event) => {
                                     if (event.key !== "Enter" && event.key !== " ") return;
@@ -4974,6 +5297,97 @@ const averageTonnage = (minTon + maxTon) / 2;
                           </span>
                         </>
                       )}
+
+                      {/* Guided Workflow Overlays */}
+                      {activeGuidedWorkflow === "classify-walls" && (
+                        <div style={{
+                          position: "absolute",
+                          top: "20px",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          background: "rgba(15,23,42,0.95)",
+                          backdropFilter: "blur(8px)",
+                          WebkitBackdropFilter: "blur(8px)",
+                          padding: "16px 24px",
+                          borderRadius: "16px",
+                          zIndex: 100,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "12px",
+                          alignItems: "center",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                          pointerEvents: "auto",
+                          width: "max-content"
+                        }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                            <span style={{ color: "#f8fafc", fontSize: "16px", fontWeight: 800 }}>Which walls touch outside air?</span>
+                            <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>Tap exterior walls. We'll mark the rest as interior when you finish.</span>
+                          </div>
+                          <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                            <button 
+                              style={{ background: "#22c55e", border: "1px solid rgba(34, 197, 94, 0.5)", borderRadius: "8px", padding: "8px 24px", color: "#000", fontWeight: 900, cursor: "pointer", fontSize: "12px", boxShadow: "0 2px 10px rgba(34, 197, 94, 0.2)" }} 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                if (selectedDetectedRoomId) {
+                                  // Find the room
+                                  const room = blueprintRoomTrace.roomOutlines.find(r => r.id === selectedDetectedRoomId);
+                                  if (room && room.boundaryEdges) {
+                                    // Mark all remaining unknown walls as interior
+                                    room.boundaryEdges.forEach((edge, idx) => {
+                                      if (edge.boundaryType === "unknown") {
+                                        setBlueprintRoomTrace((currentTrace) =>
+                                          updateBlueprintRoomBoundaryEdgeType(currentTrace, room.id, idx, "interior")
+                                        );
+                                      }
+                                    });
+                                  }
+                                }
+                                setActiveGuidedWorkflow(null); 
+                                setProjectActionMessage("Exterior and interior walls marked.");
+                              }}
+                            >
+                              Done — other walls are interior
+                            </button>
+                            <button 
+                              style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "8px", padding: "8px 16px", color: "#94a3b8", fontWeight: 800, cursor: "pointer", fontSize: "12px" }} 
+                              onClick={(e) => { e.stopPropagation(); setActiveGuidedWorkflow(null); }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeGuidedWorkflow === "verify-openings" && selectedBlueprintBoundaryEdge && (
+                        <div style={{
+                          position: "absolute",
+                          top: "20px",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          background: "rgba(15,23,42,0.9)",
+                          backdropFilter: "blur(8px)",
+                          WebkitBackdropFilter: "blur(8px)",
+                          padding: "12px 24px",
+                          borderRadius: "100px",
+                          zIndex: 100,
+                          display: "flex",
+                          gap: "12px",
+                          alignItems: "center",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          boxShadow: "0 8px 32px rgba(0,0,0,0.5)"
+                        }}>
+                          <span style={{ color: "#fbbf24", fontSize: "14px", fontWeight: 800 }}>Verify Openings:</span>
+                          <span style={{ color: "#f8fafc", fontSize: "12px", fontWeight: 600 }}>Use the Edge Inspector sidebar to add windows to this wall.</span>
+                          <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.2)" }} />
+                          <button 
+                            style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "20px", padding: "6px 16px", color: "#94a3b8", fontWeight: 800, cursor: "pointer", fontSize: "11px" }} 
+                            onClick={(e) => { e.stopPropagation(); setActiveGuidedWorkflow(null); }}
+                          >
+                            Exit Guide
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {blueprintWorkspaceMode === "review-detected" && detectedBlueprintRooms.length > 0 ? (
                       <div style={blueprintOverlayLayerStyle} aria-label="Detected room preview overlay">
@@ -5034,22 +5448,45 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                 {/* Compact Calibration Section */}
                 <div style={{ ...blueprintInspectorCardStyle, padding: "8px" }} title="Blueprint Calibration">
-                  <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor, fontSize: "10px", textAlign: "center" }}>
-                    {blueprintCalibration.status === "calibrated" ? "CALIBRATED" : "UNVERIFIED"}
+                  <p style={{ ...blueprintCalibrationStatusStyle, color: blueprintCalibrationUI.statusColor, fontSize: "10px", textAlign: "center", fontWeight: "bold" }}>
+                    {blueprintCalibration.status === "calibrated" ? "✓ CALIBRATED" : "Calibration Required"}
                   </p>
                   
                   <div style={{ display: "grid", gap: "10px", marginTop: "10px" }}>
                     {blueprintCalibration.status === "calibrated" ? (
                       <div style={{ display: "grid", gap: "8px" }}>
-                        <div style={{ padding: "8px", background: "rgba(34,197,94,0.1)", borderRadius: "8px", border: "1px solid rgba(34,197,94,0.2)", textAlign: "center" }}>
-                          <p style={{ margin: 0, fontSize: "11px", fontWeight: 800, color: "#4ade80" }}>Scale Verified</p>
-                          <p style={{ margin: "2px 0 0", fontSize: "10px", color: "#94a3b8" }}>
-                            {blueprintCalibrationMeasurementText?.arch} = {activePixelsPerFoot?.toFixed(2)} px/ft
+                        <div style={{ padding: "10px", background: "rgba(34,197,94,0.12)", borderRadius: "8px", border: "1px solid rgba(34,197,94,0.3)", textAlign: "center", display: "grid", gap: "2px" }}>
+                          <p style={{ margin: 0, fontSize: "12px", fontWeight: "bold", color: "#4ade80" }}>
+                            ✓ Scale Locked
+                          </p>
+                          <p style={{ margin: 0, fontSize: "10px", color: "#cbd5e1" }}>
+                            Room measurements will now use this scale.
+                          </p>
+                          <p style={{ margin: "4px 0 0", fontSize: "9px", color: "#94a3b8", fontStyle: "italic" }}>
+                            Active scale: {blueprintCalibrationMeasurementText?.arch} = {activePixelsPerFoot?.toFixed(2)} px/ft
                           </p>
                         </div>
+
                         <button
                           type="button"
-                          style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "34px", border: "1px solid rgba(239,68,68,0.3)", color: "#fca5a5" }}
+                          style={{
+                            ...blueprintCalibrationConfirmButtonStyle,
+                            width: "100%",
+                            minHeight: "36px",
+                            fontSize: "12px",
+                            fontWeight: "bold",
+                            background: "#22c55e",
+                            color: "#fff",
+                            cursor: "pointer"
+                          }}
+                          onClick={() => dispatchProjectEngineActionRef.current?.({ type: "SET_STAGE", stage: "TAKEOFF" })}
+                        >
+                          Start Room Takeoff
+                        </button>
+
+                        <button
+                          type="button"
+                          style={{ ...blueprintCalibrationButtonStyle, width: "100%", minHeight: "30px", border: "1px solid rgba(239,68,68,0.2)", color: "#fca5a5", fontSize: "10px" }}
                           onClick={recalibrateBlueprintScale}
                         >
                           REPLACE SCALE
@@ -5057,6 +5494,11 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     ) : (
                       <>
+                        {(blueprintCalibration.status === "uncalibrated" || blueprintCalibration.status === "calibrating") && (
+                          <p style={{ margin: "0 0 4px", fontSize: "10px", color: "#cbd5e1", lineHeight: 1.4, textAlign: "center" }}>
+                            Choose a known dimension on the blueprint (such as a labeled wall or hallway) to establish the drawing scale.
+                          </p>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", background: "rgba(0,0,0,0.2)", borderRadius: "6px" }}>
                           <span style={{ fontSize: "10px", fontWeight: 800, color: "#64748b" }}>ACTIVE:</span>
                           <span style={{ fontSize: "10px", fontWeight: 900, color: calibrationPlacementMode ? "#fbbf24" : "#94a3b8" }}>
@@ -5119,6 +5561,11 @@ const averageTonnage = (minTon + maxTon) / 2;
                               {calibrationPlacementMode === "B" ? "FINISH B" : (blueprintCalibration.endPoint ? "ADJUST B" : "SET POINT B")}
                             </button>
                           </div>
+                        </div>
+
+                        <div style={{ display: "grid", gap: "2px", marginTop: "4px", padding: "0 2px" }}>
+                          <span style={{ fontSize: "11px", fontWeight: "bold", color: "#e2e8f0" }}>Real-World Length</span>
+                          <span style={{ fontSize: "9px", color: "#94a3b8" }}>Enter the actual length of the reference line.</span>
                         </div>
 
                         <div style={structuredCalibrationGridStyle}>
@@ -5299,7 +5746,15 @@ const averageTonnage = (minTon + maxTon) / 2;
                                   Measured: {scaleCheckResult.measuredFeet?.toFixed(2)} ft
                                 </p>
                                 <p style={{ margin: 0, fontSize: "9px", color: scaleCheckResult.isPassed ? "#4ade80" : "#fbbf24" }}>
-                                  Accuracy: {scaleCheckResult.confidence?.toUpperCase()}
+                                  Accuracy: {
+                                    scaleCheckResult.confidence === "verified"
+                                      ? "Excellent"
+                                      : scaleCheckResult.confidence === "acceptable"
+                                      ? "Good"
+                                      : scaleCheckResult.confidence === "warning"
+                                      ? "Recalibration Recommended"
+                                      : scaleCheckResult.confidence
+                                  }
                                 </p>
                               </div>
                             ) : (
@@ -5653,10 +6108,23 @@ const averageTonnage = (minTon + maxTon) / 2;
                       const envelopeInsight = explainBlueprintRoomEnvelopePreview(envelopeInput);
                       const envelopeConfidence = calculateBlueprintRoomEnvelopeConfidence(envelopeInput);
                       const boundaryCompleteness = calculateBlueprintRoomBoundaryCompleteness(outline);
+                      const readiness = calculateRoomReadiness(outline, blueprintCalibration);
+                      const readinessColor = readiness.status === "READY_FOR_MANUAL_J" ? "#22c55e" : readiness.status === "NEEDS_REVIEW" ? "#fbbf24" : "#f87171";
+
                       const envelopeInsightMessages =
                         envelopeInsight.status === "ready"
                           ? envelopeInsight.messages.slice(0, 3)
                           : ["Envelope insight not ready."];
+
+                      let verifiedWindowsCount = 0;
+                      let verifiedWindowsArea = 0;
+                      outline.boundaryEdges?.forEach((edge) => {
+                        const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
+                        verifiedWindowsCount += windows.length;
+                        windows.forEach((win) => {
+                          verifiedWindowsArea += win.widthFeet * win.heightFeet;
+                        });
+                      });
 
                       return (
                       <div
@@ -5675,51 +6143,248 @@ const averageTonnage = (minTon + maxTon) / 2;
                       >
                         <div style={detectedRoomHeaderStyle}>
                           <p style={tracedRoomTitleStyle}>{outline.name}</p>
-                          <span style={detectedRoomConfirmedBadgeStyle}>Traced</span>
-                        </div>
-                        <div style={detectedRoomFactsStyle}>
-                          <span>
-                            {outline.squareFeet === null
-                              ? "Calibration required"
-                              : `${Math.round(outline.squareFeet).toLocaleString()} sq ft`}
-                          </span>
-                          <span>{outline.squareFeet === null ? blueprintTraceCalibrationStatusText : "Confirmed scale"}</span>
-                          <span>Level {outline.floorLevel || "1"}</span>
-                          <span>{outline.ceilingHeight || "8"} ft ceiling</span>
-                          <span>{outline.points.length} points</span>
-                          <span style={{ color: boundaryCompleteness.isFullyClassified ? "#4ade80" : "#94a3b8" }}>
-                            {boundaryCompleteness.completionPercent}% classified ({boundaryCompleteness.classifiedEdges}/{boundaryCompleteness.totalEdges} edges)
+                          <span style={{ 
+                            ...detectedRoomConfirmedBadgeStyle, 
+                            background: `${readinessColor}15`, 
+                            color: readinessColor,
+                            border: `1px solid ${readinessColor}30`,
+                            fontSize: "8px",
+                            fontWeight: 900
+                          }}>
+                            {readiness.status.replace(/_/g, " ")}
                           </span>
                         </div>
 
-                        {selectedDetectedRoomId === outline.id && (
-                          <div style={{ ...detectedRoomFactsStyle, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", marginTop: "8px", flexDirection: "column", alignItems: "flex-start", gap: "8px" }}>
-                            <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "10px" }} onClick={(e) => e.stopPropagation()}>
-                              <span style={{ fontSize: "9px", fontWeight: 800, color: "#94a3b8" }}>EXPECTED AREA (SQ FT)</span>
-                              <input 
-                                type="number"
-                                className="load-input"
-                                placeholder="e.g. 150"
-                                value={manualExpectedArea}
-                                onChange={(e) => setManualExpectedArea(e.target.value)}
-                                style={{ ...inputControlStyle, width: "60px", height: "20px", fontSize: "10px", background: "rgba(0,0,0,0.2)", textAlign: "right" }}
-                              />
-                            </label>
-                            {manualExpectedArea && outline.squareFeet !== null && (
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                                <span style={{ fontSize: "9px", color: "#64748b" }}>TRACE VARIANCE</span>
-                                {(() => {
-                                  const expected = parseFloat(manualExpectedArea);
-                                  if (!expected || expected <= 0) return null;
-                                  const diff = ((outline.squareFeet - expected) / expected) * 100;
-                                  return (
-                                    <span style={{ fontSize: "10px", fontWeight: 900, color: Math.abs(diff) > 5 ? "#fca5a5" : "#4ade80" }}>
-                                      {diff > 0 ? "+" : ""}{diff.toFixed(1)}%
-                                    </span>
-                                  );
-                                })()}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "10px" }}>
+                          <div style={{ display: "grid", gap: "4px" }}>
+                            {[
+                              { label: "Geometry", ok: readiness.checklist.geometry },
+                              { label: "Walls", ok: readiness.checklist.walls },
+                              { label: "Openings", ok: readiness.checklist.openings }
+                            ].map(item => (
+                              <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                {item.ok ? <CheckCircle2 size={10} color="#22c55e" /> : <Circle size={10} color="#64748b" />}
+                                <span style={{ fontSize: "10px", fontWeight: 700, color: item.ok ? "#f8fafc" : "#94a3b8" }}>{item.label}</span>
                               </div>
-                            )}
+                            ))}
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <p style={{ margin: 0, fontSize: "12px", fontWeight: 900, color: "#f8fafc" }}>
+                              {outline.squareFeet !== null ? `${Math.round(outline.squareFeet).toLocaleString()} sq ft` : "--"}
+                            </p>
+                            <p style={{ margin: 0, fontSize: "8px", color: "#64748b", fontWeight: 800 }}>TRACE AREA</p>
+                          </div>
+                        </div>
+
+                        {readiness.warnings.map(w => (
+                          <p key={w} style={{ margin: "8px 0 0", fontSize: "9px", color: "#fbbf24", fontStyle: "italic", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <AlertTriangle size={10} /> {w}
+                          </p>
+                        ))}
+
+                        {/* Guided Workflow Primary Action */}
+                        <div style={{ marginTop: "12px" }}>
+                          {(() => {
+                            if (!readiness.checklist.geometry) return null;
+                            
+                            if (!readiness.checklist.walls) {
+                              const firstUnknownIdx = (outline.boundaryEdges ?? []).findIndex(e => e.boundaryType === "unknown");
+                              return (
+                                <button
+                                  type="button"
+                                  style={{ ...blueprintCalibrationButtonStyle, width: "100%", background: "#38bdf8", color: "#000", fontWeight: 900, border: "none" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDetectedRoomId(outline.id);
+                                    setSelectedBlueprintBoundaryEdge({ outlineId: outline.id, edgeIndex: Math.max(0, firstUnknownIdx) });
+                                    setActiveGuidedWorkflow("classify-walls");
+                                    // Make sure we are in manual-trace view
+                                    setBlueprintWorkspaceMode("manual-trace");
+                                  }}
+                                >
+                                  Next: Mark Exterior Walls
+                                </button>
+                              );
+                            }
+
+                            if (!readiness.checklist.openings) {
+                              const firstUnverifiedIdx = (outline.boundaryEdges ?? []).findIndex(e => 
+                                e.boundaryType === "exterior" && (e.openings ?? []).some(op => !op.isVerified)
+                              );
+                              return (
+                                <button
+                                  type="button"
+                                  style={{ ...blueprintCalibrationButtonStyle, width: "100%", background: "#fbbf24", color: "#000", fontWeight: 900, border: "none" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDetectedRoomId(outline.id);
+                                    setSelectedBlueprintBoundaryEdge({ outlineId: outline.id, edgeIndex: Math.max(0, firstUnverifiedIdx) });
+                                    setActiveGuidedWorkflow("verify-openings");
+                                    setBlueprintWorkspaceMode("manual-trace");
+                                  }}
+                                >
+                                  Next: Verify Openings
+                                </button>
+                              );
+                            }
+
+                            if (readiness.status === "READY_FOR_MANUAL_J") {
+                              const alreadyInManualJ = blueprintRoomsForManualD.some(r => r.sourceBlueprintRoomId === outline.id);
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={alreadyInManualJ}
+                                  style={{ 
+                                    ...blueprintCalibrationButtonStyle, 
+                                    width: "100%", 
+                                    background: alreadyInManualJ ? "rgba(34, 197, 94, 0.1)" : "#22c55e", 
+                                    color: alreadyInManualJ ? "#22c55e" : "#000", 
+                                    fontWeight: 900, 
+                                    border: alreadyInManualJ ? "1px solid rgba(34, 197, 94, 0.2)" : "none",
+                                    cursor: alreadyInManualJ ? "default" : "pointer"
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    sendTracedRoomToManualD(outline.id);
+                                  }}
+                                >
+                                  {alreadyInManualJ ? "Synced to Manual J" : "Next: Send to Manual J"}
+                                </button>
+                              );
+                            }
+
+                            return null;
+                          })()}
+                        </div>
+
+                        {/* Collapsible Engineering Details */}
+                        {selectedDetectedRoomId === outline.id && (
+                          <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
+                            <details style={{ cursor: "pointer" }} onClick={(e) => e.stopPropagation()}>
+                              <summary style={{ fontSize: "9px", fontWeight: 800, color: "#64748b", listStyle: "none" }}>
+                                [ Engineering Details ]
+                              </summary>
+                              <div style={{ ...detectedRoomFactsStyle, marginTop: "8px", background: "rgba(0,0,0,0.1)", padding: "8px", borderRadius: "8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                                <span>{outline.squareFeet === null ? "Calibration required" : "Confirmed scale"}</span>
+                                <span>Level {outline.floorLevel || "1"}</span>
+                                <span>{outline.ceilingHeight || "8"} ft ceiling</span>
+                                <span style={{ color: verifiedWindowsCount > 0 ? "#4ade80" : "#94a3b8" }}>
+                                  Windows: {verifiedWindowsCount} ({verifiedWindowsArea.toFixed(1)} sf)
+                                </span>
+                                <span>{outline.points.length} points</span>
+                                <span>{boundaryCompleteness.completionPercent}% shell classification</span>
+                              </div>
+                            </details>
+                          </div>
+                        )}
+
+                        {selectedDetectedRoomId === outline.id && (
+                          <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "10px", display: "grid", gap: "12px" }}>
+                            {/* Manual Expected Area Audit Tool */}
+                            <div style={{ display: "grid", gap: "8px" }} onClick={(e) => e.stopPropagation()}>
+                              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", gap: "10px" }}>
+                                <span style={{ fontSize: "9px", fontWeight: 800, color: "#94a3b8" }}>EXPECTED AREA (SQ FT)</span>
+                                <input 
+                                  type="number"
+                                  className="load-input"
+                                  placeholder="e.g. 150"
+                                  value={manualExpectedArea}
+                                  onChange={(e) => setManualExpectedArea(e.target.value)}
+                                  style={{ ...inputControlStyle, width: "60px", height: "20px", fontSize: "10px", background: "rgba(0,0,0,0.2)", textAlign: "right" }}
+                                />
+                              </label>
+                              {manualExpectedArea && outline.squareFeet !== null && (
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                  <span style={{ fontSize: "9px", color: "#64748b" }}>TRACE VARIANCE</span>
+                                  {(() => {
+                                    const expected = parseFloat(manualExpectedArea);
+                                    if (!expected || expected <= 0) return null;
+                                    const diff = ((outline.squareFeet - expected) / expected) * 100;
+                                    return (
+                                      <span style={{ fontSize: "10px", fontWeight: 900, color: Math.abs(diff) > 5 ? "#fca5a5" : "#4ade80" }}>
+                                        {diff > 0 ? "+" : ""}{diff.toFixed(1)}%
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* AI Suggestions Panel */}
+                            <div onClick={(e) => e.stopPropagation()}>
+                              {outline.suggestions ? (
+                                <div style={{ background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.15)", borderRadius: "10px", padding: "8px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <Zap size={12} color="#38bdf8" />
+                                      <span style={{ fontSize: "10px", fontWeight: 800, color: "#38bdf8" }}>SUGGESTED INTELLIGENCE</span>
+                                    </div>
+                                    <span style={{ fontSize: "9px", fontWeight: 900, color: outline.suggestions.confidence > 80 ? "#4ade80" : "#fbbf24" }}>
+                                      {outline.suggestions.confidence}% CONF
+                                    </span>
+                                  </div>
+                                  
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", background: "rgba(0,0,0,0.2)", padding: "6px", borderRadius: "6px" }}>
+                                    <div style={{ display: "grid", gap: "2px" }}>
+                                      <span style={{ fontSize: "8px", color: "#64748b", fontWeight: 800 }}>SUGGESTED NAME</span>
+                                      <span style={{ fontSize: "11px", fontWeight: 800, color: "#f8fafc" }}>{outline.suggestions.roomNameSuggestion}</span>
+                                    </div>
+                                    <div style={{ display: "grid", gap: "2px" }}>
+                                      <span style={{ fontSize: "8px", color: "#64748b", fontWeight: 800 }}>ROOM TYPE</span>
+                                      <span style={{ fontSize: "11px", fontWeight: 800, color: "#f8fafc" }}>{outline.suggestions.roomTypeSuggestion}</span>
+                                    </div>
+                                  </div>
+
+                                  <div style={{ marginTop: "8px", display: "grid", gap: "2px" }}>
+                                    {outline.suggestions.reasons.map((reason, idx) => (
+                                      <div key={idx} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                        <div style={{ width: "3px", height: "3px", borderRadius: "50%", background: "#38bdf8" }} />
+                                        <p style={{ margin: 0, fontSize: "9px", color: "#94a3b8" }}>{reason}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  <div style={{ marginTop: "10px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                                    <button
+                                      type="button"
+                                      style={{ ...detectedRoomButtonStyle, background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.2)", color: "#38bdf8", fontSize: "10px" }}
+                                      onClick={() => applyRoomIntelligence(outline.id, "accept")}
+                                    >
+                                      Accept Suggestions
+                                    </button>
+                                    <button
+                                      type="button"
+                                      style={{ ...detectedRoomButtonStyle, background: "none", border: "1px solid rgba(255,255,255,0.05)", color: "#64748b", fontSize: "10px" }}
+                                      onClick={() => applyRoomIntelligence(outline.id, "ignore")}
+                                    >
+                                      Ignore
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  style={{ 
+                                    width: "100%", 
+                                    minHeight: "32px", 
+                                    background: "rgba(56,189,248,0.05)", 
+                                    border: "1px dashed rgba(56,189,248,0.2)", 
+                                    borderRadius: "10px",
+                                    color: "#38bdf8",
+                                    fontSize: "10px",
+                                    fontWeight: 800,
+                                    cursor: "pointer",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "8px"
+                                  }}
+                                  onClick={() => generateRoomIntelligenceSuggestions(outline.id)}
+                                >
+                                  <PlayCircle size={14} /> Run AI Intelligence Analysis
+                                </button>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -6015,7 +6680,9 @@ const averageTonnage = (minTon + maxTon) / 2;
             savedProjectState={loadedManualDProjectState}
             onProjectStateChange={setManualDProjectState}
             activeSection={
-              activeTechnicianSection === "manual-room-takeoff" || activeTechnicianSection === "envelope-verification"
+              activeTechnicianSection === "manual-room-takeoff" || 
+              activeTechnicianSection === "envelope-verification" ||
+              activeTechnicianSection === "window-schedule"
                 ? "hidden"
                 : activeTechnicianSection
             }
