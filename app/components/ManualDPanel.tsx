@@ -385,12 +385,41 @@ export default function ManualDPanel({
     const newBlueprintRooms = blueprintRooms.filter(
       (room) => !processedBlueprintRoomIds.current.has(room.id)
     );
+    const updatedBlueprintRooms = blueprintRooms.filter(
+      (room) => processedBlueprintRoomIds.current.has(room.id)
+    );
 
-    if (newBlueprintRooms.length === 0) return;
+    if (newBlueprintRooms.length === 0 && updatedBlueprintRooms.length === 0) return;
 
-    setRooms((currentRooms) => [
-      ...currentRooms,
-      ...newBlueprintRooms.map((room) => ({
+    setRooms((currentRooms) => {
+      // 1. Update existing rooms
+      const updatedRooms = currentRooms.map((r) => {
+        const br = updatedBlueprintRooms.find((u) => u.id === r.id);
+        if (!br) return r;
+
+        // Detection of manual override for window area
+        const isWindowAreaOverridden = r.originalWindowsAreaInput && r.windowsAreaInput !== r.originalWindowsAreaInput;
+
+        return {
+          ...r,
+          // Mandatory updates from blueprint
+          squareFeet: Math.max(0, Math.round(br.squareFeet)),
+          squareFeetInput: String(Math.max(0, Math.round(br.squareFeet))),
+          ceilingHeightInput: br.ceilingHeight,
+          floorLevelInput: br.floorLevel,
+          exteriorWallsCountInput: br.exteriorWallsCount ?? r.exteriorWallsCountInput,
+          windowsCountInput: br.windowsCount ?? r.windowsCountInput,
+
+          // Conditional update for window area: only if NOT overridden
+          windowsAreaInput: isWindowAreaOverridden ? r.windowsAreaInput : (br.windowsArea ?? r.windowsAreaInput),
+
+          // Always update the 'reference' baseline so we can detect future changes
+          originalWindowsAreaInput: br.windowsArea ?? r.originalWindowsAreaInput,
+        };
+      });
+
+      // 2. Add new rooms
+      const addedRooms = newBlueprintRooms.map((room) => ({
         ...createDefaultRoom(
           `manual-d-${room.id}`,
           room.name,
@@ -403,8 +432,10 @@ export default function ManualDPanel({
         originalWindowsAreaInput: room.windowsArea ?? "",
         exteriorWallsCountInput: room.exteriorWallsCount ?? "",
         blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
-      })),
-    ]);
+      }));
+
+      return [...updatedRooms, ...addedRooms];
+    });
 
     newBlueprintRooms.forEach((room) => {
       processedBlueprintRoomIds.current.add(room.id);
@@ -478,7 +509,7 @@ export default function ManualDPanel({
         if (field === "supplyRegisterCount") {
           return {
             ...room,
-            supplyRegisterCount: Math.max(1, Number(value) || 1),
+            supplyRegisterCount: Math.max(0, Number(value) || 0),
           };
         }
 
@@ -1493,7 +1524,7 @@ export default function ManualDPanel({
                   <input
                     className="load-input"
                     type="number"
-                    min="1"
+                    min="0"
                     aria-label={`${room.name} supply register count`}
                     value={room.supplyRegisterCount}
                     onChange={(event) =>
@@ -1540,9 +1571,27 @@ export default function ManualDPanel({
                   {room.blueprintSourceRoomId && (room.windowsAreaInput || room.windowsCountInput) && (
                     <div style={{ gridColumn: "span 2", margin: "4px 0 0" }}>
                       {room.originalWindowsAreaInput && room.windowsAreaInput !== room.originalWindowsAreaInput ? (
-                        <p style={{ margin: 0, fontSize: "8px", color: "#fbbf24", fontStyle: "italic", display: "flex", alignItems: "center", gap: "4px" }}>
-                          <AlertTriangle size={10} /> Manual override active — verified blueprint window area changed.
-                        </p>
+                        <div style={{ display: "grid", gap: "6px" }}>
+                          <p style={{ margin: 0, fontSize: "8px", color: "#fbbf24", fontStyle: "italic", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <AlertTriangle size={10} /> Blueprint data changed — manual window area override is active.
+                          </p>
+                          <button
+                            type="button"
+                            style={{
+                              background: "rgba(251,191,36,0.1)",
+                              border: "1px solid rgba(251,191,36,0.3)",
+                              color: "#fbbf24",
+                              fontSize: "8px",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              width: "fit-content",
+                              cursor: "pointer"
+                            }}
+                            onClick={() => updateRoom(room.id, "windowsArea", room.originalWindowsAreaInput || "")}
+                          >
+                            Re-sync from Blueprint
+                          </button>
+                        </div>
                       ) : (
                         <p style={{ margin: 0, fontSize: "8px", color: "#4ade80", fontStyle: "italic" }}>
                           Window count and area from verified blueprint openings

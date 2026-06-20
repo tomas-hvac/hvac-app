@@ -19,6 +19,18 @@ export type BlueprintWallOpening = {
   isVerified: boolean;
   uFactor?: number;
   shgc?: number;
+  scheduleMarkId?: string;
+};
+
+export type SuggestedRoomIntelligence = {
+  roomNameSuggestion?: string;
+  roomTypeSuggestion?: string;
+  possibleExteriorWalls?: number;
+  possibleWindowCount?: number;
+  possibleDoorCount?: number;
+  possibleWindowScheduleMark?: string;
+  confidence: number;
+  reasons: string[];
 };
 
 export type BlueprintRoomBoundaryEdge = {
@@ -36,6 +48,7 @@ export type BlueprintRoomOutline = {
   squareFeet: number | null;
   ceilingHeight: string;
   floorLevel: string;
+  suggestions?: SuggestedRoomIntelligence;
 };
 
 export type BlueprintRoomTraceState = {

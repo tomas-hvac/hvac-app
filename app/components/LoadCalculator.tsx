@@ -2142,7 +2142,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
               type,
               widthFeet: 3,
               heightFeet: type === "window" ? 4 : 6.67,
-              isVerified: true,
+              isVerified: false,
             };
             return {
               ...edge,
@@ -2153,6 +2153,35 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       }),
     }));
   };
+
+  const markSelectedEdgeOpeningsComplete = () => {
+    if (!selectedBlueprintBoundaryEdge) return;
+    const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
+
+    setBlueprintRoomTrace((currentTrace) => ({
+      ...currentTrace,
+      roomOutlines: currentTrace.roomOutlines.map((outline) => {
+        if (outline.id !== outlineId) return outline;
+        const boundaryEdges = outline.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(outline.points);
+        return {
+          ...outline,
+          boundaryEdges: boundaryEdges.map((edge, idx) => {
+            if (idx !== edgeIndex) return edge;
+            return {
+              ...edge,
+              openings: (edge.openings ?? []).map((op) => ({
+                ...op,
+                isVerified: true,
+              })),
+            };
+          }),
+        };
+      }),
+    }));
+
+    setProjectActionMessage("Wall openings marked complete.");
+  };
+
 
   const removeOpeningFromSelectedEdge = (openingId: string) => {
     if (!selectedBlueprintBoundaryEdge) return;
@@ -2825,6 +2854,21 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
           selectedBlueprintBoundaryEdge.edgeIndex
         ] ?? null
       : null;
+
+  const selectedEdgeMidpoint = useMemo(() => {
+    if (!selectedBlueprintBoundaryEdge || !selectedTracedRoom) return null;
+    const boundaryEdges = selectedTracedRoom.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(selectedTracedRoom.points);
+    const edge = boundaryEdges[selectedBlueprintBoundaryEdge.edgeIndex];
+    if (!edge) return null;
+    const start = selectedTracedRoom.points[edge.startPointIndex];
+    const end = selectedTracedRoom.points[edge.endPointIndex];
+    if (!start || !end) return null;
+    return {
+      x: (start.xPercent + end.xPercent) / 2,
+      y: (start.yPercent + end.yPercent) / 2
+    };
+  }, [selectedBlueprintBoundaryEdge, selectedTracedRoom]);
+
 
   const selectedRoomPageInfo = useMemo(() => {
     if (!selectedDetectedRoomId || !blueprintDocument) return null;
@@ -4975,6 +5019,57 @@ const averageTonnage = (minTon + maxTon) / 2;
                           )}
                         </svg>
                       ))}
+
+                      {/* HTML Opening Markers Overlay */}
+                      {tracedRoomsWithSqft.map((outline) => (
+                        <div key={`${outline.id}-openings-overlay`} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                          {(outline.boundaryEdges ?? []).map((edge, edgeIndex) => {
+                            if (edge.boundaryType !== "exterior" || !edge.openings || edge.openings.length === 0) return null;
+                            const startPoint = outline.points[edge.startPointIndex];
+                            const endPoint = outline.points[edge.endPointIndex];
+                            if (!startPoint || !endPoint) return null;
+
+                            const N = edge.openings.length;
+                            return edge.openings.map((opening, idx) => {
+                              const ratio = (idx + 1) / (N + 1);
+                              const left = startPoint.xPercent + (endPoint.xPercent - startPoint.xPercent) * ratio;
+                              const top = startPoint.yPercent + (endPoint.yPercent - startPoint.yPercent) * ratio;
+                              const baseColor = opening.type === "window" ? "#0284c7" : "#7c3aed";
+                              const color = opening.isVerified ? baseColor : "#fbbf24";
+                              const label = opening.type === "window" ? "W" : "D";
+
+                              return (
+                                <div
+                                  key={opening.id}
+                                  style={{
+                                    position: "absolute",
+                                    left: `${left}%`,
+                                    top: `${top}%`,
+                                    transform: "translate(-50%, -50%)",
+                                    width: "16px",
+                                    height: "16px",
+                                    borderRadius: "50%",
+                                    background: color,
+                                    border: "1.5px solid #ffffff",
+                                    color: "#ffffff",
+                                    fontSize: "9px",
+                                    fontWeight: 900,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
+                                    pointerEvents: "none",
+                                    userSelect: "none",
+                                    zIndex: 10
+                                  }}
+                                >
+                                  {label}
+                                </div>
+                              );
+                            });
+                          })}
+                        </div>
+                      ))}
                       {blueprintRoomTrace.draftPoints.length > 0 ? (
                         <svg
                           viewBox="0 0 100 100"
@@ -5378,7 +5473,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                           boxShadow: "0 8px 32px rgba(0,0,0,0.5)"
                         }}>
                           <span style={{ color: "#fbbf24", fontSize: "14px", fontWeight: 800 }}>Verify Openings:</span>
-                          <span style={{ color: "#f8fafc", fontSize: "12px", fontWeight: 600 }}>Use the Edge Inspector sidebar to add windows to this wall.</span>
+                          <span style={{ color: "#f8fafc", fontSize: "12px", fontWeight: 600 }}>Use the contextual toolbar on the selected wall to add windows or doors.</span>
                           <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.2)" }} />
                           <button 
                             style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "20px", padding: "6px 16px", color: "#94a3b8", fontWeight: 800, cursor: "pointer", fontSize: "11px" }} 
@@ -5388,6 +5483,121 @@ const averageTonnage = (minTon + maxTon) / 2;
                           </button>
                         </div>
                       )}
+
+                      {activeGuidedWorkflow === "verify-openings" &&
+                       selectedBlueprintBoundaryEdge &&
+                       selectedBoundaryEdgeMetadata?.boundaryType === "exterior" &&
+                       isSelectedRoomOnCurrentPage &&
+                       selectedEdgeMidpoint && (
+                        <div style={{
+                          position: "absolute",
+                          left: `${selectedEdgeMidpoint.x}%`,
+                          top: `${selectedEdgeMidpoint.y}%`,
+                          transform: "translate(-50%, -125%)",
+                          background: "#1e293b",
+                          border: "1px solid #475569",
+                          borderRadius: "8px",
+                          padding: "4px",
+                          display: "flex",
+                          gap: "4px",
+                          alignItems: "center",
+                          boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)",
+                          zIndex: 250,
+                          pointerEvents: "auto",
+                          userSelect: "none"
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onPointerUp={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => addOpeningToSelectedEdge("window")}
+                            style={{
+                              background: "rgba(56, 189, 248, 0.1)",
+                              border: "1px solid rgba(56, 189, 248, 0.3)",
+                              color: "#38bdf8",
+                              borderRadius: "6px",
+                              padding: "4px 8px",
+                              fontSize: "11px",
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(56, 189, 248, 0.2)";
+                              e.currentTarget.style.borderColor = "rgba(56, 189, 248, 0.5)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "rgba(56, 189, 248, 0.1)";
+                              e.currentTarget.style.borderColor = "rgba(56, 189, 248, 0.3)";
+                            }}
+                          >
+                            <Plus size={10} /> Window
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addOpeningToSelectedEdge("door")}
+                            style={{
+                              background: "rgba(168, 85, 247, 0.1)",
+                              border: "1px solid rgba(168, 85, 247, 0.3)",
+                              color: "#c084fc",
+                              borderRadius: "6px",
+                              padding: "4px 8px",
+                              fontSize: "11px",
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(168, 85, 247, 0.2)";
+                              e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.5)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "rgba(168, 85, 247, 0.1)";
+                              e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
+                            }}
+                          >
+                            <Plus size={10} /> Door
+                          </button>
+                          <div style={{ width: "1px", height: "16px", background: "#475569", margin: "0 2px" }} />
+                          <button
+                            type="button"
+                            onClick={markSelectedEdgeOpeningsComplete}
+                            style={{
+                              background: "rgba(34, 197, 94, 0.15)",
+                              border: "1px solid rgba(34, 197, 94, 0.4)",
+                              color: "#4ade80",
+                              borderRadius: "6px",
+                              padding: "4px 8px",
+                              fontSize: "11px",
+                              fontWeight: 800,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.2s"
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = "rgba(34, 197, 94, 0.25)";
+                              e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.6)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "rgba(34, 197, 94, 0.15)";
+                              e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.4)";
+                            }}
+                          >
+                            <CheckCircle2 size={10} /> Wall Complete
+                          </button>
+                        </div>
+                      )}
+
                     </div>
                     {blueprintWorkspaceMode === "review-detected" && detectedBlueprintRooms.length > 0 ? (
                       <div style={blueprintOverlayLayerStyle} aria-label="Detected room preview overlay">
@@ -6118,11 +6328,19 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                       let verifiedWindowsCount = 0;
                       let verifiedWindowsArea = 0;
+                      let verifiedDoorsCount = 0;
+                      let verifiedDoorsArea = 0;
                       outline.boundaryEdges?.forEach((edge) => {
-                        const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
-                        verifiedWindowsCount += windows.length;
-                        windows.forEach((win) => {
-                          verifiedWindowsArea += win.widthFeet * win.heightFeet;
+                        edge.openings?.forEach((op) => {
+                          if (op.isVerified) {
+                            if (op.type === "window") {
+                              verifiedWindowsCount++;
+                              verifiedWindowsArea += op.widthFeet * op.heightFeet;
+                            } else if (op.type === "door") {
+                              verifiedDoorsCount++;
+                              verifiedDoorsArea += op.widthFeet * op.heightFeet;
+                            }
+                          }
                         });
                       });
 
@@ -6231,25 +6449,54 @@ const averageTonnage = (minTon + maxTon) / 2;
                             if (readiness.status === "READY_FOR_MANUAL_J") {
                               const alreadyInManualJ = blueprintRoomsForManualD.some(r => r.sourceBlueprintRoomId === outline.id);
                               return (
-                                <button
-                                  type="button"
-                                  disabled={alreadyInManualJ}
-                                  style={{ 
-                                    ...blueprintCalibrationButtonStyle, 
-                                    width: "100%", 
-                                    background: alreadyInManualJ ? "rgba(34, 197, 94, 0.1)" : "#22c55e", 
-                                    color: alreadyInManualJ ? "#22c55e" : "#000", 
-                                    fontWeight: 900, 
-                                    border: alreadyInManualJ ? "1px solid rgba(34, 197, 94, 0.2)" : "none",
-                                    cursor: alreadyInManualJ ? "default" : "pointer"
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    sendTracedRoomToManualD(outline.id);
-                                  }}
-                                >
-                                  {alreadyInManualJ ? "Synced to Manual J" : "Next: Send to Manual J"}
-                                </button>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                                  <button
+                                    type="button"
+                                    disabled={alreadyInManualJ}
+                                    style={{
+                                      ...blueprintCalibrationButtonStyle,
+                                      width: "100%",
+                                      background: alreadyInManualJ ? "rgba(34, 197, 94, 0.1)" : "#22c55e",
+                                      color: alreadyInManualJ ? "#22c55e" : "#000",
+                                      fontWeight: 900,
+                                      border: alreadyInManualJ ? "1px solid rgba(34, 197, 94, 0.2)" : "none",
+                                      cursor: alreadyInManualJ ? "default" : "pointer"
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      sendTracedRoomToManualD(outline.id);
+                                    }}
+                                  >
+                                    {alreadyInManualJ ? "Synced to Manual J" : "Next: Send to Manual J"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      ...blueprintCalibrationButtonStyle,
+                                      width: "100%",
+                                      background: "rgba(251, 191, 36, 0.1)",
+                                      color: "#fbbf24",
+                                      fontWeight: 800,
+                                      border: "1px solid rgba(251, 191, 36, 0.3)",
+                                      cursor: "pointer"
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedDetectedRoomId(outline.id);
+                                      // Default selection to first exterior edge if available, otherwise index 0
+                                      const extEdges = outline.boundaryEdges ?? [];
+                                      const firstExtIdx = extEdges.findIndex(e => e.boundaryType === "exterior");
+                                      setSelectedBlueprintBoundaryEdge({
+                                        outlineId: outline.id,
+                                        edgeIndex: firstExtIdx !== -1 ? firstExtIdx : 0
+                                      });
+                                      setActiveGuidedWorkflow("verify-openings");
+                                      setBlueprintWorkspaceMode("manual-trace");
+                                    }}
+                                  >
+                                    Verify Openings
+                                  </button>
+                                </div>
                               );
                             }
 
@@ -6510,31 +6757,68 @@ const averageTonnage = (minTon + maxTon) / 2;
                           </div>
                         ) : null}
                         <div style={tracedRoomEnvelopeInsightStyle}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "4px", marginBottom: "8px" }}>
                             <p style={tracedRoomEnvelopeInsightTitleStyle}>Envelope Insight</p>
                             <p style={{
                               ...tracedRoomEnvelopeInsightTitleStyle,
                               color: envelopeConfidence.score === "high" ? "#4ade80" : envelopeConfidence.score === "medium" ? "#fbbf24" : "#f87171",
                               fontSize: "9px"
                             }}>
-                              Confidence: {envelopeConfidence.score.toUpperCase()}
+                              Engineering Quality: {
+                                envelopeConfidence.score === "high"
+                                  ? "Excellent"
+                                  : envelopeConfidence.score === "medium"
+                                  ? "Additional data available"
+                                  : "Critical engineering issue"
+                              }
                             </p>
                           </div>
-                          <div style={tracedRoomEnvelopeInsightMessagesStyle}>
-                            {envelopeInsightMessages.map((message) => (
-                              <p key={message} style={tracedRoomEnvelopeInsightMessageStyle}>
-                                {message}
-                              </p>
-                            ))}
+                          <div style={{ ...tracedRoomEnvelopeInsightMessagesStyle, display: "grid", gap: "8px" }}>
+                            {/* Measured Project Data */}
+                            <div style={{ display: "grid", gap: "2px" }}>
+                              <span style={{ fontSize: "8px", color: "#64748b", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                Measured Project Data
+                              </span>
+                              <div style={{ fontSize: "10px", color: "#cbd5e1", display: "grid", gap: "2px", paddingLeft: "4px" }}>
+                                <div>• Area: {outline.squareFeet ? `${Math.round(outline.squareFeet)} sqft` : "Pending scale"}</div>
+                                <div>• Exterior Wall Classification: {boundaryCompleteness.exteriorEdges > 0 ? `${boundaryCompleteness.exteriorEdges} wall exposure(s)` : "None mapped"}</div>
+                                <div>• Verified Openings: {verifiedWindowsCount} window(s) ({verifiedWindowsArea.toFixed(1)} sqft) {verifiedDoorsCount > 0 ? `· ${verifiedDoorsCount} door(s) (${verifiedDoorsArea.toFixed(1)} sqft)` : ""}</div>
+                              </div>
+                            </div>
+
+                            {/* Engineering Assumptions */}
                             {envelopeConfidence.assumptionsUsed.length > 0 && (
-                              <p style={{ ...tracedRoomEnvelopeInsightMessageStyle, color: "#94a3b8", fontSize: "10px", marginTop: "2px" }}>
-                                Assumptions: {envelopeConfidence.assumptionsUsed.join(", ")}
+                              <div style={{ display: "grid", gap: "4px" }}>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "1px" }}>
+                                  <span style={{ fontSize: "8px", color: "#fbbf24", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                                    Engineering Assumptions
+                                  </span>
+                                  <span style={{ fontSize: "8px", color: "#64748b", fontStyle: "italic" }}>
+                                    Normal engineering fallbacks until project-specific values are entered.
+                                  </span>
+                                </div>
+                                <ul style={{ margin: 0, paddingLeft: "12px", fontSize: "10px", color: "#94a3b8", display: "grid", gap: "2px" }}>
+                                  {envelopeConfidence.assumptionsUsed.map((assumption, idx) => (
+                                    <li key={idx}>{assumption}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Action Info Tip */}
+                            {envelopeConfidence.score === "medium" && (
+                              <p style={{ margin: 0, fontSize: "9px", color: "#94a3b8", lineHeight: 1.3, padding: "6px", background: "rgba(251, 191, 36, 0.05)", borderLeft: "2px solid #fbbf24", borderRadius: "2px" }}>
+                                💡 Tip: Project-specific values can further improve engineering accuracy. Specify R-values in project settings to lock custom ratings.
                               </p>
                             )}
+
+                            {/* Warnings (for low/errors) */}
                             {envelopeConfidence.warnings.length > 0 && envelopeConfidence.score === "low" && (
-                              <p style={{ ...tracedRoomEnvelopeInsightMessageStyle, color: "#fca5a5", fontSize: "10px" }}>
-                                Warning: {envelopeConfidence.warnings[0]}
-                              </p>
+                              <div style={{ padding: "6px", background: "rgba(239,68,68,0.08)", borderLeft: "2px solid #f87171", borderRadius: "2px" }}>
+                                <p style={{ margin: 0, fontSize: "9px", color: "#fca5a5", fontWeight: "bold" }}>
+                                  ⚠️ Action Required: {envelopeConfidence.warnings[0]}
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>

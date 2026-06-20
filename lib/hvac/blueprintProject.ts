@@ -22,6 +22,14 @@ export type BlueprintProjectEnvelopeSettings = {
   isVerified: boolean;
 };
 
+export type WindowScheduleEntry = {
+  id: string;
+  mark: string;
+  glassArea: number;
+  uFactor: number;
+  description?: string;
+};
+
 export type EnvelopeSuggestion = {
   value: number | string;
   confidence: number;
@@ -85,6 +93,7 @@ export type BlueprintProject = {
   blueprintOverlaySize?: { widthPx: number; heightPx: number };
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
+  windowSchedule?: WindowScheduleEntry[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
   envelopeSuggestions?: BlueprintEnvelopeSuggestions;
   manualDProjectState: ManualDProjectState | null;
@@ -113,6 +122,7 @@ export function createBlueprintProject(name: string): BlueprintProject {
       confidence: "unverified",
     },
     tracedRooms: [],
+    windowSchedule: [],
     envelopeSettings: {
       insulationQuality: "Average",
       oregonRegion: "Portland / Beaverton / West Oregon",
@@ -130,6 +140,7 @@ export type BlueprintProjectSnapshotInput = {
   blueprintOverlaySize?: { widthPx: number; heightPx: number };
   calibration: BlueprintCalibrationState;
   tracedRooms: BlueprintRoomOutline[];
+  windowSchedule?: WindowScheduleEntry[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
   envelopeSuggestions?: BlueprintEnvelopeSuggestions;
   manualDProjectState: ManualDProjectState | null;
@@ -145,6 +156,7 @@ export function createBlueprintProjectSnapshot(input: BlueprintProjectSnapshotIn
     blueprintOverlaySize: input.blueprintOverlaySize,
     calibration: input.calibration,
     tracedRooms: input.tracedRooms,
+    windowSchedule: input.windowSchedule || [],
     envelopeSettings: input.envelopeSettings,
     envelopeSuggestions: input.envelopeSuggestions,
     manualDProjectState: input.manualDProjectState,
@@ -153,116 +165,61 @@ export function createBlueprintProjectSnapshot(input: BlueprintProjectSnapshotIn
 }
 
 export function updateBlueprintProjectSnapshot(
-  existingProject: BlueprintProject,
-  updates: Partial<BlueprintProjectSnapshotInput>
+  existing: BlueprintProject,
+  input: BlueprintProjectSnapshotInput
 ): BlueprintProject {
   return {
-    ...existingProject,
-    ...updates,
+    ...existing,
+    name: input.name,
     updatedAt: new Date().toISOString(),
+    blueprintImage: input.blueprintImage,
+    blueprintDocument: input.blueprintDocument,
+    blueprintOverlaySize: input.blueprintOverlaySize,
+    calibration: input.calibration,
+    tracedRooms: input.tracedRooms,
+    windowSchedule: input.windowSchedule || existing.windowSchedule || [],
+    envelopeSettings: input.envelopeSettings,
+    envelopeSuggestions: input.envelopeSuggestions,
+    manualDProjectState: input.manualDProjectState,
+    engineMetadata: input.engineMetadata || existing.engineMetadata,
+  };
+}
+
+export function ensureBlueprintDocument(project: BlueprintProject): BlueprintProject {
+  if (project.blueprintDocument) return project;
+
+  return {
+    ...project,
+    blueprintDocument: {
+      id: `doc-${Date.now()}`,
+      name: project.blueprintImage?.name || project.name,
+      pages: [
+        {
+          id: `page-1`,
+          pageNumber: 1,
+          label: "Sheet 1",
+          calibration: project.calibration,
+          tracedRooms: project.tracedRooms,
+        }
+      ],
+      activePageId: "page-1",
+    }
   };
 }
 
 export function serializeBlueprintProject(project: BlueprintProject): string {
-  return JSON.stringify({
-    ...project,
-    updatedAt: new Date().toISOString(),
-  });
+  return JSON.stringify(project);
 }
 
 export function deserializeBlueprintProject(json: string): BlueprintProject {
-  const data = JSON.parse(json);
-  
-  // Basic version migration logic can go here in the future
-  if (!data.version) {
-    data.version = "1.0";
+  const project = JSON.parse(json) as BlueprintProject;
+
+  // Ensure we have a default windowSchedule if missing from old versions
+  if (!project.windowSchedule) {
+    project.windowSchedule = [];
   }
 
-  data.engineMetadata = migrateEngineMetadata(data.engineMetadata);
-
-  return data as BlueprintProject;
-}
-
-/**
- * ARCHITECTURE DECISION: Multi-Page PDF Workspace (Deferred Activation)
- *
- * Stage 1A: PDF Upload Guard - Complete
- * Stage 1B: Multi-Page Types - Complete
- * Stage 1C: Passive Promotion Helper - Complete
- * Stage 1D: Activation - Deferred
- *
- * Current Source of Truth:
- * - blueprintImage
- * - calibration
- * - tracedRooms
- *
- * The UI and engineering engine currently read and write
- * root-level blueprint state directly.
- *
- * DO NOT invoke ensureBlueprintDocument during normal
- * load/deserialize flows yet.
- *
- * Activating promotion now will create a blueprintDocument
- * that can drift out of sync with technician edits because
- * the UI does not yet read/write blueprintDocument.pages.
- *
- * Activation must wait until:
- * 1. Page-based UI exists.
- * 2. Page switching exists.
- * 3. Calibration is page-specific.
- * 4. Traced rooms are page-specific.
- * 5. blueprintDocument.pages becomes the primary source of truth.
- *
- * Until then, this helper remains a passive migration bridge only.
- */
-export function ensureBlueprintDocument(project: BlueprintProject): BlueprintProject {
-  // 1. If already has a document with pages, return as-is
-  if (project.blueprintDocument && project.blueprintDocument.pages.length > 0) {
-    return project;
-  }
-
-  // 2. Create a "Legacy Page" from existing root-level data
-  const legacyPage: BlueprintPage = {
-    id: `page-${project.id}-1`,
-    pageNumber: 1,
-    label: "Sheet 1",
-    sheetType: "floor-plan",
-    // Copy lightweight metadata only, NO high-res dataUrl duplication
-    image: project.blueprintImage
-      ? {
-          name: project.blueprintImage.name,
-          mimeType: project.blueprintImage.type,
-        }
-      : undefined,
-    // Copy references to existing engineering work
-    calibration: project.calibration,
-    tracedRooms: [...project.tracedRooms],
-  };
-
-  // 3. Attach the new document model
-  return {
-    ...project,
-    blueprintDocument: {
-      id: `doc-${project.id}`,
-      name: project.name,
-      pages: [legacyPage],
-      activePageId: legacyPage.id,
-    },
-  };
-}
-
-export function exportBlueprintProjectToFileData(
-  project: BlueprintProject,
-  engineState?: ProjectEngineState
-): string {
-  const portableProject = engineState
-    ? {
-        ...project,
-        engineMetadata: prepareEngineStateForSave(engineState, "PROJECT_SAVED").metadata,
-      }
-    : project;
-
-  return serializeBlueprintProject(portableProject);
+  return project;
 }
 
 export function importBlueprintProjectFromFileData(json: string): BlueprintProject | null {
