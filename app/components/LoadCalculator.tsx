@@ -2179,7 +2179,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
       }),
     }));
 
-    setProjectActionMessage("Wall openings marked complete.");
+    setProjectActionMessage("Wall windows & doors marked complete.");
   };
 
 
@@ -2187,7 +2187,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     if (!selectedBlueprintBoundaryEdge) return;
     const { outlineId, edgeIndex } = selectedBlueprintBoundaryEdge;
 
-    if (!window.confirm("Are you sure you want to remove this opening?")) return;
+    if (!window.confirm("Are you sure you want to remove this window/door?")) return;
 
     setBlueprintRoomTrace((currentTrace) => ({
       ...currentTrace,
@@ -5454,149 +5454,9 @@ const averageTonnage = (minTon + maxTon) / 2;
                         </div>
                       )}
 
-                      {activeGuidedWorkflow === "verify-openings" && selectedBlueprintBoundaryEdge && (
-                        <div style={{
-                          position: "absolute",
-                          top: "20px",
-                          left: "50%",
-                          transform: "translateX(-50%)",
-                          background: "rgba(15,23,42,0.9)",
-                          backdropFilter: "blur(8px)",
-                          WebkitBackdropFilter: "blur(8px)",
-                          padding: "12px 24px",
-                          borderRadius: "100px",
-                          zIndex: 100,
-                          display: "flex",
-                          gap: "12px",
-                          alignItems: "center",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          boxShadow: "0 8px 32px rgba(0,0,0,0.5)"
-                        }}>
-                          <span style={{ color: "#fbbf24", fontSize: "14px", fontWeight: 800 }}>Verify Openings:</span>
-                          <span style={{ color: "#f8fafc", fontSize: "12px", fontWeight: 600 }}>Use the contextual toolbar on the selected wall to add windows or doors.</span>
-                          <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.2)" }} />
-                          <button 
-                            style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "20px", padding: "6px 16px", color: "#94a3b8", fontWeight: 800, cursor: "pointer", fontSize: "11px" }} 
-                            onClick={(e) => { e.stopPropagation(); setActiveGuidedWorkflow(null); }}
-                          >
-                            Exit Guide
-                          </button>
-                        </div>
-                      )}
 
-                      {activeGuidedWorkflow === "verify-openings" &&
-                       selectedBlueprintBoundaryEdge &&
-                       selectedBoundaryEdgeMetadata?.boundaryType === "exterior" &&
-                       isSelectedRoomOnCurrentPage &&
-                       selectedEdgeMidpoint && (
-                        <div style={{
-                          position: "absolute",
-                          left: `${selectedEdgeMidpoint.x}%`,
-                          top: `${selectedEdgeMidpoint.y}%`,
-                          transform: "translate(-50%, -125%)",
-                          background: "#1e293b",
-                          border: "1px solid #475569",
-                          borderRadius: "8px",
-                          padding: "4px",
-                          display: "flex",
-                          gap: "4px",
-                          alignItems: "center",
-                          boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3)",
-                          zIndex: 250,
-                          pointerEvents: "auto",
-                          userSelect: "none"
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onPointerUp={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => addOpeningToSelectedEdge("window")}
-                            style={{
-                              background: "rgba(56, 189, 248, 0.1)",
-                              border: "1px solid rgba(56, 189, 248, 0.3)",
-                              color: "#38bdf8",
-                              borderRadius: "6px",
-                              padding: "4px 8px",
-                              fontSize: "11px",
-                              fontWeight: 800,
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              transition: "all 0.2s"
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "rgba(56, 189, 248, 0.2)";
-                              e.currentTarget.style.borderColor = "rgba(56, 189, 248, 0.5)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "rgba(56, 189, 248, 0.1)";
-                              e.currentTarget.style.borderColor = "rgba(56, 189, 248, 0.3)";
-                            }}
-                          >
-                            <Plus size={10} /> Window
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => addOpeningToSelectedEdge("door")}
-                            style={{
-                              background: "rgba(168, 85, 247, 0.1)",
-                              border: "1px solid rgba(168, 85, 247, 0.3)",
-                              color: "#c084fc",
-                              borderRadius: "6px",
-                              padding: "4px 8px",
-                              fontSize: "11px",
-                              fontWeight: 800,
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              transition: "all 0.2s"
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "rgba(168, 85, 247, 0.2)";
-                              e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.5)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "rgba(168, 85, 247, 0.1)";
-                              e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.3)";
-                            }}
-                          >
-                            <Plus size={10} /> Door
-                          </button>
-                          <div style={{ width: "1px", height: "16px", background: "#475569", margin: "0 2px" }} />
-                          <button
-                            type="button"
-                            onClick={markSelectedEdgeOpeningsComplete}
-                            style={{
-                              background: "rgba(34, 197, 94, 0.15)",
-                              border: "1px solid rgba(34, 197, 94, 0.4)",
-                              color: "#4ade80",
-                              borderRadius: "6px",
-                              padding: "4px 8px",
-                              fontSize: "11px",
-                              fontWeight: 800,
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              transition: "all 0.2s"
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = "rgba(34, 197, 94, 0.25)";
-                              e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.6)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = "rgba(34, 197, 94, 0.15)";
-                              e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.4)";
-                            }}
-                          >
-                            <CheckCircle2 size={10} /> Wall Complete
-                          </button>
-                        </div>
-                      )}
+
+
 
                     </div>
                     {blueprintWorkspaceMode === "review-detected" && detectedBlueprintRooms.length > 0 ? (
@@ -6046,7 +5906,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
                         {/* Openings Editor */}
                         <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
-                          <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "9px", opacity: 0.8 }}>OPENINGS</p>
+                          <p style={{ ...blueprintCalibrationStatusStyle, fontSize: "9px", opacity: 0.8 }}>WINDOWS & DOORS</p>
 
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
                             <button
@@ -6378,7 +6238,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                             {[
                               { label: "Geometry", ok: readiness.checklist.geometry },
                               { label: "Walls", ok: readiness.checklist.walls },
-                              { label: "Openings", ok: readiness.checklist.openings }
+                              { label: "Windows & Doors", ok: readiness.checklist.openings }
                             ].map(item => (
                               <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                 {item.ok ? <CheckCircle2 size={10} color="#22c55e" /> : <Circle size={10} color="#64748b" />}
@@ -6441,7 +6301,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                                     setBlueprintWorkspaceMode("manual-trace");
                                   }}
                                 >
-                                  Next: Verify Openings
+                                  Next: Verify Windows & Doors
                                 </button>
                               );
                             }
@@ -6494,7 +6354,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                                       setBlueprintWorkspaceMode("manual-trace");
                                     }}
                                   >
-                                    Verify Openings
+                                    Verify Windows & Doors
                                   </button>
                                 </div>
                               );
@@ -6516,7 +6376,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                                 <span>Level {outline.floorLevel || "1"}</span>
                                 <span>{outline.ceilingHeight || "8"} ft ceiling</span>
                                 <span style={{ color: verifiedWindowsCount > 0 ? "#4ade80" : "#94a3b8" }}>
-                                  Windows: {verifiedWindowsCount} ({verifiedWindowsArea.toFixed(1)} sf)
+                                  Windows & Doors: {verifiedWindowsCount + verifiedDoorsCount} total ({verifiedWindowsArea + verifiedDoorsArea} sf)
                                 </span>
                                 <span>{outline.points.length} points</span>
                                 <span>{boundaryCompleteness.completionPercent}% shell classification</span>
@@ -6692,7 +6552,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                             {selectedCardEdge.boundaryType === "exterior" ? (
                               <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }} onClick={(e) => e.stopPropagation()}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                                  <span style={detectedRoomEditLabelStyle}>Opening Verification</span>
+                                  <span style={detectedRoomEditLabelStyle}>Windows & Doors Verification</span>
                                   <div style={{ display: "flex", gap: "6px" }}>
                                     <button 
                                       type="button" 
@@ -6735,6 +6595,43 @@ const averageTonnage = (minTon + maxTon) / 2;
                                 ) : (
                                   <p style={{ ...openingMetaStyle, fontStyle: "italic", opacity: 0.6 }}>No verified openings on this wall.</p>
                                 )}
+
+                                {/* Sidebar Confirm Action Button */}
+                                <div style={{ marginTop: "12px" }}>
+                                  <button
+                                    type="button"
+                                    onClick={markSelectedEdgeOpeningsComplete}
+                                    style={{
+                                      background: "rgba(34, 197, 94, 0.15)",
+                                      border: "1px solid rgba(34, 197, 94, 0.4)",
+                                      color: "#4ade80",
+                                      borderRadius: "6px",
+                                      padding: "6px 12px",
+                                      fontSize: "11px",
+                                      fontWeight: 800,
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: "6px",
+                                      width: "100%",
+                                      transition: "all 0.2s"
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = "rgba(34, 197, 94, 0.25)";
+                                      e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.6)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = "rgba(34, 197, 94, 0.15)";
+                                      e.currentTarget.style.borderColor = "rgba(34, 197, 94, 0.4)";
+                                    }}
+                                  >
+                                    <CheckCircle2 size={12} />
+                                    <span style={{ whiteSpace: "nowrap" }}>
+                                      {(selectedCardEdge.openings ?? []).length > 0 ? "Approve Wall" : "No W/D Here"}
+                                    </span>
+                                  </button>
+                                </div>
                               </div>
                             ) : (selectedCardEdge.openings && selectedCardEdge.openings.length > 0) ? (
                               <div style={{ width: "100%", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
@@ -6749,7 +6646,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                                 }}>
                                   <AlertTriangle size={14} color="#f87171" />
                                   <p style={{ ...openingMetaStyle, color: "#fca5a5", fontSize: "9px" }}>
-                                    Openings only affect calculations when wall is Exterior.
+                                    Windows & doors only affect calculations when wall is Exterior.
                                   </p>
                                 </div>
                               </div>
@@ -6782,7 +6679,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                               <div style={{ fontSize: "10px", color: "#cbd5e1", display: "grid", gap: "2px", paddingLeft: "4px" }}>
                                 <div>• Area: {outline.squareFeet ? `${Math.round(outline.squareFeet)} sqft` : "Pending scale"}</div>
                                 <div>• Exterior Wall Classification: {boundaryCompleteness.exteriorEdges > 0 ? `${boundaryCompleteness.exteriorEdges} wall exposure(s)` : "None mapped"}</div>
-                                <div>• Verified Openings: {verifiedWindowsCount} window(s) ({verifiedWindowsArea.toFixed(1)} sqft) {verifiedDoorsCount > 0 ? `· ${verifiedDoorsCount} door(s) (${verifiedDoorsArea.toFixed(1)} sqft)` : ""}</div>
+                                <div>• Verified Windows & Doors: {verifiedWindowsCount} window(s) ({verifiedWindowsArea.toFixed(1)} sqft) {verifiedDoorsCount > 0 ? `· ${verifiedDoorsCount} door(s) (${verifiedDoorsArea.toFixed(1)} sqft)` : ""}</div>
                               </div>
                             </div>
 
@@ -7360,7 +7257,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     </div>
                     <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Opening Verification</p>
+                      <p style={auditLabelStyle}>Windows & Doors Verification</p>
                       <p style={auditValueStyle}>
                         {!hasVerifiedOpenings && !hasUnverifiedOpenings ? "Not Documented" : (hasUnverifiedOpenings ? "Incomplete" : "Complete")}
                       </p>
@@ -7373,7 +7270,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={auditRowStyle}>
                         <p style={auditLabelStyle}>Verified Window Data</p>
                         <p style={auditValueStyle}>{verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)</p>
-                        <p style={auditSourceStyle}>Takeoff Openings</p>
+                        <p style={auditSourceStyle}>Takeoff Windows & Doors</p>
                         <div style={auditBadgeVerifiedStyle}>Verified</div>
                       </div>
                     )}
@@ -7381,7 +7278,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       <div style={auditRowStyle}>
                         <p style={auditLabelStyle}>Verified Door Data</p>
                         <p style={auditValueStyle}>{verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)</p>
-                        <p style={auditSourceStyle}>Takeoff Openings</p>
+                        <p style={auditSourceStyle}>Takeoff Windows & Doors</p>
                         <div style={auditBadgeVerifiedStyle}>Verified</div>
                       </div>
                     )}
