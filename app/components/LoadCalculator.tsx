@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Maximize2, Minimize2, Target, Square, RotateCcw } from "lucide-react";
+import { Calculator, Home, Thermometer, Wind, Layers, Users, Droplet, Sparkles, SunMedium, FileText, X, ClipboardCheck, ShieldCheck, Activity, Printer, AlertTriangle, CheckCircle2, Circle, PlayCircle, UploadCloud, Zap, MousePointer2, Plus, Trash2, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, ChevronLeft, ChevronRight, Maximize2, Minimize2, Target, Square, RotateCcw, ArrowRight } from "lucide-react";
 import { calculateManualJLoad, type ManualJResults } from "../lib/manualJCalculations";
 import type { ManualJInputs } from "../lib/manualJCalculations";
 import {
@@ -7146,11 +7146,11 @@ const averageTonnage = (minTon + maxTon) / 2;
             </div>
           </div>
 
-          {/* Manual J Engineering Audit Panel */}
+          {/* Manual J Engineering Audit Panel / Project Readiness */}
           <div className="manual-j-engineering-audit" style={auditPanelStyle}>
             <div>
-              <h4 style={auditTitleStyle}>Engineering Audit</h4>
-              <p style={auditSubtitleStyle}>Verified and assumed inputs used for this Manual J result.</p>
+              <h4 style={auditTitleStyle}>Project Readiness & Audit</h4>
+              <p style={auditSubtitleStyle}>Technician readiness checklist and detailed engineering verification log.</p>
             </div>
 
             {(() => {
@@ -7194,248 +7194,469 @@ const averageTonnage = (minTon + maxTon) / 2;
 
               const confidenceScore = Math.max(0, Math.min(100, 100 - (assumedRows * 10) - (missingCriticalRows * 20)));
 
+              // 2. Project Readiness Audit Logic
+              const blockingIssues: string[] = [];
+              if (blueprintFile && blueprintCalibration.status !== "calibrated") {
+                blockingIssues.push("Scale Calibration is missing. Please calibrate the blueprint.");
+              }
+              if (blueprintFile && tracedRoomsWithSqft.length === 0) {
+                blockingIssues.push("No rooms traced. Trace at least one room on the blueprint.");
+              }
+              if (tracedRoomsWithSqft.some(r => !r.name.trim())) {
+                blockingIssues.push("One or more traced rooms have unconfirmed or blank names.");
+              }
+              if (tracedRoomsWithSqft.some(r => (r.boundaryEdges ?? []).some(e => e.boundaryType === "unknown"))) {
+                blockingIssues.push("Wall exposures are incomplete. Classify all boundary walls as interior/exterior.");
+              }
+              if (hasUnverifiedOpenings) {
+                blockingIssues.push("Unverified Windows & Doors. Verify all opening markers on the blueprint.");
+              }
+              if (tracedRoomsWithSqft.length > 0 && blueprintRoomsForManualD.length === 0) {
+                blockingIssues.push("Manual J Sync Pending. Send your verified takeoff rooms to Manual J.");
+              }
+              const systemTons = parseFloat(manualDProjectState?.settings?.systemTons || "0") || 0;
+              if (tracedRoomsWithSqft.length > 0 && systemTons <= 0) {
+                blockingIssues.push("Equipment sizing missing in Manual D. Enter system tons to compute register airflow.");
+              }
+
+              // Status calculation
+              let projectStatus: "Ready" | "Needs Review" | "Blocked" = "Ready";
+              if (blockingIssues.length > 0) {
+                projectStatus = "Blocked";
+              } else if (assumedRows > 0 || hasUnverifiedOpenings || !isEnvelopeVerified) {
+                projectStatus = "Needs Review";
+              }
+
+              // Recommended next action & workflow step
+              let currentStep = "Setup";
+              let nextAction = "Upload a blueprint image to start takeoff.";
+              if (!blueprintFile) {
+                currentStep = "Manual Project Setup";
+                nextAction = "Upload a blueprint file or proceed to Manual D Sizing.";
+              } else if (blueprintCalibration.status !== "calibrated") {
+                currentStep = "Scale Calibration";
+                nextAction = "Define and confirm the reference scale distance on the canvas.";
+              } else if (tracedRoomsWithSqft.length === 0) {
+                currentStep = "Room Takeoff";
+                nextAction = "Draw room boundaries on the calibrated blueprint canvas.";
+              } else if (tracedRoomsWithSqft.some(r => (r.boundaryEdges ?? []).some(e => e.boundaryType === "unknown"))) {
+                currentStep = "Wall Classification";
+                nextAction = "Select traced rooms and mark edges as interior or exterior.";
+              } else if (hasUnverifiedOpenings) {
+                currentStep = "Windows & Doors Verification";
+                nextAction = "Review and approve all window and door locations in the inspector.";
+              } else if (blueprintRoomsForManualD.length === 0) {
+                currentStep = "Manual J Sync";
+                nextAction = "Send the verified room profiles to Manual J load calculator.";
+              } else if (systemTons <= 0) {
+                currentStep = "Manual D Sizing";
+                nextAction = "Navigate to Manual D and input the equipment tons to size ducts.";
+              } else {
+                currentStep = "Reports & Proposal";
+                nextAction = "Verify result metrics and download the print-ready proposal report.";
+              }
+
+              const checklistItems = [
+                { label: "Upload Blueprint", ok: !!blueprintFile },
+                { label: "Calibrate Scale", ok: blueprintCalibration.status === "calibrated" },
+                { label: "Trace Rooms", ok: tracedRoomsWithSqft.length > 0 },
+                { label: "Classify Exterior Walls", ok: tracedRoomsWithSqft.length > 0 && !tracedRoomsWithSqft.some(r => (r.boundaryEdges ?? []).some(e => e.boundaryType === "unknown")) },
+                { label: "Verify Windows & Doors", ok: tracedRoomsWithSqft.length > 0 && !hasUnverifiedOpenings },
+                { label: "Sync with Manual J", ok: blueprintRoomsForManualD.length > 0 },
+                { label: "Enter Equipment Size / Manual D Ready", ok: manualDProjectState && (parseFloat(manualDProjectState.settings.systemTons) || 0) > 0 && manualDProjectState.rooms.length > 0 },
+                { label: "Generate Proposal Report", ok: manualDProjectState && (parseFloat(manualDProjectState.settings.systemTons) || 0) > 0 }
+              ];
+              const completedCount = checklistItems.filter(item => item.ok).length;
+              const totalCount = checklistItems.length;
+              const progressPercent = Math.round((completedCount / totalCount) * 100);
+
               return (
                 <>
-                  <div style={auditGridStyle}>
-                    <p style={auditSectionTitleStyle}>Engineering Confidence</p>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
-                      <div style={resultCardStyle}>
-                        <p style={auditSectionTitleStyle}>Confidence</p>
-                        <p style={{ ...resultCardValueStyle, color: confidenceScore > 80 ? "#4ade80" : confidenceScore > 50 ? "#fde68a" : "#f87171" }}>
-                          {confidenceScore}%
+                  {/* 1. PROJECT READINESS STATUS CARD */}
+                  <div style={{
+                    background: "rgba(15, 23, 42, 0.4)",
+                    border: "1px solid rgba(255, 255, 255, 0.08)",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    display: "grid",
+                    gap: "12px",
+                    marginBottom: "16px"
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <p style={{ margin: 0, fontSize: "11px", fontWeight: 900, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                        Project Health & Readiness
+                      </p>
+                      <span style={{
+                        padding: "4px 8px",
+                        borderRadius: "8px",
+                        fontSize: "10px",
+                        fontWeight: 900,
+                        textTransform: "uppercase",
+                        background: projectStatus === "Ready" ? "rgba(34, 197, 94, 0.15)" : projectStatus === "Needs Review" ? "rgba(251, 191, 36, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                        color: projectStatus === "Ready" ? "#4ade80" : projectStatus === "Needs Review" ? "#fde68a" : "#fca5a5",
+                        border: `1px solid ${projectStatus === "Ready" ? "rgba(34,197,94,0.3)" : projectStatus === "Needs Review" ? "rgba(251,191,36,0.3)" : "rgba(239,68,68,0.3)"}`
+                      }}>
+                        {projectStatus}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 800, color: "#f8fafc" }}>
+                          Project Readiness: {progressPercent}%
+                        </span>
+                        <span style={{ fontSize: "9px", fontWeight: 800, color: "#64748b" }}>
+                          {completedCount} / {totalCount} Steps
+                        </span>
+                      </div>
+                      <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.06)", borderRadius: "3px", overflow: "hidden" }}>
+                        <div style={{
+                          width: `${progressPercent}%`,
+                          height: "100%",
+                          background: progressPercent === 100 ? "#22c55e" : projectStatus === "Blocked" ? "#f87171" : projectStatus === "Needs Review" ? "#fbbf24" : "#38bdf8",
+                          borderRadius: "3px",
+                          transition: "width 0.4s ease"
+                        }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div style={{ padding: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "10px" }}>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>ACTIVE STEP</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "13px", fontWeight: 900, color: "#f8fafc" }}>{currentStep}</p>
+                      </div>
+                      <div style={{ padding: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "10px" }}>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>BLOCKS DETECTED</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "13px", fontWeight: 900, color: blockingIssues.length > 0 ? "#f87171" : "#4ade80" }}>
+                          {blockingIssues.length}
                         </p>
                       </div>
-                      <div style={resultCardStyle}>
-                        <p style={auditSectionTitleStyle}>Verified</p>
-                        <p style={resultCardValueStyle}>{10 - assumedRows}</p>
-                      </div>
-                      <div style={resultCardStyle}>
-                        <p style={auditSectionTitleStyle}>Assumed</p>
-                        <p style={resultCardValueStyle}>{assumedRows}</p>
-                      </div>
-                      <div style={resultCardStyle}>
-                        <p style={auditSectionTitleStyle}>Missing</p>
-                        <p style={resultCardValueStyle}>{missingCriticalRows}</p>
+                    </div>
+
+                    <div style={{ padding: "10px 12px", background: "rgba(56,189,248,0.06)", border: "1px solid rgba(56,189,248,0.12)", borderRadius: "10px" }}>
+                      <p style={{ margin: 0, fontSize: "9px", color: "#38bdf8", fontWeight: 800 }}>RECOMMENDED NEXT ACTION</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                        <p style={{ margin: 0, fontSize: "11px", fontWeight: 700, color: "#cbd5e1", lineHeight: 1.4, flex: 1 }}>{nextAction}</p>
+                        <ArrowRight size={16} color="#38bdf8" style={{ flexShrink: 0 }} />
                       </div>
                     </div>
                   </div>
 
-                  <div style={auditGridStyle}>
-                    <p style={auditSectionTitleStyle}>Geometry Audit</p>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Conditioned Area</p>
-                      <p style={auditValueStyle}>{Math.round(activeConditionedArea).toLocaleString()} sqft</p>
-                      <p style={auditSourceStyle}>{isAreaVerified ? "Blueprint Takeoff" : "Manual Entry"}</p>
-                      <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {isAreaVerified ? "Verified" : "Assumed"}
-                      </div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Ceiling Height</p>
-                      <p style={auditValueStyle}>{ceilingHeight} ft</p>
-                      <p style={auditSourceStyle}>Manual Entry</p>
-                      <div style={auditBadgeAssumedStyle}>Assumed</div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Calculated Volume</p>
-                      <p style={auditValueStyle}>{(Math.round(activeConditionedArea) * parseFloat(ceilingHeight)).toLocaleString()} cuft</p>
-                      <p style={auditSourceStyle}>Derived</p>
-                      <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {isAreaVerified ? "Verified" : "Assumed"}
-                      </div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Verified traced area source</p>
-                      <p style={auditValueStyle}>{Math.round(totalTracedSqft).toLocaleString()} sqft from {tracedRoomsWithSqft.length} rooms</p>
-                      <p style={auditSourceStyle}>Diagnostic</p>
-                      <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {isAreaVerified ? "Active" : "Bypassed"}
-                      </div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Blueprint Set</p>
-                      <p style={auditValueStyle}>
-                        {blueprintDocument ? `${blueprintDocument.pages.length} page${blueprintDocument.pages.length === 1 ? "" : "s"} active` : "No blueprint"}
-                        {blueprintDocument && blueprintDocument.pages.length > 0 && (
-                          ` (page ${blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of ${blueprintDocument.pages.length})`
-                        )}
-                        {blueprintDocument?.assetId?.startsWith('pdf-') && " [PDF source]"}
+                  {/* 2. BLOCKING ISSUES (Only visible if issues exist) */}
+                  {blockingIssues.length > 0 && (
+                    <div style={{
+                      background: "rgba(239, 68, 68, 0.05)",
+                      border: "1px solid rgba(239, 68, 68, 0.15)",
+                      borderRadius: "16px",
+                      padding: "16px",
+                      marginBottom: "16px"
+                    }}>
+                      <p style={{ margin: "0 0 10px 0", fontSize: "11px", fontWeight: 900, color: "#fca5a5", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                        ⚠️ Blocking Issues ({blockingIssues.length})
                       </p>
-                      <p style={auditSourceStyle}>Document Container</p>
-                      <div style={blueprintDocument ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {blueprintDocument ? "Verified" : "Missing"}
-                      </div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Reference Dimensions</p>
-                      <p style={auditValueStyle}>
-                        {blueprintOverlaySize.widthPx > 0 ? `${Math.round(blueprintOverlaySize.widthPx)} x ${Math.round(blueprintOverlaySize.heightPx)} px` : "Pending render"}
-                      </p>
-                      <p style={auditSourceStyle}>Viewport Persistence</p>
-                      <div style={blueprintOverlaySize.widthPx > 0 ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {blueprintOverlaySize.widthPx > 0 ? "Restored" : "Waiting"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={auditGridStyle}>
-                    <p style={auditSectionTitleStyle}>Thermal Envelope Audit</p>
-                    {[
-                      { label: "Attic Insulation", val: isEnvelopeVerified && atticRValue ? `R-${atticRValue}` : insulationQuality, verified: isEnvelopeVerified && !!atticRValue },
-                      { label: "Wall Insulation", val: isEnvelopeVerified && wallRValue ? `R-${wallRValue}` : insulationQuality, verified: isEnvelopeVerified && !!wallRValue },
-                      { label: "Floor Insulation", val: isEnvelopeVerified && floorRValue ? `R-${floorRValue}` : insulationQuality, verified: isEnvelopeVerified && !!floorRValue },
-                      { label: "Window U-Factor", val: isEnvelopeVerified && windowUFactor ? windowUFactor : windowEfficiency, verified: isEnvelopeVerified && !!windowUFactor },
-                      { label: "Window SHGC", val: isEnvelopeVerified && windowSHGC ? windowSHGC : windowEfficiency, verified: isEnvelopeVerified && !!windowSHGC },
-                    ].map((row) => (
-                      <div key={row.label} style={auditRowStyle}>
-                        <p style={auditLabelStyle}>{row.label}</p>
-                        <p style={auditValueStyle}>{row.val}</p>
-                        <p style={auditSourceStyle}>{row.verified ? "Envelope Verification" : "Manual J Assumption"}</p>
-                        <div style={row.verified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                          {row.verified ? "Verified" : "Assumed"}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={auditGridStyle}>
-                    <p style={auditSectionTitleStyle}>Takeoff Verification Audit</p>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Wall Exposure Verification</p>
-                      <p style={auditValueStyle}>{verifiedOpeningsMetrics.allEdgesClassified ? "Complete" : "Incomplete"}</p>
-                      <p style={auditSourceStyle}>Verified Takeoff</p>
-                      <div style={verifiedOpeningsMetrics.allEdgesClassified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {verifiedOpeningsMetrics.allEdgesClassified ? "Verified" : "Pending"}
-                      </div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Windows & Doors Verification</p>
-                      <p style={auditValueStyle}>
-                        {!hasVerifiedOpenings && !hasUnverifiedOpenings ? "Not Documented" : (hasUnverifiedOpenings ? "Incomplete" : "Complete")}
-                      </p>
-                      <p style={auditSourceStyle}>Verified Takeoff</p>
-                      <div style={hasVerifiedOpenings && !hasUnverifiedOpenings ? auditBadgeVerifiedStyle : (hasUnverifiedOpenings ? auditBadgeAssumedStyle : auditBadgeMissingStyle)}>
-                        {hasVerifiedOpenings && !hasUnverifiedOpenings ? "Verified" : (hasUnverifiedOpenings ? "Partial" : "Missing")}
-                      </div>
-                    </div>
-                    {verifiedOpeningsMetrics.windowCount > 0 && (
-                      <div style={auditRowStyle}>
-                        <p style={auditLabelStyle}>Verified Window Data</p>
-                        <p style={auditValueStyle}>{verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)</p>
-                        <p style={auditSourceStyle}>Takeoff Windows & Doors</p>
-                        <div style={auditBadgeVerifiedStyle}>Verified</div>
-                      </div>
-                    )}
-                    {verifiedOpeningsMetrics.doorCount > 0 && (
-                      <div style={auditRowStyle}>
-                        <p style={auditLabelStyle}>Verified Door Data</p>
-                        <p style={auditValueStyle}>{verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)</p>
-                        <p style={auditSourceStyle}>Takeoff Windows & Doors</p>
-                        <div style={auditBadgeVerifiedStyle}>Verified</div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={auditGridStyle}>
-                    <p style={auditSectionTitleStyle}>Air Leakage / Environment Audit</p>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Infiltration</p>
-                      <p style={auditValueStyle}>{isEnvelopeVerified && infiltrationACH50 ? `${infiltrationACH50} ACH50` : infiltrationTightness}</p>
-                      <p style={auditSourceStyle}>{isEnvelopeVerified && infiltrationACH50 ? "Envelope Verification" : "Manual J Assumption"}</p>
-                      <div style={isEnvelopeVerified && infiltrationACH50 ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
-                        {isEnvelopeVerified && infiltrationACH50 ? "Verified" : "Assumed"}
-                      </div>
-                    </div>
-                    <div style={auditRowStyle}>
-                      <p style={auditLabelStyle}>Climate Region</p>
-                      <p style={auditValueStyle}>{oregonRegion}</p>
-                      <p style={auditSourceStyle}>Manual Entry</p>
-                      <div style={auditBadgeAssumedStyle}>Assumed</div>
-                    </div>
-                  </div>
-
-                  {(assumedRows > 0 || missingCriticalRows > 0) && (
-                    <div style={auditGridStyle}>
-                      <p style={auditSectionTitleStyle}>Active Engine Assumptions</p>
-                      <div style={constructionNotesListStyle}>
-                        {!isAreaVerified && (
-                          <div style={auditAssumptionItemStyle}>
-                            <AlertTriangle size={12} color="#fde68a" />
-                            Conditioned area is manually entered and not verified by blueprint takeoff.
+                      <div style={{ display: "grid", gap: "8px" }}>
+                        {blockingIssues.map((issue, idx) => (
+                          <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                            <AlertTriangle size={14} color="#fca5a5" style={{ flexShrink: 0, marginTop: "2px" }} />
+                            <p style={{ margin: 0, fontSize: "11px", color: "#e2e8f0", lineHeight: 1.3 }}>{issue}</p>
                           </div>
-                        )}
-                        {!blueprintFile && blueprintRoomsForManualD.some((room) => !!room.sourceBlueprintRoomId) && (
-                          <div style={auditAssumptionItemStyle}>
-                            <AlertTriangle size={12} color="#fde68a" />
-                            Manual J contains rooms from a removed blueprint. Calculations are using legacy takeoff data.
-                          </div>
-                        )}
-                        {!isCeilingVerified && (
-                          <div style={auditAssumptionItemStyle}>
-                            <AlertTriangle size={12} color="#fde68a" />
-                            Ceiling height is manually entered and not independently verified.
-                          </div>
-                        )}
-                        {!isEnvelopeVerified && (
-                          <>
-                            <div style={auditAssumptionItemStyle}>
-                              <AlertTriangle size={12} color="#fde68a" />
-                              Insulation is using shorthand quality settings.
-                            </div>
-                            <div style={auditAssumptionItemStyle}>
-                              <AlertTriangle size={12} color="#fde68a" />
-                              Infiltration is using shorthand tightness settings.
-                            </div>
-                            <div style={auditAssumptionItemStyle}>
-                              <AlertTriangle size={12} color="#fde68a" />
-                              Window values are using fallback efficiency labels.
-                            </div>
-                          </>
-                        )}
-                        <div style={auditAssumptionItemStyle}>
-                          <AlertTriangle size={12} color="#fde68a" />
-                          Wall exposure is still based on current engine assumptions (70% perimeter).
-                        </div>
-                        {tracedRoomsWithSqft.some(outline => 
-                          (outline.boundaryEdges ?? []).some(edge => edge.boundaryType === "unknown")
-                        ) && (
-                          <div style={auditAssumptionItemStyle}>
-                            <AlertTriangle size={12} color="#fde68a" />
-                            Some traced rooms have unclassified wall exposures (Unknown).
-                          </div>
-                        )}
-                        {hasExteriorWalls && !hasVerifiedOpenings && (
-                          <div style={auditAssumptionItemStyle}>
-                            <AlertTriangle size={12} color="#fde68a" />
-                            Exterior walls verified, but no window or door openings are documented. Calculations currently assume 0% opening area.
-                          </div>
-                        )}
-                        {hasUnverifiedOpenings && (
-                          <div style={auditAssumptionItemStyle}>
-                            <AlertTriangle size={12} color="#fde68a" />
-                            Some window or door openings are unverified.
-                          </div>
-                        )}
-                        {verifiedOpeningsMetrics.allEdgesClassified && (
-                          <div style={{ ...auditAssumptionItemStyle, color: "#4ade80" }}>
-                            <CheckCircle2 size={12} color="#22c55e" />
-                            Verified Window Area: {verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)
-                          </div>
-                        )}
-                        {verifiedOpeningsMetrics.allEdgesClassified && verifiedOpeningsMetrics.doorCount > 0 && (
-                          <div style={{ ...auditAssumptionItemStyle, color: "#4ade80" }}>
-                            <CheckCircle2 size={12} color="#22c55e" />
-                            Verified Door Area: {verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)
-                          </div>
-                        )}
-                        {verifiedOpeningsMetrics.allEdgesClassified && (
-                          <div style={{ ...auditAssumptionItemStyle, color: "#4ade80", fontSize: "10px", marginLeft: "20px" }}>
-                            Source: Verified Takeoff
-                          </div>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )}
+
+                  {/* 3. READY CHECKLIST */}
+                  <div style={{
+                    background: "rgba(15, 23, 42, 0.2)",
+                    border: "1px solid rgba(255, 255, 255, 0.04)",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    marginBottom: "16px"
+                  }}>
+                    <p style={{ margin: "0 0 12px 0", fontSize: "11px", fontWeight: 900, color: "#cbd5e1", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                      Project Sizing Checklist
+                    </p>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px" }}>
+                      {checklistItems.map((item) => (
+                        <div key={item.label} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          {item.ok ? (
+                            <CheckCircle2 size={14} color="#22c55e" style={{ flexShrink: 0 }} />
+                          ) : (
+                            <Circle size={14} color="#64748b" style={{ flexShrink: 0 }} />
+                          )}
+                          <span style={{ fontSize: "11px", fontWeight: 600, color: item.ok ? "#e2e8f0" : "#64748b" }}>
+                            {item.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 4. COLLAPSED ENGINEERING DETAILS */}
+                  <details style={{
+                    cursor: "pointer",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    border: "1px solid rgba(255, 255, 255, 0.06)",
+                    borderRadius: "16px",
+                    padding: "16px"
+                  }}>
+                    <summary style={{
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      color: "#94a3b8",
+                      outline: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      userSelect: "none"
+                    }}>
+                      <span>⚙️ Engineering Details & Assumptions</span>
+                      <span style={{ fontSize: "10px", color: "#64748b", fontWeight: 700 }}>(click to expand)</span>
+                    </summary>
+                    <div style={{ marginTop: "16px", display: "grid", gap: "16px", cursor: "default" }} onClick={(e) => e.stopPropagation()}>
+                      <div style={auditGridStyle}>
+                        <p style={auditSectionTitleStyle}>Engineering Confidence</p>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "12px" }}>
+                          <div style={resultCardStyle}>
+                            <p style={auditSectionTitleStyle}>Confidence</p>
+                            <p style={{ ...resultCardValueStyle, color: confidenceScore > 80 ? "#4ade80" : confidenceScore > 50 ? "#fde68a" : "#f87171" }}>
+                              {confidenceScore}%
+                            </p>
+                          </div>
+                          <div style={resultCardStyle}>
+                            <p style={auditSectionTitleStyle}>Verified</p>
+                            <p style={resultCardValueStyle}>{10 - assumedRows}</p>
+                          </div>
+                          <div style={resultCardStyle}>
+                            <p style={auditSectionTitleStyle}>Assumed</p>
+                            <p style={resultCardValueStyle}>{assumedRows}</p>
+                          </div>
+                          <div style={resultCardStyle}>
+                            <p style={auditSectionTitleStyle}>Missing</p>
+                            <p style={resultCardValueStyle}>{missingCriticalRows}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={auditGridStyle}>
+                        <p style={auditSectionTitleStyle}>Geometry Audit</p>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Conditioned Area</p>
+                          <p style={auditValueStyle}>{Math.round(activeConditionedArea).toLocaleString()} sqft</p>
+                          <p style={auditSourceStyle}>{isAreaVerified ? "Blueprint Takeoff" : "Manual Entry"}</p>
+                          <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {isAreaVerified ? "Verified" : "Assumed"}
+                          </div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Ceiling Height</p>
+                          <p style={auditValueStyle}>{ceilingHeight} ft</p>
+                          <p style={auditSourceStyle}>Manual Entry</p>
+                          <div style={auditBadgeAssumedStyle}>Assumed</div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Calculated Volume</p>
+                          <p style={auditValueStyle}>{(Math.round(activeConditionedArea) * parseFloat(ceilingHeight)).toLocaleString()} cuft</p>
+                          <p style={auditSourceStyle}>Derived</p>
+                          <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {isAreaVerified ? "Verified" : "Assumed"}
+                          </div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Verified traced area source</p>
+                          <p style={auditValueStyle}>{Math.round(totalTracedSqft).toLocaleString()} sqft from {tracedRoomsWithSqft.length} rooms</p>
+                          <p style={auditSourceStyle}>Diagnostic</p>
+                          <div style={isAreaVerified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {isAreaVerified ? "Active" : "Bypassed"}
+                          </div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Blueprint Set</p>
+                          <p style={auditValueStyle}>
+                            {blueprintDocument ? `${blueprintDocument.pages.length} page${blueprintDocument.pages.length === 1 ? "" : "s"} active` : "No blueprint"}
+                            {blueprintDocument && blueprintDocument.pages.length > 0 && (
+                              ` (page ${blueprintDocument.pages.findIndex(p => p.id === blueprintDocument.activePageId) + 1} of ${blueprintDocument.pages.length})`
+                            )}
+                            {blueprintDocument?.assetId?.startsWith('pdf-') && " [PDF source]"}
+                          </p>
+                          <p style={auditSourceStyle}>Document Container</p>
+                          <div style={blueprintDocument ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {blueprintDocument ? "Verified" : "Missing"}
+                          </div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Reference Dimensions</p>
+                          <p style={auditValueStyle}>
+                            {blueprintOverlaySize.widthPx > 0 ? `${Math.round(blueprintOverlaySize.widthPx)} x ${Math.round(blueprintOverlaySize.heightPx)} px` : "Pending render"}
+                          </p>
+                          <p style={auditSourceStyle}>Viewport Persistence</p>
+                          <div style={blueprintOverlaySize.widthPx > 0 ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {blueprintOverlaySize.widthPx > 0 ? "Restored" : "Waiting"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={auditGridStyle}>
+                        <p style={auditSectionTitleStyle}>Thermal Envelope Audit</p>
+                        {[
+                          { label: "Attic Insulation", val: isEnvelopeVerified && atticRValue ? `R-${atticRValue}` : insulationQuality, verified: isEnvelopeVerified && !!atticRValue },
+                          { label: "Wall Insulation", val: isEnvelopeVerified && wallRValue ? `R-${wallRValue}` : insulationQuality, verified: isEnvelopeVerified && !!wallRValue },
+                          { label: "Floor Insulation", val: isEnvelopeVerified && floorRValue ? `R-${floorRValue}` : insulationQuality, verified: isEnvelopeVerified && !!floorRValue },
+                          { label: "Window U-Factor", val: isEnvelopeVerified && windowUFactor ? windowUFactor : windowEfficiency, verified: isEnvelopeVerified && !!windowUFactor },
+                          { label: "Window SHGC", val: isEnvelopeVerified && windowSHGC ? windowSHGC : windowEfficiency, verified: isEnvelopeVerified && !!windowSHGC },
+                        ].map((row) => (
+                          <div key={row.label} style={auditRowStyle}>
+                            <p style={auditLabelStyle}>{row.label}</p>
+                            <p style={auditValueStyle}>{row.val}</p>
+                            <p style={auditSourceStyle}>{row.verified ? "Envelope Verification" : "Manual J Assumption"}</p>
+                            <div style={row.verified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                              {row.verified ? "Verified" : "Assumed"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={auditGridStyle}>
+                        <p style={auditSectionTitleStyle}>Takeoff Verification Audit</p>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Wall Exposure Verification</p>
+                          <p style={auditValueStyle}>{verifiedOpeningsMetrics.allEdgesClassified ? "Complete" : "Incomplete"}</p>
+                          <p style={auditSourceStyle}>Verified Takeoff</p>
+                          <div style={verifiedOpeningsMetrics.allEdgesClassified ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {verifiedOpeningsMetrics.allEdgesClassified ? "Verified" : "Pending"}
+                          </div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Windows & Doors Verification</p>
+                          <p style={auditValueStyle}>
+                            {!hasVerifiedOpenings && !hasUnverifiedOpenings ? "Not Documented" : (hasUnverifiedOpenings ? "Incomplete" : "Complete")}
+                          </p>
+                          <p style={auditSourceStyle}>Verified Takeoff</p>
+                          <div style={hasVerifiedOpenings && !hasUnverifiedOpenings ? auditBadgeVerifiedStyle : (hasUnverifiedOpenings ? auditBadgeAssumedStyle : auditBadgeMissingStyle)}>
+                            {hasVerifiedOpenings && !hasUnverifiedOpenings ? "Verified" : (hasUnverifiedOpenings ? "Partial" : "Missing")}
+                          </div>
+                        </div>
+                        {verifiedOpeningsMetrics.windowCount > 0 && (
+                          <div style={auditRowStyle}>
+                            <p style={auditLabelStyle}>Verified Window Data</p>
+                            <p style={auditValueStyle}>{verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)</p>
+                            <p style={auditSourceStyle}>Takeoff Windows & Doors</p>
+                            <div style={auditBadgeVerifiedStyle}>Verified</div>
+                          </div>
+                        )}
+                        {verifiedOpeningsMetrics.doorCount > 0 && (
+                          <div style={auditRowStyle}>
+                            <p style={auditLabelStyle}>Verified Door Data</p>
+                            <p style={auditValueStyle}>{verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)</p>
+                            <p style={auditSourceStyle}>Takeoff Windows & Doors</p>
+                            <div style={auditBadgeVerifiedStyle}>Verified</div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={auditGridStyle}>
+                        <p style={auditSectionTitleStyle}>Air Leakage / Environment Audit</p>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Infiltration</p>
+                          <p style={auditValueStyle}>{isEnvelopeVerified && infiltrationACH50 ? `${infiltrationACH50} ACH50` : infiltrationTightness}</p>
+                          <p style={auditSourceStyle}>{isEnvelopeVerified && infiltrationACH50 ? "Envelope Verification" : "Manual J Assumption"}</p>
+                          <div style={isEnvelopeVerified && infiltrationACH50 ? auditBadgeVerifiedStyle : auditBadgeAssumedStyle}>
+                            {isEnvelopeVerified && infiltrationACH50 ? "Verified" : "Assumed"}
+                          </div>
+                        </div>
+                        <div style={auditRowStyle}>
+                          <p style={auditLabelStyle}>Climate Region</p>
+                          <p style={auditValueStyle}>{oregonRegion}</p>
+                          <p style={auditSourceStyle}>Manual Entry</p>
+                          <div style={auditBadgeAssumedStyle}>Assumed</div>
+                        </div>
+                      </div>
+
+                      {(assumedRows > 0 || missingCriticalRows > 0) && (
+                        <div style={auditGridStyle}>
+                          <p style={auditSectionTitleStyle}>Active Engine Assumptions</p>
+                          <div style={constructionNotesListStyle}>
+                            {!isAreaVerified && (
+                              <div style={auditAssumptionItemStyle}>
+                                <AlertTriangle size={12} color="#fde68a" />
+                                Conditioned area is manually entered and not verified by blueprint takeoff.
+                              </div>
+                            )}
+                            {!blueprintFile && blueprintRoomsForManualD.some((room) => !!room.sourceBlueprintRoomId) && (
+                              <div style={auditAssumptionItemStyle}>
+                                <AlertTriangle size={12} color="#fde68a" />
+                                Manual J contains rooms from a removed blueprint. Calculations are using legacy takeoff data.
+                              </div>
+                            )}
+                            {!isCeilingVerified && (
+                              <div style={auditAssumptionItemStyle}>
+                                <AlertTriangle size={12} color="#fde68a" />
+                                Ceiling height is manually entered and not independently verified.
+                              </div>
+                            )}
+                            {!isEnvelopeVerified && (
+                              <>
+                                <div style={auditAssumptionItemStyle}>
+                                  <AlertTriangle size={12} color="#fde68a" />
+                                  Insulation is using shorthand quality settings.
+                                </div>
+                                <div style={auditAssumptionItemStyle}>
+                                  <AlertTriangle size={12} color="#fde68a" />
+                                  Infiltration is using shorthand tightness settings.
+                                </div>
+                                <div style={auditAssumptionItemStyle}>
+                                  <AlertTriangle size={12} color="#fde68a" />
+                                  Window values are using fallback efficiency labels.
+                                </div>
+                              </>
+                            )}
+                            <div style={auditAssumptionItemStyle}>
+                              <AlertTriangle size={12} color="#fde68a" />
+                              Wall exposure is still based on current engine assumptions (70% perimeter).
+                            </div>
+                            {tracedRoomsWithSqft.some(outline =>
+                              (outline.boundaryEdges ?? []).some(edge => edge.boundaryType === "unknown")
+                            ) && (
+                              <div style={auditAssumptionItemStyle}>
+                                <AlertTriangle size={12} color="#fde68a" />
+                                Some traced rooms have unclassified wall exposures (Unknown).
+                              </div>
+                            )}
+                            {hasExteriorWalls && !hasVerifiedOpenings && (
+                              <div style={auditAssumptionItemStyle}>
+                                <AlertTriangle size={12} color="#fde68a" />
+                                Exterior walls verified, but no window or door openings are documented. Calculations currently assume 0% opening area.
+                              </div>
+                            )}
+                            {hasUnverifiedOpenings && (
+                              <div style={auditAssumptionItemStyle}>
+                                <AlertTriangle size={12} color="#fde68a" />
+                                Some window or door openings are unverified.
+                              </div>
+                            )}
+                            {verifiedOpeningsMetrics.allEdgesClassified && (
+                              <div style={{ ...auditAssumptionItemStyle, color: "#4ade80" }}>
+                                <CheckCircle2 size={12} color="#22c55e" />
+                                Verified Window Area: {verifiedOpeningsMetrics.windowArea} sqft ({verifiedOpeningsMetrics.windowCount} units)
+                              </div>
+                            )}
+                            {verifiedOpeningsMetrics.allEdgesClassified && verifiedOpeningsMetrics.doorCount > 0 && (
+                              <div style={{ ...auditAssumptionItemStyle, color: "#4ade80" }}>
+                                <CheckCircle2 size={12} color="#22c55e" />
+                                Verified Door Area: {verifiedOpeningsMetrics.doorArea} sqft ({verifiedOpeningsMetrics.doorCount} units)
+                              </div>
+                            )}
+                            {verifiedOpeningsMetrics.allEdgesClassified && (
+                              <div style={{ ...auditAssumptionItemStyle, color: "#4ade80", fontSize: "10px", marginLeft: "20px" }}>
+                                Source: Verified Takeoff
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </details>
                 </>
               );
             })()}
