@@ -1065,7 +1065,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
 
   const handleLoadV3Project = async (projectId: string) => {
     try {
-      let project = loadBlueprintProjectFromLocalStorage(projectId);
+      const project = loadBlueprintProjectFromLocalStorage(projectId);
       if (!project) {
         setV3SaveStatus("Project not found");
         return;
@@ -1495,7 +1495,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setDetectedRoomActionMessage("Room removed");
   };
 
-  const useDetectedRoomAsTrace = (room: DetectedBlueprintRoom) => {
+  const handleUseDetectedRoomAsTrace = (room: DetectedBlueprintRoom) => {
     const leftPercent = room.overlay.leftPercent;
     const topPercent = room.overlay.topPercent;
     const rightPercent = Math.min(100, leftPercent + room.overlay.widthPercent);
@@ -1733,11 +1733,11 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     if (isFocusAreaMode) return;
 
     const overlayBounds = event.currentTarget.getBoundingClientRect();
-    let xPercent = Math.min(
+    const xPercent = Math.min(
       100,
       Math.max(0, ((event.clientX - overlayBounds.left) / overlayBounds.width) * 100)
     );
-    let yPercent = Math.min(
+    const yPercent = Math.min(
       100,
       Math.max(0, ((event.clientY - overlayBounds.top) / overlayBounds.height) * 100)
     );
@@ -4641,7 +4641,7 @@ const averageTonnage = (minTon + maxTon) / 2;
 
               <section className="blueprint-workspace-main" style={blueprintWorkspaceMainStyle}>
                 {blueprintFile ? (
-                  <div ref={blueprintPreviewRef} tabIndex={-1} style={{ ...blueprintWorkspaceStyle, gap: 0, padding: 0 }}>
+                  <div ref={blueprintPreviewRef} tabIndex={-1} style={{ ...blueprintWorkspaceStyle, gap: 0, padding: 0, position: "relative" }}>
                     {/* Professional Command Bar */}
                     <div style={{ ...blueprintCommandBarStyle, opacity: isTracingLock ? 0.4 : 1, pointerEvents: isTracingLock ? "none" : "auto" }}>
                       <div style={commandBarGroupStyle}>
@@ -5417,7 +5417,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                         }}>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
                             <span style={{ color: "#f8fafc", fontSize: "16px", fontWeight: 800 }}>Which walls touch outside air?</span>
-                            <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>Tap exterior walls. We'll mark the rest as interior when you finish.</span>
+                            <span style={{ color: "#94a3b8", fontSize: "12px", fontWeight: 600 }}>Tap exterior walls. {"We'll mark the rest as interior when you finish."}</span>
                           </div>
                           <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
                             <button 
@@ -5487,6 +5487,181 @@ const averageTonnage = (minTon + maxTon) / 2;
                     ) : null}
                   </div>
                 </div>
+
+                {/* Scale Check Confirmation Card */}
+                {isVerificationMode && blueprintCalibration.verification?.startPoint && blueprintCalibration.verification?.endPoint && scaleCheckResult && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: "24px",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: "280px",
+                      background: "rgba(15, 23, 42, 0.95)",
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                      border: "1px solid rgba(168, 85, 247, 0.4)",
+                      borderRadius: "14px",
+                      padding: "16px",
+                      boxShadow: "0 12px 40px rgba(0, 0, 0, 0.6)",
+                      zIndex: 1000,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                      color: "#f8fafc",
+                      fontFamily: "Inter, Roboto, sans-serif",
+                      pointerEvents: "auto",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "12px", fontWeight: 800, color: "#a855f7", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                        Scale Check
+                      </span>
+                      {/* Status Badge */}
+                      <span
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: 900,
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          textTransform: "uppercase",
+                          background:
+                            scaleCheckResult.confidence === "verified"
+                              ? "rgba(34, 197, 94, 0.2)"
+                              : scaleCheckResult.confidence === "acceptable"
+                              ? "rgba(234, 179, 8, 0.2)"
+                              : "rgba(239, 68, 68, 0.2)",
+                          color:
+                            scaleCheckResult.confidence === "verified"
+                              ? "#4ade80"
+                              : scaleCheckResult.confidence === "acceptable"
+                              ? "#fbbf24"
+                              : "#f87171",
+                          border:
+                            scaleCheckResult.confidence === "verified"
+                              ? "1px solid rgba(34, 197, 94, 0.3)"
+                              : scaleCheckResult.confidence === "acceptable"
+                              ? "1px solid rgba(234, 179, 8, 0.3)"
+                              : "1px solid rgba(239, 68, 68, 0.3)",
+                        }}
+                      >
+                        {scaleCheckResult.confidence === "verified"
+                          ? "Passed"
+                          : scaleCheckResult.confidence === "acceptable"
+                          ? "Acceptable"
+                          : "Warning"}
+                      </span>
+                    </div>
+
+                    {/* Metrics Grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", background: "rgba(255, 255, 255, 0.03)", padding: "10px", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.05)" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase" }}>Expected</span>
+                        <span style={{ fontSize: "13px", fontWeight: 800, color: "#f8fafc" }}>
+                          {scaleCheckResult.expectedFeet?.toFixed(2)} ft
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                        <span style={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase" }}>Measured</span>
+                        <span style={{ fontSize: "13px", fontWeight: 800, color: "#f8fafc" }}>
+                          {scaleCheckResult.measuredFeet?.toFixed(2)} ft
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", gridColumn: "span 2", borderTop: "1px solid rgba(255, 255, 255, 0.06)", paddingTop: "6px", marginTop: "2px" }}>
+                        <span style={{ fontSize: "8px", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase" }}>Variance / Difference</span>
+                        <span style={{ fontSize: "12px", fontWeight: 800, color: scaleCheckResult.isPassed ? "#e2e8f0" : "#fca5a5" }}>
+                          {Math.abs((scaleCheckResult.measuredFeet ?? 0) - scaleCheckResult.expectedFeet).toFixed(2)} ft ({(scaleCheckResult.error ?? 0).toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsVerificationMode(false)}
+                        style={{
+                          background: "#a855f7",
+                          border: "none",
+                          borderRadius: "8px",
+                          color: "#ffffff",
+                          fontSize: "11px",
+                          fontWeight: 800,
+                          padding: "8px",
+                          cursor: "pointer",
+                          transition: "background 0.2s, transform 0.1s",
+                          textAlign: "center",
+                          boxShadow: "0 4px 12px rgba(168, 85, 247, 0.3)",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#9333ea")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#a855f7")}
+                      >
+                        Confirm Scale Check
+                      </button>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBlueprintCalibration((curr) => ({
+                              ...curr,
+                              verification: curr.verification
+                                ? {
+                                    ...curr.verification,
+                                    startPoint: null,
+                                    endPoint: null,
+                                  }
+                                : null,
+                            }));
+                          }}
+                          style={{
+                            background: "rgba(255, 255, 255, 0.08)",
+                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                            borderRadius: "8px",
+                            color: "#f8fafc",
+                            fontSize: "10px",
+                            fontWeight: 800,
+                            padding: "6px",
+                            cursor: "pointer",
+                            transition: "background 0.2s",
+                            textAlign: "center",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.15)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)")}
+                        >
+                          Recheck
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsVerificationMode(false);
+                            setBlueprintCalibration((curr) => ({
+                              ...curr,
+                              verification: null,
+                            }));
+                          }}
+                          style={{
+                            background: "rgba(239, 68, 68, 0.15)",
+                            border: "1px solid rgba(239, 68, 68, 0.3)",
+                            borderRadius: "8px",
+                            color: "#fca5a5",
+                            fontSize: "10px",
+                            fontWeight: 800,
+                            padding: "6px",
+                            cursor: "pointer",
+                            transition: "background 0.2s",
+                            textAlign: "center",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239, 68, 68, 0.25)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)")}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                   </div>
                 ) : (
@@ -5983,7 +6158,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                       <div style={{ ...blueprintAirflowPreviewMetricStyle, padding: "4px", flexDirection: "column", gap: "2px" }}>
                         <span style={{ ...blueprintAirflowPreviewMetricLabelStyle, fontSize: "8px" }}>DUCT</span>
-                        <strong style={{ fontSize: "11px" }}>{selectedDetectedRoomAirflow.ductRecommendation.diameterInches}"</strong>
+                        <strong style={{ fontSize: "11px" }}>{selectedDetectedRoomAirflow.ductRecommendation.diameterInches}&quot;</strong>
                       </div>
                     </div>
                   </div>
@@ -6112,11 +6287,11 @@ const averageTonnage = (minTon + maxTon) / 2;
                         <button
                           type="button"
                           style={detectedRoomButtonStyle}
-                          onClick={() => useDetectedRoomAsTrace(room)}
+                          onClick={() => handleUseDetectedRoomAsTrace(room)}
                           onPointerUp={(event) => {
                             if (event.pointerType === "mouse") return;
                             event.preventDefault();
-                            useDetectedRoomAsTrace(room);
+                            handleUseDetectedRoomAsTrace(room);
                           }}
                         >
                           Use as Trace
