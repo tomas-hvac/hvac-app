@@ -48,14 +48,6 @@ type TracedRoomAdapterInput = {
   context?: RoomCalculationContext;
 };
 
-type ManualFallbackRoomAdapterInput = {
-  id: string;
-  name: string;
-  squareFeet: number;
-  ceilingHeight: string;
-  floorLevel: string;
-  context?: RoomCalculationContext;
-};
 
 type DetectedRoomAdapterInput = {
   detectedRoom: DetectedBlueprintRoom;
@@ -168,48 +160,6 @@ export function adaptTracedRoomToManualDBlueprintRoom({
   };
 }
 
-export function createUnifiedManualFallbackRoom({
-  id,
-  name,
-  squareFeet,
-  ceilingHeight,
-  floorLevel,
-  context,
-}: ManualFallbackRoomAdapterInput): UnifiedHvacRoom {
-  const normalizedSquareFeet = Math.max(0, Math.round(squareFeet));
-  const volume = calculateUnifiedRoomVolume(normalizedSquareFeet, ceilingHeight);
-  const targetCfm = calculateUnifiedRoomTargetCfm(normalizedSquareFeet, context);
-  const ductSizeRecommendation = calculateUnifiedRoomDuctSize(targetCfm);
-  const registerCountRecommendation = recommendUnifiedRoomRegisterCount(targetCfm);
-
-  return {
-    id,
-    source: "manual",
-    name: name.trim() || "New Room",
-    squareFeet: normalizedSquareFeet,
-    ceilingHeight,
-    floorLevel,
-    volume,
-    targetCfm,
-    ductSizeRecommendation,
-    registerCountRecommendation,
-    confidenceStatus: normalizedSquareFeet > 0 ? "calculation-ready" : "needs-review",
-  };
-}
-
-export function adaptManualFallbackRoomToManualDBlueprintRoom(
-  input: ManualFallbackRoomAdapterInput
-): ManualDBlueprintRoomOutput {
-  const unifiedRoom = createUnifiedManualFallbackRoom(input);
-
-  return {
-    id: input.id,
-    name: unifiedRoom.name,
-    squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
-    ceilingHeight: unifiedRoom.ceilingHeight,
-    floorLevel: unifiedRoom.floorLevel,
-  };
-}
 
 export function createUnifiedDetectedRoom({
   detectedRoom,

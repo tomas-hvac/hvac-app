@@ -46,7 +46,6 @@ import {
 import { calculateRoomReadiness } from "@/lib/hvac/roomReadiness";
 import {
   adaptDetectedRoomToManualDBlueprintRoom,
-  adaptManualFallbackRoomToManualDBlueprintRoom,
   adaptTracedRoomToManualDBlueprintRoom,
 } from "@/lib/hvac/roomCalculationPipeline";
 import {
@@ -563,7 +562,6 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const blueprintImageRef = useRef<HTMLImageElement | null>(null);
 
   const detectedRoomsRef = useRef<HTMLDivElement | null>(null);
-  const manualTakeoffRef = useRef<HTMLDivElement | null>(null);
   const suppressNextBlueprintOverlayClickRef = useRef(false);
   const isBlueprintTraceFocusForcedRef = useRef(false);
   const draftTracePointRefs = useRef<Array<HTMLSpanElement | null>>([]);
@@ -854,8 +852,6 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     ],
   };
 
-  const blueprintSquareFeet =
-    Math.max(0, Number(blueprintLength) || 0) * Math.max(0, Number(blueprintWidth) || 0);
   const detectedBlueprintRooms = blueprintDetectionPipeline.rooms;
 
   useEffect(() => {
@@ -1304,21 +1300,6 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setProjectActionMessage("Project deleted");
   };
 
-  const addBlueprintRoomToManualD = () => {
-    const calculatedSquareFeet = Math.round(blueprintSquareFeet);
-    if (calculatedSquareFeet <= 0) return;
-
-    setBlueprintRoomsForManualD((currentRooms) => [
-      ...currentRooms,
-      adaptManualFallbackRoomToManualDBlueprintRoom({
-        id: `blueprint-room-${Date.now()}-${currentRooms.length + 1}`,
-        name: blueprintRoomName,
-        squareFeet: calculatedSquareFeet,
-        ceilingHeight: blueprintCeilingHeight,
-        floorLevel: blueprintFloorLevel,
-      }),
-    ]);
-  };
 
   const handleBlueprintFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -2410,35 +2391,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     element?.focus?.();
   };
 
-  const handleBlueprintWorkflowStep = (stepIndex: number) => {
-    if (isTracingLock) {
-      setProjectActionMessage("Navigation locked during active trace.");
-      return;
-    }
 
-    if (stepIndex === 0) {
-      blueprintFileInputRef.current?.click();
-      return;
-    }
-
-    if (stepIndex === 1) {
-      if (blueprintFile) {
-        scrollToTakeoffElement(blueprintPreviewRef.current);
-      } else {
-        blueprintFileInputRef.current?.click();
-      }
-      return;
-    }
-
-    if (stepIndex === 3) {
-      scrollToTakeoffElement(detectedRoomsRef.current);
-      return;
-    }
-
-    if (stepIndex === 4) {
-      scrollToTakeoffElement(manualTakeoffRef.current);
-    }
-  };
 
   const zoomBlueprintIn = () => {
     if (blueprintRoomTrace.isTracing || blueprintRoomTrace.draftPoints.length > 0) {
@@ -6949,85 +6902,7 @@ const averageTonnage = (minTon + maxTon) / 2;
               </div>
             </details>
 
-            <p style={blueprintManualFallbackLabelStyle}>Manual room takeoff fallback</p>
-            <div ref={manualTakeoffRef} tabIndex={-1} className="blueprint-takeoff-grid" style={blueprintTakeoffGridStyle}>
-              <label style={blueprintTakeoffRoomNameGroupStyle}>
-                <span style={blueprintTakeoffInputLabelStyle}>Room Name</span>
-                <input
-                  className="load-input blueprint-takeoff-control"
-                  type="text"
-                  aria-label="Blueprint takeoff room name"
-                  value={blueprintRoomName}
-                  onChange={(event) => setBlueprintRoomName(event.target.value)}
-                  style={blueprintTakeoffInputStyle}
-                />
-              </label>
-              <label style={blueprintTakeoffInputGroupStyle}>
-                <span style={blueprintTakeoffInputLabelStyle}>Width</span>
-                <input
-                  className="load-input blueprint-takeoff-control"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  aria-label="Blueprint takeoff room width"
-                  value={blueprintWidth}
-                  onChange={(event) => setBlueprintWidth(event.target.value)}
-                  style={blueprintTakeoffInputStyle}
-                />
-              </label>
-              <label style={blueprintTakeoffInputGroupStyle}>
-                <span style={blueprintTakeoffInputLabelStyle}>Length</span>
-                <input
-                  className="load-input blueprint-takeoff-control"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  aria-label="Blueprint takeoff room length"
-                  value={blueprintLength}
-                  onChange={(event) => setBlueprintLength(event.target.value)}
-                  style={blueprintTakeoffInputStyle}
-                />
-              </label>
-              <label style={blueprintTakeoffInputGroupStyle}>
-                <span style={blueprintTakeoffInputLabelStyle}>Ceiling Height</span>
-                <input
-                  className="load-input blueprint-takeoff-control"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  aria-label="Blueprint takeoff ceiling height"
-                  value={blueprintCeilingHeight}
-                  onChange={(event) => setBlueprintCeilingHeight(event.target.value)}
-                  style={blueprintTakeoffInputStyle}
-                />
-              </label>
-              <label style={blueprintTakeoffInputGroupStyle}>
-                <span style={blueprintTakeoffInputLabelStyle}>Floor / Level</span>
-                <input
-                  className="load-input blueprint-takeoff-control"
-                  type="number"
-                  min="1"
-                  aria-label="Blueprint takeoff floor or level"
-                  value={blueprintFloorLevel}
-                  onChange={(event) => setBlueprintFloorLevel(event.target.value)}
-                  style={blueprintTakeoffInputStyle}
-                />
-              </label>
-              <div className="blueprint-takeoff-result" style={blueprintTakeoffResultStyle}>
-                <p style={blueprintTakeoffLabelStyle}>Calculated Sq. Ft.</p>
-                <p style={blueprintTakeoffValueStyle}>
-                  {Math.round(blueprintSquareFeet).toLocaleString()} sq ft
-                </p>
-              </div>
-              <button
-                type="button"
-                className="blueprint-takeoff-button"
-                style={blueprintTakeoffButtonStyle}
-                onClick={addBlueprintRoomToManualD}
-              >
-                Add to Manual D
-              </button>
-            </div>
+
           </div>
 
           <ManualDPanel
@@ -8194,12 +8069,7 @@ const blueprintTakeoffPanelStyle: React.CSSProperties = {
   overflow: "visible",
 };
 
-const blueprintTakeoffGridStyle: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "flex-end",
-  gap: "10px",
-};
+
 
 const blueprintDraftingWorkspaceStyle: React.CSSProperties = {
   display: "grid",
@@ -9641,84 +9511,6 @@ const tracedRoomButtonDisabledStyle: React.CSSProperties = {
   cursor: "not-allowed",
 };
 
-const blueprintTakeoffInputGroupStyle: React.CSSProperties = {
-  display: "grid",
-  gap: "6px",
-  flex: "0 0 86px",
-  minWidth: "78px",
-};
-
-const blueprintTakeoffRoomNameGroupStyle: React.CSSProperties = {
-  ...blueprintTakeoffInputGroupStyle,
-  flex: "1 1 180px",
-  minWidth: "160px",
-};
-
-const blueprintTakeoffInputLabelStyle: React.CSSProperties = {
-  color: "#cbd5e1",
-  fontSize: "10px",
-  fontWeight: 900,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-};
-
-const blueprintTakeoffInputStyle: React.CSSProperties = {
-  ...inputControlStyle,
-  height: "38px",
-  minHeight: "38px",
-  maxHeight: "38px",
-  padding: "8px 10px",
-  borderRadius: "12px",
-  fontSize: "13px",
-  lineHeight: "20px",
-  boxSizing: "border-box",
-};
-
-const blueprintTakeoffResultStyle: React.CSSProperties = {
-  flex: "0 0 124px",
-  alignSelf: "flex-end",
-  display: "grid",
-  alignContent: "center",
-  height: "38px",
-  minHeight: "38px",
-  maxHeight: "38px",
-  padding: "5px 10px",
-  borderRadius: "12px",
-  background: "rgba(255,255,255,0.03)",
-  border: "1px solid rgba(255,255,255,0.08)",
-  boxSizing: "border-box",
-};
-
-const blueprintTakeoffLabelStyle: React.CSSProperties = {
-  margin: 0,
-  color: "#94a3b8",
-  fontSize: "9px",
-  fontWeight: 800,
-  letterSpacing: "0.1em",
-  textTransform: "uppercase",
-  lineHeight: 1,
-};
-
-const blueprintTakeoffValueStyle: React.CSSProperties = {
-  margin: "2px 0 0",
-  color: "#f8fafc",
-  fontSize: "13px",
-  fontWeight: 900,
-  lineHeight: 1,
-};
-
-const blueprintTakeoffButtonStyle: React.CSSProperties = {
-  ...calcActionButtonStyle,
-  flex: "0 0 auto",
-  alignSelf: "flex-end",
-  height: "38px",
-  minHeight: "38px",
-  maxHeight: "38px",
-  padding: "8px 12px",
-  borderRadius: "12px",
-  fontSize: "13px",
-  whiteSpace: "nowrap",
-};
 
 const selectControlStyle: React.CSSProperties = {
   ...inputControlStyle,
