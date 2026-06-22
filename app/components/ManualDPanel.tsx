@@ -1594,7 +1594,7 @@ export default function ManualDPanel({
                         </div>
                       ) : (
                         <p style={{ margin: 0, fontSize: "8px", color: "#4ade80", fontStyle: "italic" }}>
-                          Window count and area from verified blueprint openings
+                          Window count and area from verified blueprint windows & doors
                         </p>
                       )}
                     </div>
