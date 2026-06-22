@@ -4847,7 +4847,8 @@ const averageTonnage = (minTon + maxTon) / 2;
                       </div>
                     )}
 
-                    <div ref={blueprintViewportRef} style={{
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <div ref={blueprintViewportRef} style={{
                     ...blueprintViewportStyle,
                     ...(isTracingLock ? {
                     border: "2px solid rgba(212,175,55,0.8)",
@@ -5662,6 +5663,7 @@ const averageTonnage = (minTon + maxTon) / 2;
                     </div>
                   </div>
                 )}
+              </div>
 
                   </div>
                 ) : (
