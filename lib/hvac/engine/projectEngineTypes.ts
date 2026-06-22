@@ -67,7 +67,7 @@ export type ProjectTimelineEvent = {
   message: string;
   severity: "info" | "success" | "warning" | "critical";
   relatedStage: ProjectWorkflowStage;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 export type ProjectAutomationSuggestion = ProjectAutomationResult;

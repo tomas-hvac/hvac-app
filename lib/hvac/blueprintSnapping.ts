@@ -75,7 +75,7 @@ function getNearestPointOnSegment(p: Point, a: Point, b: Point): Point {
   const atob = { x: b.x - a.x, y: b.y - a.y };
   const atop = { x: p.x - a.x, y: p.y - a.y };
   const lenSq = atob.x * atob.x + atob.y * atob.y;
-  let t = lenSq === 0 ? -1 : (atop.x * atob.x + atop.y * atob.y) / lenSq;
+  const t = lenSq === 0 ? -1 : (atop.x * atob.x + atop.y * atob.y) / lenSq;
   
   if (t < 0) return a;
   if (t > 1) return b;

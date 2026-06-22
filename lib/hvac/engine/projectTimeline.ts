@@ -12,7 +12,7 @@ export function createTimelineEvent(
     message: string;
     severity?: ProjectTimelineEvent["severity"];
     relatedStage: ProjectWorkflowStage;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }
 ): ProjectTimelineEvent {
   return {
