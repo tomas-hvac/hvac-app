@@ -10,18 +10,9 @@ import {
   getVelocityStatusWarning,
   recommendRoundDuctSize,
 } from "@/lib/hvac/manualD";
+import type { EngineeringRoom } from "@/lib/hvac/blueprintRoomTracing";
 
-export type ManualDBlueprintRoom = {
-  id: string;
-  name: string;
-  squareFeet: number;
-  ceilingHeight: string;
-  floorLevel: string;
-  sourceBlueprintRoomId?: string;
-  windowsCount?: string;
-  windowsArea?: string;
-  exteriorWallsCount?: string;
-};
+export type ManualDBlueprintRoom = EngineeringRoom;
 
 export type ManualDPanelSection = "manual-d" | "room-airflow" | "return-air" | "reports" | "hidden";
 
@@ -411,45 +402,45 @@ export default function ManualDPanel({
 
       // 2. Update existing rooms
       const updatedRooms = remainingRooms.map((r) => {
-        const br = updatedBlueprintRooms.find((u) => u.id === r.id);
+        const br = updatedBlueprintRooms.find((u) => u.id === r.id || u.id === r.blueprintSourceRoomId);
         if (!br) return r;
 
-        // Detection of manual override for window area
-        const isWindowAreaOverridden = r.originalWindowsAreaInput && r.windowsAreaInput !== r.originalWindowsAreaInput;
+        let totalWindowsArea = 0;
+        br.boundaryEdges?.forEach((edge) => {
+          const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
+          windows.forEach((win) => {
+            totalWindowsArea += win.widthFeet * win.heightFeet;
+          });
+        });
+        const brWindowsArea = br.windowsArea ?? (totalWindowsArea > 0 ? totalWindowsArea.toFixed(1) : "");
 
         return {
           ...r,
-          // Mandatory updates from blueprint
-          squareFeet: Math.max(0, Math.round(br.squareFeet)),
-          squareFeetInput: String(Math.max(0, Math.round(br.squareFeet))),
-          ceilingHeightInput: br.ceilingHeight,
-          floorLevelInput: br.floorLevel,
-          exteriorWallsCountInput: br.exteriorWallsCount ?? r.exteriorWallsCountInput,
-          windowsCountInput: br.windowsCount ?? r.windowsCountInput,
-
-          // Conditional update for window area: only if NOT overridden
-          windowsAreaInput: isWindowAreaOverridden ? r.windowsAreaInput : (br.windowsArea ?? r.windowsAreaInput),
-
-          // Always update the 'reference' baseline so we can detect future changes
-          originalWindowsAreaInput: br.windowsArea ?? r.originalWindowsAreaInput,
+          originalWindowsAreaInput: brWindowsArea,
         };
       });
 
       // 3. Add new rooms
-      const addedRooms = newBlueprintRooms.map((room) => ({
-        ...createDefaultRoom(
-          `manual-d-${room.id}`,
-          room.name,
-          Math.max(0, Math.round(room.squareFeet))
-        ),
-        ceilingHeightInput: room.ceilingHeight,
-        floorLevelInput: room.floorLevel,
-        windowsCountInput: room.windowsCount ?? "",
-        windowsAreaInput: room.windowsArea ?? "",
-        originalWindowsAreaInput: room.windowsArea ?? "",
-        exteriorWallsCountInput: room.exteriorWallsCount ?? "",
-        blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
-      }));
+      const addedRooms = newBlueprintRooms.map((room) => {
+        let totalWindowsArea = 0;
+        room.boundaryEdges?.forEach((edge) => {
+          const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
+          windows.forEach((win) => {
+            totalWindowsArea += win.widthFeet * win.heightFeet;
+          });
+        });
+        const brWindowsArea = room.windowsArea ?? (totalWindowsArea > 0 ? totalWindowsArea.toFixed(1) : "");
+
+        return {
+          ...createDefaultRoom(
+            `manual-d-${room.id}`,
+            "", // no duplication
+            0 // no duplication
+          ),
+          originalWindowsAreaInput: brWindowsArea,
+          blueprintSourceRoomId: room.sourceBlueprintRoomId ?? room.id,
+        };
+      });
 
       return [...updatedRooms, ...addedRooms];
     });
@@ -481,15 +472,61 @@ export default function ManualDPanel({
     onBlueprintRoomSelect?.(room.blueprintSourceRoomId);
   };
 
+  const resolvedRooms = useMemo(() => {
+    return rooms.map((room) => {
+      if (!room.blueprintSourceRoomId) return room;
+      const br = blueprintRooms.find((b) => b.id === room.blueprintSourceRoomId);
+      if (!br) return room;
+
+      const exteriorWallsCount = br.exteriorWallsCount !== undefined
+        ? br.exteriorWallsCount
+        : String(br.boundaryEdges?.filter((edge) => edge.boundaryType === "exterior").length ?? 0);
+
+      let totalWindowsCount = 0;
+      let totalWindowsArea = 0;
+      br.boundaryEdges?.forEach((edge) => {
+        const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
+        totalWindowsCount += windows.length;
+        windows.forEach((win) => {
+          totalWindowsArea += win.widthFeet * win.heightFeet;
+        });
+      });
+
+      const windowsCount = br.windowsCount !== undefined
+        ? br.windowsCount
+        : String(totalWindowsCount);
+
+      const windowsArea = br.windowsArea !== undefined
+        ? br.windowsArea
+        : (totalWindowsArea > 0 ? totalWindowsArea.toFixed(1) : "");
+
+      const isWindowAreaOverridden = room.originalWindowsAreaInput && room.windowsAreaInput !== room.originalWindowsAreaInput;
+
+      return {
+        ...room,
+        name: br.name,
+        squareFeet: Math.max(0, Math.round(br.squareFeet ?? 0)),
+        squareFeetInput: String(Math.max(0, Math.round(br.squareFeet ?? 0))),
+        ceilingHeightInput: br.ceilingHeight,
+        floorLevelInput: br.floorLevel,
+        exteriorWallsCountInput: exteriorWallsCount,
+        windowsCountInput: windowsCount,
+        windowsAreaInput: isWindowAreaOverridden ? room.windowsAreaInput : windowsArea,
+        insulationLevel: br.insulationLevel || room.insulationLevel || "average",
+        sunExposure: br.sunExposure || room.sunExposure || "medium",
+      };
+    });
+  }, [rooms, blueprintRooms]);
+
   const roomDuctRecommendations = useMemo(
     () => {
-      const roomLoadScores = rooms.map((room) => {
+      const roomLoadScores = resolvedRooms.map((room) => {
         const roomSquareFeet = Math.max(0, room.squareFeet);
         return roomSquareFeet * calculateRoomLoadFactor(room);
       });
       const totalRoomLoadScore = roomLoadScores.reduce((sum, score) => sum + score, 0);
 
-      return rooms.map((room, index) => {
+      return resolvedRooms.map((room, index) => {
         const roomSquareFeet = Math.max(0, room.squareFeet);
         const roomLoadFactor = calculateRoomLoadFactor(room);
         const roomLoadScore = roomLoadScores[index] ?? 0;
@@ -515,7 +552,7 @@ export default function ManualDPanel({
         };
       });
     },
-    [rooms, totalHomeSquareFeet, totalSystemBtu, totalSystemCfm]
+    [resolvedRooms, totalHomeSquareFeet, totalSystemBtu, totalSystemCfm]
   );
 
   const updateRoom = (roomId: string, field: ManualDRoomEditableField, value: string | number) => {

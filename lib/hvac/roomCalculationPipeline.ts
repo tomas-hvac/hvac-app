@@ -1,6 +1,6 @@
 import type { RoundDuctSizingRecommendation } from "./manualD";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "./manualD";
-import type { BlueprintRoomOutline } from "./blueprintRoomTracing";
+import type { BlueprintRoomOutline, EngineeringRoom } from "./blueprintRoomTracing";
 import type { DetectedBlueprintRoom } from "./blueprintDetection";
 
 export type HvacRoomSource = "traced" | "manual" | "detected";
@@ -25,17 +25,7 @@ export type UnifiedHvacRoom = {
   confidenceStatus: UnifiedHvacRoomStatus;
 };
 
-export type ManualDBlueprintRoomOutput = {
-  id: string;
-  name: string;
-  squareFeet: number;
-  ceilingHeight: string;
-  floorLevel: string;
-  sourceBlueprintRoomId?: string;
-  windowsCount?: string;
-  windowsArea?: string;
-  exteriorWallsCount?: string;
-};
+export type ManualDBlueprintRoomOutput = EngineeringRoom;
 
 type RoomCalculationContext = {
   totalHomeSquareFeet?: number;
@@ -130,7 +120,7 @@ export function adaptTracedRoomToManualDBlueprintRoom({
   tracedRoom,
   outputId,
   context,
-}: TracedRoomAdapterInput): ManualDBlueprintRoomOutput {
+}: TracedRoomAdapterInput): EngineeringRoom {
   const unifiedRoom = createUnifiedTracedRoom({ tracedRoom, context });
   const exteriorWallsCount = tracedRoom.boundaryEdges?.filter(
     (edge) => edge.boundaryType === "exterior"
@@ -148,6 +138,7 @@ export function adaptTracedRoomToManualDBlueprintRoom({
   });
 
   return {
+    ...tracedRoom,
     id: outputId,
     name: unifiedRoom.name,
     squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
@@ -196,7 +187,7 @@ export function adaptDetectedRoomToManualDBlueprintRoom({
   defaultCeilingHeight,
   defaultFloorLevel,
   context,
-}: DetectedRoomAdapterInput): ManualDBlueprintRoomOutput {
+}: DetectedRoomAdapterInput): EngineeringRoom {
   const unifiedRoom = createUnifiedDetectedRoom({
     detectedRoom,
     defaultCeilingHeight,
@@ -207,6 +198,7 @@ export function adaptDetectedRoomToManualDBlueprintRoom({
   return {
     id: outputId,
     name: unifiedRoom.name,
+    points: [],
     squareFeet: Math.max(0, Math.round(unifiedRoom.squareFeet ?? 0)),
     ceilingHeight: unifiedRoom.ceilingHeight,
     floorLevel: unifiedRoom.floorLevel,
