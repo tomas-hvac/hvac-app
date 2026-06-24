@@ -1,5 +1,5 @@
 import type { BlueprintCalibrationState } from "./blueprintCalibration";
-import type { BlueprintRoomOutline } from "./blueprintRoomTracing";
+import type { BlueprintRoomOutline, EngineeringRoom } from "./blueprintRoomTracing";
 import type { ProjectEngineMetadata, ProjectEngineState } from "./engine/projectEngineTypes";
 import { migrateEngineMetadata, prepareEngineStateForSave } from "./engine/projectEnginePersistence";
 import type { ManualDProjectState } from "../../app/components/ManualDPanel";
@@ -60,7 +60,7 @@ export type BlueprintPage = {
   sheetType?: "floor-plan" | "site-plan" | "elevation" | "roof-plan" | "schedule" | "detail" | "unknown";
   image?: BlueprintPageImage;
   calibration?: BlueprintCalibrationState | null;
-  tracedRooms?: BlueprintRoomOutline[];
+  tracedRooms?: EngineeringRoom[];
   focusArea?: {
     x: number;
     y: number;
@@ -92,7 +92,7 @@ export type BlueprintProject = {
   blueprintDocument?: BlueprintDocument | null;
   blueprintOverlaySize?: { widthPx: number; heightPx: number };
   calibration: BlueprintCalibrationState;
-  tracedRooms: BlueprintRoomOutline[];
+  tracedRooms: EngineeringRoom[];
   windowSchedule?: WindowScheduleEntry[];
   envelopeSettings: BlueprintProjectEnvelopeSettings;
   envelopeSuggestions?: BlueprintEnvelopeSuggestions;

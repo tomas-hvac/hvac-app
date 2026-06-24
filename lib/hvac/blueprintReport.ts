@@ -80,11 +80,16 @@ export function createBlueprintTechnicianReport(
         totalCfm: project.manualDProjectState.settings.totalCfm,
         availableStatic: project.manualDProjectState.settings.availableStatic,
         roomCount: project.manualDProjectState.rooms.length,
-        rooms: project.manualDProjectState.rooms.map((r) => ({
-          name: r.name,
-          squareFeet: r.squareFeet,
-          registerCount: r.supplyRegisterCount,
-        })),
+        rooms: project.manualDProjectState.rooms.map((r) => {
+          const bpRoom = r.blueprintSourceRoomId
+            ? project.tracedRooms.find((tr) => tr.id === r.blueprintSourceRoomId)
+            : null;
+          return {
+            name: bpRoom ? bpRoom.name : r.name,
+            squareFeet: bpRoom ? Math.round(bpRoom.squareFeet ?? 0) : r.squareFeet,
+            registerCount: r.supplyRegisterCount,
+          };
+        }),
       }
     : null;
 

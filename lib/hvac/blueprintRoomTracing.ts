@@ -83,7 +83,7 @@ export interface EngineeringRoom extends BlueprintRoomOutline {
 export type BlueprintRoomTraceState = {
   isTracing: boolean;
   draftPoints: BlueprintCalibrationPoint[];
-  roomOutlines: BlueprintRoomOutline[];
+  roomOutlines: EngineeringRoom[];
 };
 
 type BlueprintRoomTracePointOptions = {
