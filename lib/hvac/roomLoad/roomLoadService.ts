@@ -5,21 +5,14 @@ import {
   INDOOR_HEATING_TARGET,
   INDOOR_COOLING_TARGET
 } from "../loadUtils";
+import type { EngineeringRoom } from "../blueprintRoomTracing";
 
 /**
  * Inputs required for a professional room-level Manual J load calculation.
  * Merges room-specific geometry with global project envelope settings.
  */
 export type RoomLoadInput = {
-  roomId: string;
-  roomName: string;
-  squareFeet: number;
-  ceilingHeight: number;
-  exteriorWallCount: number;
-  windowCount: number;
-  insulationQuality: "poor" | "average" | "good";
-  sunExposure: "low" | "medium" | "high";
-  floorLevel: string;
+  room: EngineeringRoom;
   
   // Global project context for scientific alignment
   globalSettings: {
@@ -55,7 +48,28 @@ export function calculateRoomLoad(input: RoomLoadInput): RoomLoadResult {
   const assumptions: string[] = [];
   const warnings: string[] = [];
   
-  const { squareFeet, ceilingHeight, exteriorWallCount, windowCount, insulationQuality, sunExposure, globalSettings } = input;
+  const room = input.room;
+  const globalSettings = input.globalSettings;
+
+  const squareFeet = room.squareFeet || 0;
+  const ceilingHeight = Number(room.ceilingHeight) || 0;
+
+  const exteriorWallCount = room.exteriorWallsCount !== undefined
+    ? (Number(room.exteriorWallsCount) || 0)
+    : (room.boundaryEdges?.filter((edge) => edge.boundaryType === "exterior").length ?? 0);
+
+  let windowCount = 0;
+  if (room.windowsCount !== undefined) {
+    windowCount = Number(room.windowsCount) || 0;
+  } else {
+    room.boundaryEdges?.forEach((edge) => {
+      windowCount += edge.openings?.filter((op) => op.type === "window" && op.isVerified).length || 0;
+    });
+  }
+
+  const insulationQuality = room.insulationLevel || "average";
+  const sunExposure = room.sunExposure || "medium";
+
 
   // 1. Geometry Verification
   if (squareFeet <= 0) warnings.push("Room square footage is zero; calculation results will be invalid.");
@@ -126,8 +140,8 @@ export function calculateRoomLoad(input: RoomLoadInput): RoomLoadResult {
   const confidence = (exteriorWallCount > 0 && windowCount > 0 && squareFeet > 10) ? "high" : "medium";
 
   return {
-    roomId: input.roomId,
-    roomName: input.roomName,
+    roomId: room.id,
+    roomName: room.name,
     sensibleBTU,
     heatingBTU: totalHeatingBTU,
     coolingBTU: totalCoolingBTU,
