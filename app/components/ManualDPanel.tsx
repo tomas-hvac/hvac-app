@@ -383,6 +383,14 @@ export default function ManualDPanel({
   }, [currentProjectState, onProjectStateChange]);
 
   useEffect(() => {
+    const incomingBlueprintRoomIds = new Set(blueprintRooms.map((room) => room.id));
+    const removedBlueprintRoomIds = new Set<string>();
+    processedBlueprintRoomIds.current.forEach((id) => {
+      if (!incomingBlueprintRoomIds.has(id)) {
+        removedBlueprintRoomIds.add(id);
+      }
+    });
+
     const newBlueprintRooms = blueprintRooms.filter(
       (room) => !processedBlueprintRoomIds.current.has(room.id)
     );
@@ -390,11 +398,19 @@ export default function ManualDPanel({
       (room) => processedBlueprintRoomIds.current.has(room.id)
     );
 
-    if (newBlueprintRooms.length === 0 && updatedBlueprintRooms.length === 0) return;
+    if (newBlueprintRooms.length === 0 && updatedBlueprintRooms.length === 0 && removedBlueprintRoomIds.size === 0) return;
 
     setRooms((currentRooms) => {
-      // 1. Update existing rooms
-      const updatedRooms = currentRooms.map((r) => {
+      // 1. Prune rooms sourced from deleted blueprint rooms
+      const remainingRooms = currentRooms.filter((r) => {
+        if (r.blueprintSourceRoomId && removedBlueprintRoomIds.has(r.blueprintSourceRoomId)) {
+          return false;
+        }
+        return true;
+      });
+
+      // 2. Update existing rooms
+      const updatedRooms = remainingRooms.map((r) => {
         const br = updatedBlueprintRooms.find((u) => u.id === r.id);
         if (!br) return r;
 
@@ -419,7 +435,7 @@ export default function ManualDPanel({
         };
       });
 
-      // 2. Add new rooms
+      // 3. Add new rooms
       const addedRooms = newBlueprintRooms.map((room) => ({
         ...createDefaultRoom(
           `manual-d-${room.id}`,
@@ -440,6 +456,10 @@ export default function ManualDPanel({
 
     newBlueprintRooms.forEach((room) => {
       processedBlueprintRoomIds.current.add(room.id);
+    });
+
+    removedBlueprintRoomIds.forEach((id) => {
+      processedBlueprintRoomIds.current.delete(id);
     });
   }, [blueprintRooms]);
 

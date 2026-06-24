@@ -1959,6 +1959,12 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     setSelectedBlueprintBoundaryEdge((currentEdge) =>
       currentEdge?.outlineId === outlineId ? null : currentEdge
     );
+    if (selectedDetectedRoomId === outlineId) {
+      setSelectedDetectedRoomId(null);
+    }
+    setBlueprintRoomsForManualD((rooms) =>
+      rooms.filter((r) => r.sourceBlueprintRoomId !== outlineId)
+    );
     setBlueprintRoomTrace((currentTrace) => removeBlueprintRoomOutline(currentTrace, outlineId));
   };
 
