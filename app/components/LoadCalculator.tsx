@@ -7348,29 +7348,56 @@ const averageTonnage = (minTon + maxTon) / 2;
               }
 
               // 5. Engineering Insights Logic (Copilot V2)
-              let largestTracedRoomName = "";
-              let largestTracedArea = 0;
+              const engineeringInsights = [];
+
+              // Rule 6: Scale check confidence
+              if (blueprintCalibration.status === "calibrated" && scaleCheckResult) {
+                if (scaleCheckResult.isPassed) {
+                  engineeringInsights.push("Scale check passed. Room measurements are ready for engineering use.");
+                } else {
+                  engineeringInsights.push("Scale check variance is high. Recheck scale before trusting room loads.");
+                }
+              }
+
+              // Rule 4: Largest room
+              let largestRoomName = "";
+              let largestArea = 0;
               tracedRoomsWithSqft.forEach(r => {
-                const area = r.squareFeet ?? 0;
-                if (area > largestTracedArea) {
-                  largestTracedArea = area;
-                  largestTracedRoomName = r.name || "Unnamed Room";
+                if ((r.squareFeet ?? 0) > largestArea) {
+                  largestArea = r.squareFeet ?? 0;
+                  largestRoomName = r.name || "Unnamed Room";
                 }
               });
+              if (largestArea > 0) {
+                engineeringInsights.push(`${largestRoomName} is the largest traced room at ${Math.round(largestArea)} sq ft. It may drive a larger share of airflow.`);
+              }
 
-              let roomWithMostExtWallsName = "";
-              let mostExtWallsCount = 0;
-              tracedRoomsWithSqft.forEach(r => {
-                const extWalls = (r.boundaryEdges ?? []).filter(e => e.boundaryType === "exterior").length;
-                if (extWalls > mostExtWallsCount) {
-                  mostExtWallsCount = extWalls;
-                  roomWithMostExtWallsName = r.name || "Unnamed Room";
-                }
+              // Rule 1: Exterior walls with 0 verified openings
+              const roomsWithExtWallsButNoOpenings = tracedRoomsWithSqft.filter(r => {
+                const hasExtWalls = (r.boundaryEdges ?? []).some(e => e.boundaryType === "exterior");
+                if (!hasExtWalls) return false;
+                const openingsCount = (r.boundaryEdges ?? [])
+                  .filter(e => e.boundaryType === "exterior")
+                  .flatMap(e => e.openings ?? [])
+                  .length;
+                return openingsCount === 0;
+              });
+              roomsWithExtWallsButNoOpenings.forEach(r => {
+                engineeringInsights.push(`I noticed ${r.name || "Unnamed Room"} has exterior walls but no verified windows or doors. If this wall is blank, approve it as No W/D Here. Otherwise add the missing window or exterior door.`);
               });
 
-              let roomWithMostVerifiedOpeningAreaName = "";
-              let mostVerifiedOpeningArea = 0;
-              tracedRoomsWithSqft.forEach(r => {
+              // Rule 2: Rooms with multiple exterior exposures (2+ exterior walls)
+              const roomsWithMultipleExposures = tracedRoomsWithSqft.filter(r => {
+                const extWallsCount = (r.boundaryEdges ?? []).filter(e => e.boundaryType === "exterior").length;
+                return extWallsCount >= 2;
+              });
+              roomsWithMultipleExposures.forEach(r => {
+                engineeringInsights.push(`${r.name || "Unnamed Room"} has multiple exterior exposures. Double-check wall classification and insulation assumptions.`);
+              });
+
+              // Rule 3: High glazing ratio (> 15% of room area)
+              const roomsWithHighGlazing = tracedRoomsWithSqft.filter(r => {
+                if (!r.squareFeet || r.squareFeet <= 0) return false;
                 let openingArea = 0;
                 (r.boundaryEdges ?? []).forEach(e => {
                   if (e.boundaryType === "exterior") {
@@ -7381,38 +7408,20 @@ const averageTonnage = (minTon + maxTon) / 2;
                     });
                   }
                 });
-                if (openingArea > mostVerifiedOpeningArea) {
-                  mostVerifiedOpeningArea = openingArea;
-                  roomWithMostVerifiedOpeningAreaName = r.name || "Unnamed Room";
-                }
+                return (openingArea / r.squareFeet) > 0.15;
+              });
+              roomsWithHighGlazing.forEach(r => {
+                engineeringInsights.push(`${r.name || "Unnamed Room"} has a high glass/opening ratio. This may increase cooling load.`);
               });
 
-              const roomsWithExtWallsButNoOpenings = tracedRoomsWithSqft.filter(r => {
-                const hasExtWalls = (r.boundaryEdges ?? []).some(e => e.boundaryType === "exterior");
-                if (!hasExtWalls) return false;
-                const openingsCount = (r.boundaryEdges ?? [])
-                  .filter(e => e.boundaryType === "exterior")
-                  .flatMap(e => e.openings ?? [])
-                  .length;
-                return openingsCount === 0;
-              });
+              // Rule 5: Manual D pending (avoiding duplicating blocking issues)
+              const isEquipmentSizingBlocked = blockingIssues.some(msg => msg.toLowerCase().includes("equipment") || msg.toLowerCase().includes("sizing"));
+              if (tracedRoomsWithSqft.length > 0 && systemTons <= 0 && !isEquipmentSizingBlocked) {
+                engineeringInsights.push("Enter equipment size so I can calculate required room airflow and duct sizing.");
+              }
 
-              const engineeringInsights = [];
-              if (largestTracedArea > 0) {
-                engineeringInsights.push(`${largestTracedRoomName} is the largest room (${Math.round(largestTracedArea)} sqft).`);
-              }
-              if (mostExtWallsCount > 0) {
-                engineeringInsights.push(`${roomWithMostExtWallsName} has the most exterior wall exposure (${mostExtWallsCount} walls).`);
-              }
-              if (mostVerifiedOpeningArea > 0) {
-                engineeringInsights.push(`${roomWithMostVerifiedOpeningAreaName} has the largest window/door takeoff area (${Math.round(mostVerifiedOpeningArea)} sqft).`);
-              }
-              roomsWithExtWallsButNoOpenings.forEach(r => {
-                engineeringInsights.push(`Verify whether the exterior walls in ${r.name || "Unnamed Room"} have no windows or doors.`);
-              });
-              if (tracedRoomsWithSqft.length > 0 && systemTons <= 0) {
-                engineeringInsights.push("Enter equipment size to calculate required room airflow.");
-              }
+              // Limit insights to the most relevant 3-5 items
+              const visibleInsights = engineeringInsights.slice(0, 5);
 
               // Next Best Action Priority Logic
               let nextActionTitle = "";
@@ -7506,12 +7515,12 @@ const averageTonnage = (minTon + maxTon) / 2;
                     )}
 
                     {/* Engineering Insights */}
-                    {engineeringInsights.length > 0 && (
+                    {visibleInsights.length > 0 && (
                       <div style={{ marginTop: "4px", padding: "10px", background: "rgba(56, 189, 248, 0.03)", borderLeft: "2px solid #0284c7", borderRadius: "4px", display: "grid", gap: "6px" }}>
                         <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Engineering Insights:
+                          What I’m noticing:
                         </p>
-                        {engineeringInsights.map((text, idx) => (
+                        {visibleInsights.map((text, idx) => (
                           <p key={idx} style={{ margin: 0, fontSize: "11px", color: "#cbd5e1", lineHeight: 1.4 }}>
                             💡 {text}
                           </p>
