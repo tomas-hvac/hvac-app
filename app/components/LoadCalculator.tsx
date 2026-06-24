@@ -7270,8 +7270,266 @@ const averageTonnage = (minTon + maxTon) / 2;
               const totalCount = checklistItems.length;
               const progressPercent = Math.round((completedCount / totalCount) * 100);
 
+              // 4. Copilot Analytics & Next Action Priority Logic
+              const totalExteriorWalls = tracedRoomsWithSqft.reduce((acc, r) => {
+                return acc + (r.boundaryEdges ?? []).filter(e => e.boundaryType === "exterior").length;
+              }, 0);
+
+              let verifiedWindowsCount = 0;
+              let verifiedDoorsCount = 0;
+              tracedRoomsWithSqft.forEach(r => {
+                (r.boundaryEdges ?? []).forEach(e => {
+                  if (e.boundaryType === "exterior") {
+                    (e.openings ?? []).forEach(op => {
+                      if (op.isVerified) {
+                        if (op.type === "window") verifiedWindowsCount++;
+                        else if (op.type === "door") verifiedDoorsCount++;
+                      }
+                    });
+                  }
+                });
+              });
+
+              const roomsWithUnknownWalls = tracedRoomsWithSqft.filter(r =>
+                (r.boundaryEdges ?? []).some(e => e.boundaryType === "unknown")
+              );
+
+              const roomsWithUnverifiedOpenings = tracedRoomsWithSqft.filter(r =>
+                (r.boundaryEdges ?? [])
+                  .filter(e => e.boundaryType === "exterior")
+                  .flatMap(e => e.openings ?? [])
+                  .some(op => !op.isVerified)
+              );
+
+              const unsyncedRoomNames = tracedRoomsWithSqft
+                .filter(r => !blueprintRoomsForManualD.some(br => br.sourceBlueprintRoomId === r.id))
+                .map(r => r.name || "Unnamed Room");
+
+              // Findings statements (Assistant Tone)
+              const findingsText = [];
+              if (!blueprintFile) {
+                findingsText.push("I don't see a blueprint file loaded for this project yet.");
+              } else {
+                findingsText.push(`I found ${tracedRoomsWithSqft.length} traced room${tracedRoomsWithSqft.length === 1 ? "" : "s"} and ${totalExteriorWalls} exterior wall${totalExteriorWalls === 1 ? "" : "s"} on the blueprint.`);
+                if (blueprintCalibration.status === "calibrated") {
+                  findingsText.push("The reference scale is calibrated.");
+                } else {
+                  findingsText.push("The calibration scale is missing.");
+                }
+                if (scaleCheckResult) {
+                  if (scaleCheckResult.isPassed) {
+                    findingsText.push(`Scale check verified: measured ${scaleCheckResult.measuredFeet?.toFixed(1)} ft matches expected ${scaleCheckResult.expectedFeet?.toFixed(1)} ft.`);
+                  } else {
+                    findingsText.push(`Scale check warning: measured ${scaleCheckResult.measuredFeet?.toFixed(1)} ft deviates from expected ${scaleCheckResult.expectedFeet?.toFixed(1)} ft.`);
+                  }
+                }
+                if (verifiedWindowsCount > 0 || verifiedDoorsCount > 0) {
+                  findingsText.push(`I see ${verifiedWindowsCount} verified window${verifiedWindowsCount === 1 ? "" : "s"} and ${verifiedDoorsCount} verified door${verifiedDoorsCount === 1 ? "" : "s"}.`);
+                }
+              }
+
+              // Attention Items (Copilot V2)
+              const attentionText = [];
+              if (roomsWithUnknownWalls.length > 0) {
+                const unclassifiedWallsCount = tracedRoomsWithSqft.reduce((acc, r) => acc + (r.boundaryEdges ?? []).filter(e => e.boundaryType === "unknown").length, 0);
+                attentionText.push(`${unclassifiedWallsCount} wall${unclassifiedWallsCount === 1 ? "" : "s"} need exposure classification (e.g. in ${roomsWithUnknownWalls[0].name || "Unnamed"}).`);
+              }
+              if (roomsWithUnverifiedOpenings.length > 0) {
+                const unverifiedWallCount = roomsWithUnverifiedOpenings.reduce((acc, r) => {
+                  return acc + (r.boundaryEdges ?? []).filter(e => e.boundaryType === "exterior" && (e.openings ?? []).some(op => !op.isVerified)).length;
+                }, 0);
+                attentionText.push(`${unverifiedWallCount} exterior wall${unverifiedWallCount === 1 ? "" : "s"} still need Windows & Doors review.`);
+              }
+              if (unsyncedRoomNames.length > 0) {
+                attentionText.push(`${unsyncedRoomNames.length} room${unsyncedRoomNames.length === 1 ? "" : "s"} not synced to Manual J yet.`);
+              }
+              if (tracedRoomsWithSqft.length > 0 && systemTons <= 0) {
+                attentionText.push("Equipment size is missing in Manual D, blocking CFM calculation.");
+              }
+
+              // 5. Engineering Insights Logic (Copilot V2)
+              let largestTracedRoomName = "";
+              let largestTracedArea = 0;
+              tracedRoomsWithSqft.forEach(r => {
+                const area = r.squareFeet ?? 0;
+                if (area > largestTracedArea) {
+                  largestTracedArea = area;
+                  largestTracedRoomName = r.name || "Unnamed Room";
+                }
+              });
+
+              let roomWithMostExtWallsName = "";
+              let mostExtWallsCount = 0;
+              tracedRoomsWithSqft.forEach(r => {
+                const extWalls = (r.boundaryEdges ?? []).filter(e => e.boundaryType === "exterior").length;
+                if (extWalls > mostExtWallsCount) {
+                  mostExtWallsCount = extWalls;
+                  roomWithMostExtWallsName = r.name || "Unnamed Room";
+                }
+              });
+
+              let roomWithMostVerifiedOpeningAreaName = "";
+              let mostVerifiedOpeningArea = 0;
+              tracedRoomsWithSqft.forEach(r => {
+                let openingArea = 0;
+                (r.boundaryEdges ?? []).forEach(e => {
+                  if (e.boundaryType === "exterior") {
+                    (e.openings ?? []).forEach(op => {
+                      if (op.isVerified) {
+                        openingArea += (op.widthFeet || 0) * (op.heightFeet || 0);
+                      }
+                    });
+                  }
+                });
+                if (openingArea > mostVerifiedOpeningArea) {
+                  mostVerifiedOpeningArea = openingArea;
+                  roomWithMostVerifiedOpeningAreaName = r.name || "Unnamed Room";
+                }
+              });
+
+              const roomsWithExtWallsButNoOpenings = tracedRoomsWithSqft.filter(r => {
+                const hasExtWalls = (r.boundaryEdges ?? []).some(e => e.boundaryType === "exterior");
+                if (!hasExtWalls) return false;
+                const openingsCount = (r.boundaryEdges ?? [])
+                  .filter(e => e.boundaryType === "exterior")
+                  .flatMap(e => e.openings ?? [])
+                  .length;
+                return openingsCount === 0;
+              });
+
+              const engineeringInsights = [];
+              if (largestTracedArea > 0) {
+                engineeringInsights.push(`${largestTracedRoomName} is the largest room (${Math.round(largestTracedArea)} sqft).`);
+              }
+              if (mostExtWallsCount > 0) {
+                engineeringInsights.push(`${roomWithMostExtWallsName} has the most exterior wall exposure (${mostExtWallsCount} walls).`);
+              }
+              if (mostVerifiedOpeningArea > 0) {
+                engineeringInsights.push(`${roomWithMostVerifiedOpeningAreaName} has the largest window/door takeoff area (${Math.round(mostVerifiedOpeningArea)} sqft).`);
+              }
+              roomsWithExtWallsButNoOpenings.forEach(r => {
+                engineeringInsights.push(`Verify whether the exterior walls in ${r.name || "Unnamed Room"} have no windows or doors.`);
+              });
+              if (tracedRoomsWithSqft.length > 0 && systemTons <= 0) {
+                engineeringInsights.push("Enter equipment size to calculate required room airflow.");
+              }
+
+              // Next Best Action Priority Logic
+              let nextActionTitle = "";
+              let nextBestActionText = "";
+              if (!blueprintFile) {
+                nextActionTitle = "Upload Blueprint";
+                nextBestActionText = "Next: Upload the project blueprint image.";
+              } else if (blueprintCalibration.status !== "calibrated") {
+                nextActionTitle = "Calibrate Scale";
+                nextBestActionText = "Next: Calibrate the blueprint scale.";
+              } else if (tracedRoomsWithSqft.length === 0) {
+                nextActionTitle = "Trace First Room";
+                nextBestActionText = "Next: Trace the first room boundary on the blueprint.";
+              } else if (roomsWithUnknownWalls.length > 0) {
+                const targetRoom = roomsWithUnknownWalls[0].name || "Unnamed Room";
+                nextActionTitle = `Classify Exterior Walls`;
+                nextBestActionText = `Next: Classify exterior walls for ${targetRoom}.`;
+              } else if (roomsWithUnverifiedOpenings.length > 0) {
+                const targetRoom = roomsWithUnverifiedOpenings[0].name || "Unnamed Room";
+                nextActionTitle = `Verify Windows & Doors`;
+                nextBestActionText = `Next: Verify Windows & Doors for ${targetRoom}.`;
+              } else if (unsyncedRoomNames.length > 0) {
+                nextActionTitle = "Sync with Manual J";
+                nextBestActionText = "Next: Sync takeoff geometry with Manual J calculations.";
+              } else if (systemTons <= 0) {
+                nextActionTitle = "Enter Equipment Size";
+                nextBestActionText = "Next: Enter equipment size so I can calculate room airflow.";
+              } else {
+                nextActionTitle = "Generate Proposal/Report";
+                nextBestActionText = "Next: Generate the final proposal and design reports.";
+              }
+
               return (
                 <>
+                  {/* PROJECT COPILOT CARD */}
+                  <div style={{
+                    background: "rgba(30, 41, 59, 0.25)",
+                    border: "1px solid rgba(56, 189, 248, 0.15)",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    display: "grid",
+                    gap: "12px",
+                    marginBottom: "16px"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Sparkles size={16} color="#38bdf8" />
+                      <p style={{ margin: 0, fontSize: "11px", fontWeight: 900, color: "#38bdf8", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                        Project Copilot
+                      </p>
+                    </div>
+
+                    {/* Snapshot Grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", background: "rgba(255,255,255,0.02)", padding: "10px", borderRadius: "10px" }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>TRACED ROOMS</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "11px", fontWeight: 700, color: "#f1f5f9" }}>{tracedRoomsWithSqft.length}</p>
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>EXTERIOR WALLS</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "11px", fontWeight: 700, color: "#f1f5f9" }}>{totalExteriorWalls}</p>
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>VERIFIED OPENINGS</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "11px", fontWeight: 700, color: "#f1f5f9" }}>{verifiedWindowsCount} W / {verifiedDoorsCount} D</p>
+                      </div>
+                      <div>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>READINESS PROGRESS</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "11px", fontWeight: 700, color: progressPercent === 100 ? "#4ade80" : "#38bdf8" }}>{progressPercent}%</p>
+                      </div>
+                      <div style={{ gridColumn: "span 2" }}>
+                        <p style={{ margin: 0, fontSize: "9px", color: "#64748b", fontWeight: 800 }}>CALIBRATION & SCALE CHECK</p>
+                        <p style={{ margin: "2px 0 0", fontSize: "11px", fontWeight: 700, color: "#f1f5f9" }}>
+                          {blueprintCalibration.status === "calibrated" ? "Calibrated" : "Uncalibrated"}
+                          {scaleCheckResult ? ` | Scale Check: ${scaleCheckResult.isPassed ? "Passed" : "Warning"}` : " | Scale Check: Pending"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Attention Items */}
+                    {attentionText.length > 0 && (
+                      <div style={{ marginTop: "4px", padding: "10px", background: "rgba(251, 191, 36, 0.04)", borderLeft: "2px solid #fbbf24", borderRadius: "4px", display: "grid", gap: "6px" }}>
+                        <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#fde68a", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Attention Needed:
+                        </p>
+                        {attentionText.map((text, idx) => (
+                          <p key={idx} style={{ margin: 0, fontSize: "11px", color: "#cbd5e1", lineHeight: 1.4 }}>
+                            ⚠️ {text}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Engineering Insights */}
+                    {engineeringInsights.length > 0 && (
+                      <div style={{ marginTop: "4px", padding: "10px", background: "rgba(56, 189, 248, 0.03)", borderLeft: "2px solid #0284c7", borderRadius: "4px", display: "grid", gap: "6px" }}>
+                        <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#7dd3fc", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Engineering Insights:
+                        </p>
+                        {engineeringInsights.map((text, idx) => (
+                          <p key={idx} style={{ margin: 0, fontSize: "11px", color: "#cbd5e1", lineHeight: 1.4 }}>
+                            💡 {text}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Suggested Next Action */}
+                    <div style={{ marginTop: "4px", padding: "10px", background: "rgba(56, 189, 248, 0.05)", borderLeft: "2px solid #38bdf8", borderRadius: "4px" }}>
+                      <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        Suggested Copilot Action:
+                      </p>
+                      <p style={{ margin: "4px 0 0 0", fontSize: "12px", fontWeight: 800, color: "#f8fafc" }}>
+                        {nextBestActionText}
+                      </p>
+                    </div>
+                  </div>
+
                   {/* 1. PROJECT READINESS STATUS CARD */}
                   <div style={{
                     background: "rgba(15, 23, 42, 0.4)",
