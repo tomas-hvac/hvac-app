@@ -2221,6 +2221,103 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
     }));
   };
 
+  const executeCopilotAction = (actionType: string, payload?: { roomId?: string; edgeIndex?: number }) => {
+    switch (actionType) {
+      case "GOTO_CALIBRATION":
+        dispatchProjectEngineActionRef.current?.({ type: "SET_STAGE", stage: "CALIBRATION" });
+        setActiveTechnicianSection("manual-room-takeoff");
+        setBlueprintWorkspaceMode("manual-trace");
+        setActiveGuidedWorkflow(null);
+        setProjectActionMessage("Navigated to blueprint calibration scale.");
+        break;
+      case "TRACE_FIRST_ROOM":
+        dispatchProjectEngineActionRef.current?.({ type: "SET_STAGE", stage: "TAKEOFF" });
+        setActiveTechnicianSection("manual-room-takeoff");
+        setBlueprintWorkspaceMode("manual-trace");
+        setActiveGuidedWorkflow(null);
+        setProjectActionMessage("Ready to trace the first room outline.");
+        break;
+      case "CLASSIFY_WALLS": {
+        const roomId = payload?.roomId;
+        const targetRoom = roomId
+          ? tracedRoomsWithSqft.find(r => r.id === roomId)
+          : tracedRoomsWithSqft.find(r => {
+              const edges = r.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(r.points);
+              return edges.some(e => e.boundaryType === "unknown");
+            });
+
+        if (targetRoom) {
+          const edges = targetRoom.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(targetRoom.points);
+          const firstUnknownIdx = payload?.edgeIndex !== undefined
+            ? payload.edgeIndex
+            : edges.findIndex(e => e.boundaryType === "unknown");
+
+          setSelectedDetectedRoomId(targetRoom.id);
+          setSelectedBlueprintBoundaryEdge({
+            outlineId: targetRoom.id,
+            edgeIndex: firstUnknownIdx !== -1 ? firstUnknownIdx : 0
+          });
+          setActiveGuidedWorkflow("classify-walls");
+          setBlueprintWorkspaceMode("manual-trace");
+          setActiveTechnicianSection("manual-room-takeoff");
+          setProjectActionMessage(`Opening ${targetRoom.name || "Unnamed Room"} for exterior wall classification.`);
+        }
+        break;
+      }
+      case "VERIFY_WINDOWS_DOORS": {
+        const roomId = payload?.roomId;
+        const targetRoom = roomId
+          ? tracedRoomsWithSqft.find(r => r.id === roomId)
+          : tracedRoomsWithSqft.find(r => {
+              const edges = r.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(r.points);
+              return edges
+                .filter(e => e.boundaryType === "exterior")
+                .flatMap(e => e.openings ?? [])
+                .some(op => !op.isVerified);
+            });
+
+        if (targetRoom) {
+          const edges = targetRoom.boundaryEdges ?? createDefaultBlueprintRoomBoundaryEdges(targetRoom.points);
+          const firstUnverifiedIdx = payload?.edgeIndex !== undefined
+            ? payload.edgeIndex
+            : edges.findIndex(e =>
+                e.boundaryType === "exterior" && (e.openings ?? []).some(op => !op.isVerified)
+              );
+
+          setSelectedDetectedRoomId(targetRoom.id);
+          setSelectedBlueprintBoundaryEdge({
+            outlineId: targetRoom.id,
+            edgeIndex: firstUnverifiedIdx !== -1 ? firstUnverifiedIdx : 0
+          });
+          setActiveGuidedWorkflow("verify-openings");
+          setBlueprintWorkspaceMode("manual-trace");
+          setActiveTechnicianSection("manual-room-takeoff");
+          setProjectActionMessage(`Opening ${targetRoom.name || "Unnamed Room"} for Windows & Doors verification.`);
+        }
+        break;
+      }
+      case "SYNC_MANUAL_J":
+        if (payload?.roomId) {
+          sendTracedRoomToManualD(payload.roomId);
+        } else {
+          sendAllVerifiedRoomsToManualJ();
+        }
+        break;
+      case "ENTER_EQUIPMENT_SIZE":
+        dispatchProjectEngineActionRef.current?.({ type: "SET_STAGE", stage: "DUCT_DESIGN" });
+        setActiveTechnicianSection("manual-d");
+        setProjectActionMessage("Navigated to Manual D equipment sizing.");
+        break;
+      case "GENERATE_REPORT":
+        dispatchProjectEngineActionRef.current?.({ type: "SET_STAGE", stage: "REPORT" });
+        setActiveTechnicianSection("reports");
+        setProjectActionMessage("Navigating to final design reports.");
+        break;
+      default:
+        console.warn("Unhandled copilot action", actionType);
+    }
+  };
+
   const sendTracedRoomToManualD = (outlineId: string) => {
     const tracedRoom = tracedRoomsWithSqft.find((outline) => outline.id === outlineId);
     const tracedSquareFeet = tracedRoom?.squareFeet;
@@ -7426,32 +7523,48 @@ const averageTonnage = (minTon + maxTon) / 2;
               // Next Best Action Priority Logic
               let nextActionTitle = "";
               let nextBestActionText = "";
+              let copilotActionType: string | null = null;
+              let copilotActionLabel = "";
               if (!blueprintFile) {
                 nextActionTitle = "Upload Blueprint";
                 nextBestActionText = "Next: Upload the project blueprint image.";
               } else if (blueprintCalibration.status !== "calibrated") {
                 nextActionTitle = "Calibrate Scale";
                 nextBestActionText = "Next: Calibrate the blueprint scale.";
+                copilotActionType = "GOTO_CALIBRATION";
+                copilotActionLabel = "Calibrate";
               } else if (tracedRoomsWithSqft.length === 0) {
                 nextActionTitle = "Trace First Room";
                 nextBestActionText = "Next: Trace the first room boundary on the blueprint.";
+                copilotActionType = "TRACE_FIRST_ROOM";
+                copilotActionLabel = "Trace Room";
               } else if (roomsWithUnknownWalls.length > 0) {
                 const targetRoom = roomsWithUnknownWalls[0].name || "Unnamed Room";
                 nextActionTitle = `Classify Exterior Walls`;
                 nextBestActionText = `Next: Classify exterior walls for ${targetRoom}.`;
+                copilotActionType = "CLASSIFY_WALLS";
+                copilotActionLabel = "Classify Walls";
               } else if (roomsWithUnverifiedOpenings.length > 0) {
                 const targetRoom = roomsWithUnverifiedOpenings[0].name || "Unnamed Room";
                 nextActionTitle = `Verify Windows & Doors`;
                 nextBestActionText = `Next: Verify Windows & Doors for ${targetRoom}.`;
+                copilotActionType = "VERIFY_WINDOWS_DOORS";
+                copilotActionLabel = "Verify Windows & Doors";
               } else if (unsyncedRoomNames.length > 0) {
                 nextActionTitle = "Sync with Manual J";
                 nextBestActionText = "Next: Sync takeoff geometry with Manual J calculations.";
+                copilotActionType = "SYNC_MANUAL_J";
+                copilotActionLabel = "Sync Manual J";
               } else if (systemTons <= 0) {
                 nextActionTitle = "Enter Equipment Size";
                 nextBestActionText = "Next: Enter equipment size so I can calculate room airflow.";
+                copilotActionType = "ENTER_EQUIPMENT_SIZE";
+                copilotActionLabel = "Enter Equipment Size";
               } else {
                 nextActionTitle = "Generate Proposal/Report";
                 nextBestActionText = "Next: Generate the final proposal and design reports.";
+                copilotActionType = "GENERATE_REPORT";
+                copilotActionLabel = "Generate Report";
               }
 
               return (
@@ -7529,13 +7642,50 @@ const averageTonnage = (minTon + maxTon) / 2;
                     )}
 
                     {/* Suggested Next Action */}
-                    <div style={{ marginTop: "4px", padding: "10px", background: "rgba(56, 189, 248, 0.05)", borderLeft: "2px solid #38bdf8", borderRadius: "4px" }}>
-                      <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        Suggested Copilot Action:
-                      </p>
-                      <p style={{ margin: "4px 0 0 0", fontSize: "12px", fontWeight: 800, color: "#f8fafc" }}>
-                        {nextBestActionText}
-                      </p>
+                    <div style={{
+                      marginTop: "4px",
+                      padding: "10px",
+                      background: "rgba(56, 189, 248, 0.05)",
+                      borderLeft: "2px solid #38bdf8",
+                      borderRadius: "4px",
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px"
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontSize: "10px", fontWeight: 800, color: "#38bdf8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                          Suggested Copilot Action:
+                        </p>
+                        <p style={{ margin: "4px 0 0 0", fontSize: "12px", fontWeight: 800, color: "#f8fafc" }}>
+                          {nextBestActionText}
+                        </p>
+                      </div>
+                      {copilotActionType && (
+                        <button
+                          type="button"
+                          onClick={() => executeCopilotAction(copilotActionType!)}
+                          style={{
+                            flexShrink: 0,
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            background: "rgba(56, 189, 248, 0.15)",
+                            color: "#e0f2fe",
+                            border: "1px solid rgba(56, 189, 248, 0.3)",
+                            fontWeight: 800,
+                            fontSize: "11px",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px"
+                          }}
+                        >
+                          {copilotActionLabel}
+                          <ArrowRight size={12} />
+                        </button>
+                      )}
                     </div>
                   </div>
 
