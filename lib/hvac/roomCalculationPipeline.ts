@@ -25,7 +25,7 @@ export type UnifiedHvacRoom = {
   confidenceStatus: UnifiedHvacRoomStatus;
 };
 
-export type ManualDBlueprintRoomOutput = EngineeringRoom;
+
 
 type RoomCalculationContext = {
   totalHomeSquareFeet?: number;

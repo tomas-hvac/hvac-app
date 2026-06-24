@@ -12,8 +12,6 @@ import {
 } from "@/lib/hvac/manualD";
 import type { EngineeringRoom } from "@/lib/hvac/blueprintRoomTracing";
 
-export type ManualDBlueprintRoom = EngineeringRoom;
-
 export type ManualDPanelSection = "manual-d" | "room-airflow" | "return-air" | "reports" | "hidden";
 
 export type ManualDProjectSettings = {
@@ -38,7 +36,7 @@ export type ManualDProjectState = {
 
 type ManualDPanelProps = {
   squareFeet: string;
-  blueprintRooms?: ManualDBlueprintRoom[];
+  blueprintRooms?: EngineeringRoom[];
   activeSection?: ManualDPanelSection;
   selectedBlueprintRoomId?: string | null;
   onBlueprintRoomSelect?: (roomId: string) => void;

@@ -42,6 +42,7 @@ import {
   type BlueprintOpeningType,
   type BlueprintWallOpening,
   type SuggestedRoomIntelligence,
+  type EngineeringRoom,
 } from "@/lib/hvac/blueprintRoomTracing";
 import { calculateRoomReadiness } from "@/lib/hvac/roomReadiness";
 import {
@@ -77,7 +78,7 @@ import { saveBlueprintAsset, getBlueprintAsset } from "@/lib/hvac/blueprintAsset
 import { loadPDFDocument, renderPDFPageToDataURL } from "@/lib/hvac/pdfRenderingService";
 import { calculateResidentialAirflow, recommendRoundDuctSize } from "@/lib/hvac/manualD";
 import ManualDPanel from "./ManualDPanel";
-import type { ManualDBlueprintRoom, ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
+import type { ManualDPanelSection, ManualDProjectState } from "./ManualDPanel";
 import { ProjectEngineProvider } from "./project/ProjectEngineProvider";
 import { useProjectEngine } from "./project/useProjectEngine";
 import { prepareEngineStateForSave } from "@/lib/hvac/engine/projectEnginePersistence";
@@ -285,7 +286,7 @@ type SavedLoadCalculatorState = {
   blueprintCeilingHeight: string;
   blueprintFloorLevel: string;
   blueprintFileName: string;
-  blueprintRoomsForManualD: ManualDBlueprintRoom[];
+  blueprintRoomsForManualD: EngineeringRoom[];
 };
 
 type SavedProject = {
@@ -627,7 +628,7 @@ export default function LoadCalculator({ onResultChange }: { onResultChange?: (r
   const [selectedBlueprintBoundaryEdge, setSelectedBlueprintBoundaryEdge] =
     useState<SelectedBlueprintBoundaryEdge | null>(null);
   const [detectedRoomActionMessage, setDetectedRoomActionMessage] = useState("");
-  const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<ManualDBlueprintRoom[]>([]);
+  const [blueprintRoomsForManualD, setBlueprintRoomsForManualD] = useState<EngineeringRoom[]>([]);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [manualDProjectState, setManualDProjectState] = useState<ManualDProjectState | null>(null);
   const [loadedManualDProjectState, setLoadedManualDProjectState] = useState<ManualDProjectState | null>(null);
