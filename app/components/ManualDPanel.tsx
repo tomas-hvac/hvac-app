@@ -391,8 +391,9 @@ export default function ManualDPanel({
 
     setRooms((currentRooms) => {
       // 1. Prune rooms sourced from deleted blueprint rooms
+      const incomingSourceRoomIds = new Set(blueprintRooms.map((room) => room.sourceBlueprintRoomId).filter(Boolean));
       const remainingRooms = currentRooms.filter((r) => {
-        if (r.blueprintSourceRoomId && removedBlueprintRoomIds.has(r.blueprintSourceRoomId)) {
+        if (r.blueprintSourceRoomId && !incomingSourceRoomIds.has(r.blueprintSourceRoomId)) {
           return false;
         }
         return true;
@@ -400,7 +401,7 @@ export default function ManualDPanel({
 
       // 2. Update existing rooms
       const updatedRooms = remainingRooms.map((r) => {
-        const br = updatedBlueprintRooms.find((u) => u.id === r.id || u.id === r.blueprintSourceRoomId);
+        const br = updatedBlueprintRooms.find((u) => u.sourceBlueprintRoomId === r.blueprintSourceRoomId || u.id === r.blueprintSourceRoomId);
         if (!br) return r;
 
         let totalWindowsArea = 0;
@@ -473,7 +474,7 @@ export default function ManualDPanel({
   const resolvedRooms = useMemo(() => {
     return rooms.map((room) => {
       if (!room.blueprintSourceRoomId) return room;
-      const br = blueprintRooms.find((b) => b.id === room.blueprintSourceRoomId);
+      const br = blueprintRooms.find((b) => b.sourceBlueprintRoomId === room.blueprintSourceRoomId || b.id === room.blueprintSourceRoomId);
       if (!br) return room;
 
       const exteriorWallsCount = br.exteriorWallsCount !== undefined
