@@ -51,6 +51,35 @@ export type BlueprintRoomOutline = {
   suggestions?: SuggestedRoomIntelligence;
 };
 
+export type RoomInsulationLevel = "poor" | "average" | "good";
+export type RoomSunExposure = "low" | "medium" | "high";
+
+export interface EngineeringRoom extends BlueprintRoomOutline {
+  // Envelope metrics
+  windowsCount?: string;
+  windowsArea?: string;
+  exteriorWallsCount?: string;
+
+  // Manual J specific inputs
+  insulationLevel?: RoomInsulationLevel;
+  sunExposure?: RoomSunExposure;
+
+  // Manual D inputs / technician overrides
+  supplyRegisterCount?: number;
+  squareFeetInput?: string;
+  windowsCountInput?: string;
+  windowsAreaInput?: string;
+  exteriorWallsCountInput?: string;
+  ceilingHeightInput?: string;
+  floorLevelInput?: string;
+  originalWindowsAreaInput?: string;
+
+  // Verification & Status
+  isVerified?: boolean;
+  sourceBlueprintRoomId?: string;
+}
+
+
 export type BlueprintRoomTraceState = {
   isTracing: boolean;
   draftPoints: BlueprintCalibrationPoint[];
