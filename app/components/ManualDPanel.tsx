@@ -481,23 +481,38 @@ export default function ManualDPanel({
         ? br.exteriorWallsCount
         : String(br.boundaryEdges?.filter((edge) => edge.boundaryType === "exterior").length ?? 0);
 
-      let totalWindowsCount = 0;
-      let totalWindowsArea = 0;
-      br.boundaryEdges?.forEach((edge) => {
-        const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
-        totalWindowsCount += windows.length;
-        windows.forEach((win) => {
-          totalWindowsArea += win.widthFeet * win.heightFeet;
+      let verifiedWindowCount = 0;
+      let verifiedWindowArea = 0;
+      let verifiedExteriorDoorCount = 0;
+      let verifiedExteriorDoorArea = 0;
+      const hasEdges = br.boundaryEdges && br.boundaryEdges.length > 0;
+
+      if (br.boundaryEdges && br.boundaryEdges.length > 0) {
+        br.boundaryEdges.forEach((edge) => {
+          if (edge.boundaryType === "exterior") {
+            edge.openings?.forEach((op) => {
+              if (op.isVerified) {
+                const area = op.widthFeet * op.heightFeet;
+                if (op.type === "window") {
+                  verifiedWindowCount++;
+                  verifiedWindowArea += area;
+                } else if (op.type === "door") {
+                  verifiedExteriorDoorCount++;
+                  verifiedExteriorDoorArea += area;
+                }
+              }
+            });
+          }
         });
-      });
+      }
 
-      const windowsCount = br.windowsCount !== undefined
-        ? br.windowsCount
-        : String(totalWindowsCount);
+      const windowsCount = hasEdges
+        ? String(verifiedWindowCount)
+        : (br.windowsCount !== undefined ? br.windowsCount : "0");
 
-      const windowsArea = br.windowsArea !== undefined
-        ? br.windowsArea
-        : (totalWindowsArea > 0 ? totalWindowsArea.toFixed(1) : "");
+      const windowsArea = hasEdges
+        ? (verifiedWindowArea > 0 ? verifiedWindowArea.toFixed(1) : "")
+        : (br.windowsArea !== undefined ? br.windowsArea : "");
 
       const isWindowAreaOverridden = room.originalWindowsAreaInput && room.windowsAreaInput !== room.originalWindowsAreaInput;
 

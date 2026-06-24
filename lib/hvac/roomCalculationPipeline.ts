@@ -130,11 +130,13 @@ export function adaptTracedRoomToManualDBlueprintRoom({
   let totalWindowsArea = 0;
 
   tracedRoom.boundaryEdges?.forEach((edge) => {
-    const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
-    totalWindowsCount += windows.length;
-    windows.forEach((win) => {
-      totalWindowsArea += win.widthFeet * win.heightFeet;
-    });
+    if (edge.boundaryType === "exterior") {
+      const windows = edge.openings?.filter((op) => op.type === "window" && op.isVerified) ?? [];
+      totalWindowsCount += windows.length;
+      windows.forEach((win) => {
+        totalWindowsArea += win.widthFeet * win.heightFeet;
+      });
+    }
   });
 
   return {
